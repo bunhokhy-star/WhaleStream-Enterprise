@@ -1,0 +1,1 @@
+oi_change=get_oi_change(symbol)

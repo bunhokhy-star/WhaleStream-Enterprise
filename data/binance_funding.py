@@ -1,0 +1,1 @@
+get_funding_rate(symbol)
