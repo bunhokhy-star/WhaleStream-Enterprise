@@ -54,6 +54,14 @@ output/
 reports/
 
 # ==========================
+# Recovery Runtime Artifacts
+# ==========================
+history/test_recovery/
+history/recovery_state.json
+history/recovery_report.json
+history/runtime.lock
+
+# ==========================
 # Temporary Files
 # ==========================
 *.tmp
