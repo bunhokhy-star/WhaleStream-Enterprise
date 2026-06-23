@@ -178,16 +178,16 @@ GOOGLE_SHEET_ID = "1R21mkduSpbki2HmlNJMHM95-LkGS0q-AKHE1HVIfMmI"
 GOOGLE_CREDENTIALS_FILE = "google_credentials.json"
 
 # Which Claude model to use:
-#   claude-haiku-4-5-20251001  ← ACTIVE  (cheapest, ~75% less than Sonnet, good for structured prompts)
-#   claude-sonnet-4-6           (balanced quality/cost — switch back if signal quality drops)
+#   claude-sonnet-4-6           ← ACTIVE  (balanced quality/cost — optimal for signal generation)
+#   claude-haiku-4-5-20251001   (cheapest, ~75% less — fallback if Anthropic credits run low)
 #   claude-opus-4-6             (smartest, most expensive)
-CLAUDE_MODEL = "claude-haiku-4-5-20251001"
+CLAUDE_MODEL = "claude-sonnet-4-6"
 
 # ─────────────────────────────────────────────────────────────
 # SECTION 2: YOUR WHALE-STREAM PROMPT  ← Do not change this
 # ─────────────────────────────────────────────────────────────
 
-WHALE_STREAM_PROMPT = """WHALE-STREAM v46.39 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
+WHALE_STREAM_PROMPT = """WHALE-STREAM v46.40 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
 ROLE:
 You are an Institutional Multi-Agent Trading Committee composed of:
 • Market Regime Analyst • Smart Money Concepts Specialist • Quantitative Momentum Analyst • Liquidity & Stop-Hunt Analyst • Wyckoff Structure Analyst • Relative Strength Analyst • Breakout Probability Engine • Reversal Probability Engine • Continuation Probability Engine • Risk Management Committee
@@ -315,6 +315,7 @@ SHORT SIGNAL BLOCKLIST — NEVER generate SHORT signals for these coins:
 • WLD  — 0% SHORT WR across 2 trades  (avg loss: −50%)  BANNED from SHORTs
 • INJ  — 0% SHORT WR across 2 trades  (avg loss: −60%)  BANNED from SHORTs
 • AVAX — 0% SHORT WR across 1 trade   (avg loss: −49%)  BANNED from SHORTs
+• CHZ  — STRUCTURALLY INVALID in BOTH directions (SL always lands at ~$0.02 regardless of price) — DO NOT GENERATE ANY CHZ SIGNALS
 ENFORCEMENT: If any blocklisted coin appears in your short analysis, REPLACE immediately
 with the next-best coin from your analysis. No exceptions.
 ════════════════════════════════════════════════════════════
@@ -322,7 +323,8 @@ with the next-best coin from your analysis. No exceptions.
 Real SHORT win rate was deeply unprofitable. The strategy is in repair mode.
 Apply these tighter rules until SHORT WR recovers to ≥50%:
   1. PREFERRED SHORT COINS (proven recovery coins — live win rates in SIGNAL GRAVEYARD below):
-     H, FF, CHZ — default to these coins over unknown coins for SHORT signals during recovery.
+     H, FF — default to these coins over unknown coins for SHORT signals during recovery.
+     (CHZ removed from preferred list — structurally invalid SL, never use CHZ in any direction)
      See "SHORT RECOVERY MODE ACTIVE" section in the graveyard for current W/L data.
   2. Minimum SHORT confidence: 95% (raised from 91%). If no coin clears 95%, output STAY OUT.
   3. Maximum 2 SHORT signals per run. If in doubt, output fewer SHORTs.
@@ -1613,7 +1615,7 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     shorts = data.get("shorts", [])
 
     lines = []
-    lines.append(f"🐳 WHALE-STREAM v46.39")
+    lines.append(f"🐳 WHALE-STREAM v46.40")
     lines.append(f"📅 {ts}")
 
     # ── Market regime summary ─────────────────────────────────
@@ -2126,7 +2128,7 @@ def log_to_google_sheets(data, bkk_time):
 def main():
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🐳  WHALE-STREAM v46.39 — AUTO BOT STARTING    ║")
+    print("║   🐳  WHALE-STREAM v46.40 — AUTO BOT STARTING    ║")
     print("╚══════════════════════════════════════════════════╝")
     print()
 

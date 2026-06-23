@@ -1,5 +1,23 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.40 — 2026-06-23 (Security Hardening + Sonnet Restored + CHZ Fix)
+
+### 3 Fixes Shipped
+
+| # | Severity | Fix | Files |
+|---|----------|-----|-------|
+| 1 | HIGH | **Bybit API keys moved to local_config.py.** `BYBIT_API_KEY` and `BYBIT_API_SECRET` were hardcoded in 4 files. Moved to `local_config.py` (gitignored) with `try/except` env var fallback. Critical before July 1 live key swap — live keys must never appear in git history. Updated `local_config.py.example` with Bybit key placeholders. | whale_stream_trader.py, whale_stream_tracker.py, whale_stream_monitor.py, check_bybit_orphans.py, local_config.py, local_config.py.example |
+| 2 | MEDIUM | **Switched back to claude-sonnet-4-6.** Haiku was activated in v46.39 for cost savings ($1.62→$0.35/day). User confirmed cost is affordable — reverted to Sonnet for best signal quality. Haiku kept as documented fallback option in comments. | whale_stream_bot.py |
+| 3 | LOW | **CHZ consistency fix.** CHZ was in `MALFORMED_COIN_BLOCKLIST` (bot.py) but still listed as a preferred SHORT recovery coin in both the prompt and `SHORT_RECOVERY_COINS` (trader.py). Removed CHZ from `SHORT_RECOVERY_COINS`. Added explicit CHZ ban to the `SHORT SIGNAL BLOCKLIST` section of the prompt. Updated REPAIR MODE preferred coins: `H, FF, CHZ` → `H, FF`. | whale_stream_bot.py, whale_stream_trader.py |
+
+---
+
+## v46.39 — 2026-06-23 (Haiku Model Switch — cost optimization)
+
+Switched `CLAUDE_MODEL` from `claude-sonnet-4-6` to `claude-haiku-4-5-20251001` (~75% cost reduction). Reverted in v46.40 after user confirmed cost is affordable.
+
+---
+
 ## v46.38 — 2026-06-23 (Macro Event Guard + Token Unlock Calendar)
 
 ### 2 Features Shipped

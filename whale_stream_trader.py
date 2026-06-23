@@ -47,10 +47,14 @@ for mod, pkg in REQUIRED.items():
 # SECTION 1: CONFIGURATION  ← Fill in your keys here
 # ─────────────────────────────────────────────────────────────
 
-# Bybit Demo API keys
+# Bybit Demo API keys — loaded from local_config.py (gitignored). Fallback: env vars.
 # → Login bybit.com → Switch to Demo mode → Account → API Management → Create Key
-BYBIT_API_KEY    = "uJbW2tKiexXXDhoucb"
-BYBIT_API_SECRET = "c8ce3oTWMvGW7incCe3ECsMJf7BnMZaCMpqP"
+try:
+    from local_config import BYBIT_API_KEY, BYBIT_API_SECRET
+except ImportError:
+    import os as _os
+    BYBIT_API_KEY    = _os.getenv("BYBIT_API_KEY", "")
+    BYBIT_API_SECRET = _os.getenv("BYBIT_API_SECRET", "")
 
 # Trade settings
 TRADE_MARGIN_USDT = 20      # USDT margin per trade ($20)
@@ -106,7 +110,8 @@ PAUSED_FILE    = os.path.join(SCRIPT_DIR, "paused.flag")  # must match tracker's
 CIRCUIT_LOSSES = 3
 
 SHORT_REPAIR_FILE    = os.path.join(SCRIPT_DIR, "short_repair.flag")
-SHORT_RECOVERY_COINS = {"H", "FF", "CHZ"}  # approved recovery coins (bypass SHORT REPAIR MODE)
+SHORT_RECOVERY_COINS = {"H", "FF"}  # approved recovery coins (bypass SHORT REPAIR MODE)
+# Note: CHZ removed — it's in MALFORMED_COIN_BLOCKLIST in bot.py (SL always invalid)
 
 def log(msg):
     """Write to console and trader_log.txt with timestamp."""

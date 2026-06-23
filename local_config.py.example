@@ -7,3 +7,8 @@ ANTHROPIC_API_KEY  = "sk-ant-api03-YOUR_KEY_HERE"
 # Telegram Bot — create via @BotFather in Telegram
 TELEGRAM_BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
 TELEGRAM_CHAT_ID   = "-100YOUR_GROUP_CHAT_ID"   # Must start with -100 for groups
+
+# Bybit API keys — Demo: api-demo.bybit.com | Live (July 1): bybit.com
+# → Account → API Management → Create Key (enable Futures permissions)
+BYBIT_API_KEY    = "YOUR_BYBIT_API_KEY_HERE"
+BYBIT_API_SECRET = "YOUR_BYBIT_API_SECRET_HERE"

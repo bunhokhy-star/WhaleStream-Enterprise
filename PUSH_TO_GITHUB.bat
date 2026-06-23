@@ -11,7 +11,7 @@ git add .
 REM Commit with today's date
 for /f "tokens=2 delims==" %%I in ('wmic os get localdatetime /value') do set dt=%%I
 set TODAY=%dt:~0,4%-%dt:~4,2%-%dt:~6,2%
-git commit -m "v46.39 — %TODAY% Switch to Haiku (75pct cost reduction)"
+git commit -m "v46.40 — %TODAY% Security hardening + Sonnet restored + CHZ fix"
 
 echo.
 echo Pushing to GitHub...

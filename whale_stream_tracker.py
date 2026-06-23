@@ -63,8 +63,13 @@ BYBIT_START_BALANCE = 500.00   # initial demo deposit
 PAUSED_FILE        = os.path.join(SCRIPT_DIR, "paused.flag")   # circuit-breaker flag
 
 # ── Bybit Demo API auth (same creds as whale_stream_trader.py) ─
-BYBIT_API_KEY    = "uJbW2tKiexXXDhoucb"
-BYBIT_API_SECRET = "c8ce3oTWMvGW7incCe3ECsMJf7BnMZaCMpqP"
+# Bybit Demo API keys — loaded from local_config.py (gitignored). Fallback: env vars.
+try:
+    from local_config import BYBIT_API_KEY, BYBIT_API_SECRET
+except ImportError:
+    import os as _os
+    BYBIT_API_KEY    = _os.getenv("BYBIT_API_KEY", "")
+    BYBIT_API_SECRET = _os.getenv("BYBIT_API_SECRET", "")
 BYBIT_BASE_URL   = "https://api-demo.bybit.com"
 
 # ── Column indices (0-based) in Google Sheet ──────────────────

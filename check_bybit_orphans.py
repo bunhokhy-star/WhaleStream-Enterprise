@@ -22,9 +22,13 @@ GOOGLE_SHEET_ID         = "1R21mkduSpbki2HmlNJMHM95-LkGS0q-AKHE1HVIfMmI"
 GOOGLE_CREDENTIALS_FILE = os.path.join(SCRIPT_DIR, "google_credentials.json")
 OUT_FILE                = os.path.join(SCRIPT_DIR, "check_bybit_orphans.txt")
 
-# ── Bybit Demo API credentials (copied from whale_stream_trader.py) ───────────
-BYBIT_API_KEY    = "uJbW2tKiexXXDhoucb"
-BYBIT_API_SECRET = "c8ce3oTWMvGW7incCe3ECsMJf7BnMZaCMpqP"
+# ── Bybit Demo API credentials — loaded from local_config.py (gitignored) ─────
+try:
+    from local_config import BYBIT_API_KEY, BYBIT_API_SECRET
+except ImportError:
+    import os as _os
+    BYBIT_API_KEY    = _os.getenv("BYBIT_API_KEY", "")
+    BYBIT_API_SECRET = _os.getenv("BYBIT_API_SECRET", "")
 BYBIT_BASE_URL   = "https://api-demo.bybit.com"
 BYBIT_CATEGORY   = "linear"
 
