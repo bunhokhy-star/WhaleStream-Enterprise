@@ -1,0 +1,2362 @@
+"""
+╔══════════════════════════════════════════════════════════════╗
+║        WHALE-STREAM v45.0  —  FULL AUTOMATION BOT           ║
+║                                                              ║
+║  What this script does (automatically, every run):          ║
+║  1. Fetches top 200 coins from CoinGecko (free, no key)     ║
+║  2. Sends all data to Claude with your WHALE-STREAM prompt  ║
+║  3. Posts the analysis result to your Telegram group         ║
+║  4. Logs up to 8 signals (5 LONG + 3 SHORT) to Google Sheets║
+║                                                              ║
+║  HOW TO RUN:                                                 ║
+║    python whale_stream_bot.py                                ║
+║                                                              ║
+║  HOW TO SCHEDULE (run every 4 hours automatically):         ║
+║    Windows Task Scheduler  →  see SETUP_GUIDE.md            ║
+╚══════════════════════════════════════════════════════════════╝
+"""
+
+# ─────────────────────────────────────────────────────────────
+# AUTO-INSTALL: installs any missing libraries automatically
+# ─────────────────────────────────────────────────────────────
+import subprocess
+import sys
+import io
+
+# Force UTF-8 output — prevents UnicodeEncodeError on Windows CP1252 consoles / Task Scheduler.
+# reconfigure() can silently fail in Python 3.14 when stdout is redirected to a file;
+# replacing the TextIOWrapper directly is the guaranteed fix.
+if hasattr(sys.stdout, "buffer"):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+if hasattr(sys.stderr, "buffer"):
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+
+REQUIRED_PACKAGES = {
+    "anthropic":            "anthropic",
+    "requests":             "requests",
+    "gspread":              "gspread",
+    "google.oauth2":        "google-auth",
+}
+
+def get_pip_python():
+    """Find a Python executable that has pip available."""
+    candidates = [
+        r"C:\Users\MAX\AppData\Local\Python\bin\python.exe",
+        "py",
+        sys.executable,
+    ]
+    for exe in candidates:
+        try:
+            result = subprocess.run(
+                [exe, "-m", "pip", "--version"],
+                capture_output=True, timeout=10
+            )
+            if result.returncode == 0:
+                return exe
+        except Exception:
+            continue
+    return sys.executable  # fallback
+
+PIP_PYTHON = get_pip_python()
+
+print("🔍 Checking required libraries...")
+for module, package in REQUIRED_PACKAGES.items():
+    try:
+        __import__(module)
+        print(f"   ✓ {package}")
+    except ImportError:
+        print(f"   ⬇ Installing {package}...")
+        subprocess.check_call([PIP_PYTHON, "-m", "pip", "install", package, "--quiet",
+                               "--target", str(__import__("pathlib").Path(sys.executable).parent.parent / "Lib" / "site-packages")
+                               if PIP_PYTHON != sys.executable else "--quiet"])
+        print(f"   ✓ {package} installed")
+
+print("   All libraries ready.\n")
+
+# ─────────────────────────────────────────────────────────────
+# SECTION 1: CONFIGURATION  ← Fill in your keys here
+# ─────────────────────────────────────────────────────────────
+
+# Secrets loaded from local_config.py (gitignored). Fallback: env vars.
+try:
+    from local_config import ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+except ImportError:
+    import os as _os
+    ANTHROPIC_API_KEY  = _os.getenv("ANTHROPIC_API_KEY", "")
+    TELEGRAM_BOT_TOKEN = _os.getenv("TELEGRAM_BOT_TOKEN", "")
+    TELEGRAM_CHAT_ID   = _os.getenv("TELEGRAM_CHAT_ID", "")
+
+# ── SHORT coin blocklist (code-level enforcement — mirrors prompt blocklist) ──
+# These coins have 0% SHORT WR in historical data and are permanently banned.
+SHORT_COIN_BLOCKLIST = {
+    "ENA",   # 0W/5L — 0% WR, avg -60.6%
+    "XLM",   # 0W/2L — 0% WR, avg -38.0%
+    "BCH",   # 0W/2L — 0% WR, avg -44.0%
+    "VVV",   # 0W/2L — 0% WR, avg -57.9%
+    "ZRO",   # 0W/1L — 0% WR, avg -40.9%
+    "WLD",   # 0W/2L — 0% WR, avg -49.7%  ← added v46.5
+    "INJ",   # 0W/2L — 0% WR, avg -59.8%  ← added v46.5
+    "AVAX",  # 0W/1L — 0% WR, avg -49.1%  ← added v46.5
+}
+
+# ── LONG coin blocklist (code-level enforcement) ──────────────────────────────
+# Populated when a coin shows 0% LONG WR over 2+ LONG trades with clearly negative avg P&L.
+# Run analyze_shorts.py → check "LONG WIN RATE BY COIN" → add POOR-rated coins here.
+LONG_COIN_BLOCKLIST = {
+    "ZRO",   # 0W/2L — 0% WR, avg -59.5%  ← added v46.37 (2026-06-23)
+    "HYPE",  # 0W/2L — 0% WR, avg -54.3%  ← added v46.37 (2026-06-23)
+}
+
+# ── Malformed coin blocklist (BOTH directions) ────────────────────────────────
+# Coins that consistently generate invalid SL levels in EITHER direction.
+# The AI keeps picking these but always places SL on the wrong side of entry,
+# making the signal uncloseable and wasting a signal slot.
+MALFORMED_COIN_BLOCKLIST = {
+    "CHZ",   # SL stuck at ~0.02 regardless of direction — consistently invalid
+}
+
+# ── Macro Event Calendar 2026 ─────────────────────────────────────────────────
+# High-impact events that cause significant crypto volatility.
+# Sources: federalreserve.gov/monetarypolicy/fomccalendars.htm
+#          bls.gov/schedule/news_release/cpi.htm
+# Update annually (Fed publishes next year's schedule in Nov/Dec).
+# Format: (YYYY-MM-DD, HH:MM UTC, event_name, trading_note)
+MACRO_EVENTS_2026 = [
+    # ── FOMC Rate Decisions (2pm ET) ──────────────────────────────────────────
+    # Summer/fall: EDT = UTC-4  → 18:00 UTC
+    # Winter: EST = UTC-5       → 19:00 UTC
+    ("2026-07-29", "18:00", "FOMC",  "Fed rate decision — vol spike ±3h, BTC can drop 3-8%"),
+    ("2026-09-16", "18:00", "FOMC",  "Fed rate decision + dot plot — vol spike ±3h"),
+    ("2026-10-28", "18:00", "FOMC",  "Fed rate decision — vol spike ±3h"),
+    ("2026-12-09", "19:00", "FOMC",  "Fed rate decision + dot plot (EST) — vol spike ±3h"),
+    # ── US CPI Releases (8:30am ET) ───────────────────────────────────────────
+    # Summer/fall (EDT = UTC-4): 12:30 UTC | Winter (EST = UTC-5): 13:30 UTC
+    ("2026-07-14", "12:30", "CPI",   "Jun CPI — crypto vol spike 1-3h, direction unpredictable"),
+    ("2026-08-12", "12:30", "CPI",   "Jul CPI — crypto vol spike 1-3h, direction unpredictable"),
+    ("2026-09-11", "12:30", "CPI",   "Aug CPI — crypto vol spike 1-3h, direction unpredictable"),
+    ("2026-10-14", "12:30", "CPI",   "Sep CPI — crypto vol spike 1-3h, direction unpredictable"),
+    ("2026-11-10", "13:30", "CPI",   "Oct CPI (EST) — crypto vol spike 1-3h, direction unpredictable"),
+    ("2026-12-10", "13:30", "CPI",   "Nov CPI (EST) — crypto vol spike 1-3h, direction unpredictable"),
+]
+
+# DefiLlama protocol slugs for token unlock checks.
+# Used by check_token_unlock_risk() — maps coin symbol → DefiLlama emission slug.
+# Only coins in this map will be checked (others are silently skipped).
+# Add new entries when coins enter regular rotation in our signals.
+_UNLOCK_SLUG_MAP = {
+    "ARB":   "arbitrum",
+    "OP":    "optimism",
+    "SUI":   "sui",
+    "APT":   "aptos",
+    "JTO":   "jito",
+    "JUP":   "jupiter-exchange-solana",
+    "PYTH":  "pyth-network",
+    "STRK":  "starknet",
+    "IMX":   "immutable-x",
+    "BLUR":  "blur",
+    "ENA":   "ethena",
+    "EIGEN": "eigenlayer",
+    "TIA":   "celestia",
+    "W":     "wormhole",
+    "ZRO":   "layerzero",
+    "HYPE":  "hyperliquid",
+    "LDO":   "lido-dao",
+    "UNI":   "uniswap",
+    "DYDX":  "dydx",
+    "GMX":   "gmx",
+    "INJ":   "injective-protocol",
+    "SEI":   "sei-network",
+    "MANTA": "manta-network",
+}
+
+# Google Sheets — the long ID in your sheet URL
+# e.g. https://docs.google.com/spreadsheets/d/  THIS_PART  /edit
+GOOGLE_SHEET_ID = "1R21mkduSpbki2HmlNJMHM95-LkGS0q-AKHE1HVIfMmI"
+
+# Path to your Google service account JSON credentials file
+# See SETUP_GUIDE.md Step 4 to get this file
+GOOGLE_CREDENTIALS_FILE = "google_credentials.json"
+
+# Which Claude model to use (claude-sonnet-4-6 = faster/cheaper, claude-opus-4-6 = smarter)
+CLAUDE_MODEL = "claude-sonnet-4-6"
+
+# ─────────────────────────────────────────────────────────────
+# SECTION 2: YOUR WHALE-STREAM PROMPT  ← Do not change this
+# ─────────────────────────────────────────────────────────────
+
+WHALE_STREAM_PROMPT = """WHALE-STREAM v46.38 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
+ROLE:
+You are an Institutional Multi-Agent Trading Committee composed of:
+• Market Regime Analyst • Smart Money Concepts Specialist • Quantitative Momentum Analyst • Liquidity & Stop-Hunt Analyst • Wyckoff Structure Analyst • Relative Strength Analyst • Breakout Probability Engine • Reversal Probability Engine • Continuation Probability Engine • Risk Management Committee
+PRIMARY OBJECTIVE:
+Identify ONLY the highest-probability continuation opportunities likely to outperform over the next 24–72 hours.
+DO NOT chase pumps.
+DO NOT generate random signals.
+DO NOT force trades.
+Only output institutional-grade opportunities.
+════════════════════════════════════════════════════════════
+ANALYSIS ENGINE (v46.0)
+Each call provides ONE self-contained batch of market data (up to 100 coins).
+Analyze ALL coins in the provided batch.
+TOURNAMENT PROCESS (per batch):
+Step 1: Score ALL coins in the batch.
+Step 2: Select Top 5 LONG and Top 3 SHORT from this batch only.
+Step 3: Output FULL ##JSON_START## block immediately — DO NOT wait for additional data.
+FINAL SELECTIONS: TOP 5 LONG + TOP 3 SHORT from this batch.
+ALWAYS output complete JSON on first response.
+NEVER reference other batches.
+════════════════════════════════════════════════════════════
+MARKET REGIME ENGINE
+Before analyzing any coin:
+Determine:
+• BTC Market Structure • ETH Market Structure • Total Market Momentum • Altcoin Rotation • Volatility Regime • Risk-On / Risk-Off Environment
+Classify market as:
+1. Bull Expansion
+2. Bull Consolidation
+3. Range
+4. Bear Consolidation
+5. Bear Expansion
+MARKET REGIME OVERRIDE
+Bull Expansion:      LONG Score × 1.15 | SHORT Score × 0.85
+Bull Consolidation:  LONG Score × 1.05 | SHORT Score × 0.90
+Bear Consolidation:  LONG Score × 0.95 | SHORT Score × 0.75 | Require SHORT conf ≥ 92%
+Bear Expansion:      LONG Score × 0.80 | SHORT Score × 1.15
+Range: Favor mean-reversion structures.
+════════════════════════════════════════════════════════════
+TREND STAGE ENGINE
+Stage 1 = Accumulation | Stage 2 = Breakout | Stage 3 = Expansion | Stage 4 = Euphoria | Stage 5 = Distribution
+LONGS: Prefer Stage 1–3 | SHORTS: ONLY Stage 4–5
+HARD RULE — REJECT SHORT if Stage 1 (no trend yet), Stage 2 (breakout in progress — squeeze risk), OR Stage 3 (expansion intact — shorting a bull is the #1 loss cause).
+VALID SHORTS: Stage 4 (euphoria — exhaustion signals present) OR Stage 5 (distribution — structure breaking down).
+Reject LONG if Stage 5. Reject SHORT if Stage 1, 2, or 3.
+════════════════════════════════════════════════════════════
+MANDATORY ANALYSIS FACTORS
+1. Market Cap Strength       2. Liquidity Quality         3. Volume Quality
+4. Relative Strength vs BTC  5. Relative Strength vs Dataset  6. Trend Structure
+7. HH/HL Analysis            8. LH/LL Analysis            9. Trendline Structure
+10. Compression Structure    11. Breakout Quality         12. Breakdown Quality
+13. Smart Money Participation 14. Stop-Hunt Probability   15. Liquidity Sweep Detection
+16. Continuation Probability 17. Reversal Probability     18. Momentum Expansion
+19. Volatility Quality       20. Institutional Participation Estimate
+════════════════════════════════════════════════════════════
+SHORT RESTRICTION: STRICTLY PROHIBITED if Market Cap < $150,000,000
+════════════════════════════════════════════════════════════
+ANTI-FOMO FILTER
+Reject LONG if: 24h Gain > 15% AND Price within 5% of 24h High AND Volume/Mcap > 0.40
+════════════════════════════════════════════════════════════
+EXHAUSTION FILTER
+Reject LONG if: 24h Gain > 20% AND 7d Gain > 40% AND Volume/Mcap > 0.50
+════════════════════════════════════════════════════════════
+SHORT OVERSOLD REJECT (v46.2 — Critical for short win rate)
+Coins that already DUMPED are not valid shorts — they are SQUEEZE SETUPS waiting to reverse.
+Reject SHORT if: 7d Change < −20% (coin already capitulated — crowded shorts, high squeeze risk)
+Reject SHORT if: 24h Change < −12% (coin in free-fall — chasing the move, reversal bounce imminent)
+Exception: May short IF confirmed distribution with declining volume on dead-cat bounce (controlled bleed pattern ONLY)
+This is one of the most common causes of short losses — DO NOT short broken coins, short FRESH breakdowns only.
+════════════════════════════════════════════════════════════
+LIQUIDITY QUALITY ENGINE
+Volume/Mcap: 0.05–0.30 = Healthy | 0.30–0.60 = Speculative | Above 0.60 = Unstable (−15 points)
+════════════════════════════════════════════════════════════
+FUNDING RATE ENGINE (column: FundRate)
+Funding Rate = 8h perpetual contract rate (from Bybit).
+Positive Funding (longs pay shorts): Market is long-heavy → squeeze risk for LONGS. Extreme positive (>+0.10%) = LONG danger, SHORT opportunity.
+Negative Funding (shorts pay longs): Market is short-heavy → short squeeze fuel for LONGS. Extreme negative (<-0.05%) = LONG opportunity, short squeeze incoming.
+N/A = coin not listed on Bybit perp market (spot-only, ignore funding).
+OI (Open Interest USD): Rising OI + rising price = real trend. Rising OI + price flat = coiling for move.
+════════════════════════════════════════════════════════════
+════════════════════════════════════════════════════════════
+BTC DOMINANCE GATE (Live Data — Applied BEFORE scoring any coin)
+This is the #1 macro filter. Apply it before evaluating any individual setup.
+BTC dominance rising = capital flowing INTO BTC = alts underperform = penalize LONGs.
+BTC dominance falling = capital flowing INTO alts = alt season = boost LONGs.
+
+{BTC_DOMINANCE_GATE}
+════════════════════════════════════════════════════════════
+FEAR & GREED GATE (Live Crowd Psychology — Applied BEFORE scoring)
+This measures market-wide emotion. Extreme readings are the most powerful contrarian signals.
+Combine with BTC Dominance Gate for complete macro picture before analyzing any coin.
+
+{FEAR_GREED_GATE}
+
+COMBINED MACRO MATRIX (apply both gates together):
+• BTC.D HIGH + Extreme Greed  → Highest danger zone. Only SHORTs ≥ 93%. Reject LONGs < 95%.
+• BTC.D HIGH + Extreme Fear   → CAPITULATION ZONE. REJECT ALL SHORTS. Only reversal LONGs ≥ 90%.
+                                 Alts bounce hard from fear bottoms — shorts get destroyed here.
+• BTC.D LOW  + Extreme Fear   → Alt season entry signal. LONG bias strongly favored.
+• BTC.D LOW  + Extreme Greed  → Late cycle. Be selective. Graveyard data decides.
+════════════════════════════════════════════════════════════
+BTC 30-MINUTE MOVE GATE (Real-Time Volatility Alert — Applied BEFORE any analysis)
+This gate tells you whether the market is currently STABLE or REPRICING.
+A sharp BTC move in the last 30 minutes means your data may already be stale.
+Sharp move UP = alt LONGS may look better than they are (FOMO chase risk).
+Sharp move DOWN = alt LONGs may look worse — capitulation dip entry opportunity.
+
+{BTC_MOVE_GATE}
+════════════════════════════════════════════════════════════
+BTC 24-HOUR MOMENTUM GATE (Short-Side Guard — Data-Driven Rule)
+Historical performance analysis of 80 resolved trades shows that SHORT signals
+fail catastrophically when BTC is in an uptrend (+2% or more in 24h).
+June 12–15 2026: BTC rallied → 10 consecutive SHORT losses (avg -51% P&L each).
+June 16–19 2026: BTC stabilised/fell → SHORTs recovered.
+THIS IS YOUR MOST IMPORTANT SHORT-SIDE RULE.
+
+{BTC_24H_GATE}
+════════════════════════════════════════════════════════════
+SHORT SIGNAL BLOCKLIST — NEVER generate SHORT signals for these coins:
+(Historical WR = 0% across multiple trades — chronic bounce coins, always squeeze shorts)
+• ENA  — 0% SHORT WR across 5 trades  (avg loss: −61%)  PERMANENTLY BANNED from SHORTs
+• XLM  — 0% SHORT WR across 2 trades  BANNED from SHORTs
+• BCH  — 0% SHORT WR across 2 trades  BANNED from SHORTs
+• VVV  — 0% SHORT WR across 2 trades  (avg loss: −58%)  BANNED from SHORTs
+• ZRO  — 0% SHORT WR across 1 trade   BANNED from SHORTs
+• WLD  — 0% SHORT WR across 2 trades  (avg loss: −50%)  BANNED from SHORTs
+• INJ  — 0% SHORT WR across 2 trades  (avg loss: −60%)  BANNED from SHORTs
+• AVAX — 0% SHORT WR across 1 trade   (avg loss: −49%)  BANNED from SHORTs
+ENFORCEMENT: If any blocklisted coin appears in your short analysis, REPLACE immediately
+with the next-best coin from your analysis. No exceptions.
+════════════════════════════════════════════════════════════
+⚠️  SHORT SIGNAL STRATEGY — REPAIR MODE (effective until further notice)
+Real SHORT win rate was deeply unprofitable. The strategy is in repair mode.
+Apply these tighter rules until SHORT WR recovers to ≥50%:
+  1. PREFERRED SHORT COINS (proven recovery coins — live win rates in SIGNAL GRAVEYARD below):
+     H, FF, CHZ — default to these coins over unknown coins for SHORT signals during recovery.
+     See "SHORT RECOVERY MODE ACTIVE" section in the graveyard for current W/L data.
+  2. Minimum SHORT confidence: 95% (raised from 91%). If no coin clears 95%, output STAY OUT.
+  3. Maximum 2 SHORT signals per run. If in doubt, output fewer SHORTs.
+  4. SHORT entry MUST show clear structural breakdown with volume confirmation. No speculative entries.
+  5. If BTC is showing any bullish momentum on 1h or 4h → output STAY OUT for all SHORTs that run.
+  6. When in doubt between a SHORT and STAY OUT → always choose STAY OUT.
+It is better to miss a SHORT trade than to take a bad one. Protecting capital is the priority.
+════════════════════════════════════════════════════════════
+CORRELATION FILTER — MANDATORY PORTFOLIO DIVERSIFICATION (v44.0)
+Before finalising your TOP 5 LONG and TOP 3 SHORT selections, enforce sector limits.
+The goal: protect capital from sector-wide drawdowns (e.g. entire DeFi sector collapses).
+
+SECTOR CLASSIFICATIONS (use these categories):
+• Layer 1       : BTC, ETH, SOL, ADA, AVAX, DOT, NEAR, APT, SUI, TON, ALGO, ATOM
+• Layer 2       : MATIC, OP, ARB, IMX, STRK, MANTA, ZK, BLAST, SCROLL
+• DeFi          : UNI, AAVE, CRV, MKR, SNX, COMP, BAL, YFI, SUSHI, GMX, JUP, DYDX
+• AI / Data     : FET, AGIX, OCEAN, TAO, RENDER, AKT, WLD, NMR, GRT
+• Gaming / NFT  : AXS, SAND, MANA, GALA, GODS, BEAM, RON, PYR
+• Meme          : DOGE, SHIB, PEPE, FLOKI, BONK, WIF, NEIRO, BOME, MEW
+• Exchange      : BNB, OKB, CRO, KCS, HT
+• Infrastructure: LINK, API3, BAND, VET, HBAR, IOTA, HOLO
+• Privacy       : XMR, ZEC, DASH, SCRT, ROSE
+• RWA / Staking : ONDO, SNT, PENDLE, ETHFI, EIGEN, LIDO
+
+CORRELATION RULES (MANDATORY):
+• MAXIMUM 2 signals from the same sector in your LONG selections
+• MAXIMUM 2 signals from the same sector in your SHORT selections
+• IDEAL: Each of the 5 LONGs should be from DIFFERENT sectors (max diversification)
+• IDEAL: Each of the 3 SHORTs should be from DIFFERENT sectors (max diversification)
+• If forced to choose between 2 correlated coins in the same sector, select the one with HIGHER confidence score
+• NEVER output 5 LONGs all from Layer 1 — this is concentrated macro risk
+• NEVER pick more than 2 LONGs from the same narrative theme (e.g. max 2 AI tokens)
+
+ENFORCEMENT: After building your final 6-signal list, run a sector audit:
+  → If 3+ LONGs share a sector, REPLACE the weakest with the next-best coin from a different sector
+  → If 3+ SHORTs share a sector, REPLACE the weakest with the next-best coin from a different sector
+════════════════════════════════════════════════════════════
+CONTINUATION PROBABILITY ENGINE: Score 0–100. Require ≥ 70.
+REVERSAL PROBABILITY ENGINE: Score 0–100. Reject if > 40.
+BREAKOUT VALIDATION ENGINE: Reject if Fake Breakout Risk > 35.
+════════════════════════════════════════════════════════════
+STABILITY SCORE: 0–100. Weight: 15%.
+EXPECTED VALUE ENGINE: EV = (WinProb × Reward) − (LossProb × Risk). Reject EV < 2.5. Prefer EV > 3.0.
+════════════════════════════════════════════════════════════
+LONG SCORING:
+Market Regime Alignment 25 | Relative Strength 15 | Continuation Probability 15 |
+Stability Score 15 | Liquidity Quality 10 | Breakout Quality 10 | Risk/Reward Quality 10
+TOTAL = 100
+════════════════════════════════════════════════════════════
+SHORT SCORING:
+Market Regime Alignment 25 | Relative Weakness 15 | Breakdown Probability 15 |
+Stability Score 15 | Liquidity Quality 10 | Exhaustion Probability 10 | Risk/Reward Quality 10
+TOTAL = 100
+════════════════════════════════════════════════════════════
+CONFIDENCE FILTER:
+• LONGS:  Reject < 85%. Output ONLY 85–100.
+• SHORTS: Reject < 95%. Output ONLY 95–100. (Raised from 91% — SHORT WR was 24% on real trades, strategy in repair mode)
+• In Bear Consolidation or BTC.D HIGH + Extreme Fear: Reject SHORTs entirely (output STAY OUT).
+
+CONFIDENCE CALIBRATION — LONG BANDS (MANDATORY — do not artificially cap at 90%):
+• 85–87%  TIER 3 — Minimum qualifying setup. Passes filters but lacks multiple confirmations.
+• 88–91%  TIER 2 — Good setup. Two or more factors confirmed, one uncertainty remains.
+• 92–96%  TIER 1 — ELITE setup. Score HERE if THREE or more of the following are true:
+    ✅ Market regime is Bull Expansion or Bull Consolidation
+    ✅ Stage 2 or Stage 3 trend structure confirmed with rising OI
+    ✅ Funding rate is negative (−0.03% or lower) — short-heavy market = squeeze fuel
+    ✅ Coin outperforming BTC by ≥ 3% in the last 24h (clear relative strength)
+    ✅ Continuation probability ≥ 75 AND reversal probability ≤ 25
+    ✅ Multi-timeframe confluence: daily + 4h + 1h all aligned bullish
+IMPORTANT: If a setup meets 3+ TIER 1 criteria, it MUST be scored 92%+.
+Do NOT cap a genuinely elite setup at 88-90% out of conservatism — that defeats the scoring system.
+TIER 1 OUTPUT REQUIREMENT: Any signal scored 92%+ MUST include a valid TP3 value.
+  The auto-trader uses TP3 as the Bybit take-profit for TIER 1 trades (with 50% partial close at TP1).
+  A TIER 1 signal without TP3 wastes the entire upside advantage of the elite classification.
+  Calculate TP3 as the next major resistance or measured-move target above TP2 (typically 8–15% above entry).
+  If you cannot identify a credible TP3, downgrade the signal to TIER 2 (88–91%) rather than omit it.
+════════════════════════════════════════════════════════════
+ENTRY RULE (LONGS): Entry MUST be Retest Zone / Liquidity Sweep Reclaim / Support-Resistance Reclaim / Breakout Retest. Never chase current price.
+ENTRY ZONE WIDTH RULE (CRITICAL — REDUCES SIGNAL EXPIRY): Historical data shows 67% of LONG signals expire because price never pulls back to the entry zone within 72 hours.
+  • Set entry zone TOP at most 1–3% below current price. Entry zone BOTTOM must be at least 5–8% below the TOP (giving price room to pull back).
+  • Minimum zone width: entry_top - entry_bottom ≥ 4% of entry_top. A zone narrower than 4% will likely never fill.
+  • For Stage 2 expansion plays already in motion (coin has already broken out and is trending): entry zone may overlap with current price (near-market entry), with SL below the breakout base.
+  • PREFER FILLED SIGNALS: A signal that fills at a slightly wider zone beats a perfect signal that expires. Widen the zone rather than risk expiry.
+ENTRY RULE (SHORTS): Entry MUST be at Resistance Rejection / Failed Retest of Broken Support / Dead-Cat Bounce Top / High-Volume Reversal Candle. NEVER enter a short on a breakdown candle — wait for the bounce back to resistance, THEN enter. Entering on breakdown = chasing, SL gets hit on the bounce.
+════════════════════════════════════════════════════════════
+HARD RULES FOR SHORT SIGNALS — THESE ARE NON-NEGOTIABLE:
+• SL MUST be 5–7% ABOVE the entry midpoint. If you set SL below or at entry, the signal is INVALID.
+• TP1 MUST be 3–5% BELOW the entry midpoint. MINIMUM DISTANCE IS 3%. A TP1 less than 3% away from
+  entry midpoint is INVALID — output STAY OUT. Do not output a SHORT with TP1 within 3% of entry.
+• TP1 DISTANCE VERIFICATION: After setting TP1, compute (entry_mid - TP1) / entry_mid * 100.
+  If this number is less than 3.0, REJECT the signal and output STAY OUT.
+• Before outputting any SHORT signal, mentally verify: SL > entry > TP1 > TP2 > TP3 > TP4
+• If you cannot confirm this ordering, output STAY OUT instead of a malformed SHORT.
+════════════════════════════════════════════════════════════
+CRITICAL SL VALIDATION (signals with wrong SL direction are REJECTED at code level and waste a slot):
+- LONG signals: SL MUST be strictly BELOW entry (price drops to SL to close the position). SL above or equal to entry = INVALID — DO NOT OUTPUT.
+- SHORT signals: SL MUST be strictly ABOVE entry (price rises to SL to close the position). SL below or equal to entry = INVALID — DO NOT OUTPUT.
+- Low-price coins (< 0.10 USDT): Use the ACTUAL current price as your SL reference, NOT a rounded number like 0.02. A coin trading at 0.0195 with SL 0.02 is INVALID for a LONG (SL above entry).
+- If no valid SL can be found on the correct side, OMIT this signal entirely and replace with STAY OUT.
+════════════════════════════════════════════════════════════
+STOP LOSS RULE: Leverage 10X ONLY. SL: 5%–7% from entry. Wide enough to survive stop-hunts and volatility noise. Never tighter than 5%.
+TARGET RULE: Provide TP1 TP2 TP3 TP4. TP1 MUST be 3%–4% from entry (quick capture, high probability). TP2 = 7%–9%. TP3 = 12%–16%. TP4 = 20%–30%. Minimum RR 1:2 on TP1. Preferred RR 1:4+ on TP4.
+════════════════════════════════════════════════════════════
+DATE & TIME RULE: Use ONLY actual system time. Format: TIMEZONE: Bangkok, Hanoi, Jakarta (GMT+7)
+════════════════════════════════════════════════════════════
+OUTPUT FORMAT:
+════════════════════════════════════════════════════════════
+⚡ STEP 1 — OUTPUT THE JSON BLOCK FIRST (MANDATORY, BEFORE ANYTHING ELSE):
+
+##JSON_START##
+{"verdict":"GO","regime":"Bull Consolidation","btc_bias":"BULLISH","eth_bias":"BULLISH","risk_env":"RISK-ON","longs":[{"rank":1,"coin":"ZEC","conf":"94%","score":"94.3","entry":"$375-$390","sl":"$362","tp1":"$425","tp2":"$455","tp3":"$490","tp4":"$540","pattern":"Stage 2 breakout retest + negative funding"},{"rank":2,"coin":"ADA","conf":"92%","score":"92.0","entry":"$0.152-$0.158","sl":"$0.147","tp1":"$0.172","tp2":"$0.185","tp3":"$0.200","tp4":"$0.220","pattern":"Bull flag + RS vs BTC"},{"rank":3,"coin":"IOTA","conf":"88%","score":"88.1","entry":"$0.0420-$0.0440","sl":"$0.0402","tp1":"$0.0500","tp2":"$0.0560","tp3":"$0.0620","tp4":"$0.0700","pattern":"Support reclaim"}],"shorts":[{"rank":1,"coin":"FF","conf":"96%","score":"96.0","entry":"$0.100-$0.104","sl":"$0.109","tp1":"$0.089","tp2":"$0.079","tp3":"$0.068","tp4":"$0.055","pattern":"Stage 5 distribution + RS failure"},{"rank":2,"coin":"CHZ","conf":"95%","score":"95.2","entry":"$0.042-$0.044","sl":"$0.047","tp1":"$0.037","tp2":"$0.033","tp3":"$0.029","tp4":"$0.024","pattern":"Dead-cat bounce rejection"}]}
+##JSON_END##
+
+For STAY OUT verdict use:
+##JSON_START##
+{"verdict":"STAY OUT","regime":"...fill in...","btc_bias":"...fill in...","eth_bias":"...fill in...","risk_env":"...fill in...","longs":[],"shorts":[]}
+##JSON_END##
+
+RULES FOR THE JSON BLOCK:
+- Replace ALL example values with REAL values from your analysis
+- Output on a SINGLE LINE with no line breaks inside
+- Include FULL btc_bias and eth_bias text (e.g. "BEARISH — Bear Expansion")
+- Include FULL risk_env text (e.g. "RISK-OFF — Broad liquidation")
+- Output this block AS THE VERY FIRST THING in your response
+
+════════════════════════════════════════════════════════════
+⚡ STEP 2 — THEN output the full analysis below:
+
+TIMEZONE: Bangkok, Hanoi, Jakarta (GMT+7)
+DATE/TIME: [REAL SYSTEM TIME]
+
+DATASET:
+Batch 1 Coins: XXX  (Rank #1–100)
+Batch 2 Coins: XXX  (Rank #101–200)
+Total Coins: XXX
+
+MARKET REGIME:
+BTC Bias:
+ETH Bias:
+Altcoin Strength:
+Volatility Environment:
+Risk Environment:
+
+════════════════════════════════════════════════════════════
+🐳 FINAL EXECUTION MATRIX
+
+TOP 5 LONG SETUPS
+# | Coin | Conf | Score | Entry | SL | TP1 | TP2 | TP3 | TP4 | Pattern
+
+TOP 3 SHORT SETUPS
+# | Coin | Conf | Score | Entry | SL | TP1 | TP2 | TP3 | TP4 | Pattern
+
+CEO VERDICT: Output ONLY GO or STAY OUT based on aggregate quality of the final six setups.
+════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════
+SIGNAL GRAVEYARD — RECENT TRADE OUTCOMES (Self-Learning Feedback)
+Study these past outcomes before generating new signals.
+RULES:
+• If a coin appears 2+ times in LOSS rows → apply +5% confidence penalty before selecting it again
+• If a coin appears 3+ times in LOSS rows on SHORT with 0 WINS → BLACKLIST from SHORT signals entirely (hard rule — no exceptions)
+• The graveyard header shows an AUTO-BLACKLIST line — STRICTLY OBEY IT. These coins are proven short traps.
+• If a pattern type appears 3+ times in LOSS rows → flag it as "recently unreliable"
+• If the overall recent win rate is below 50% → tighten confidence threshold to 90%+ for all new signals
+• If the SHORT-specific win rate is below 45% → reject ALL SHORTs unless confidence ≥ 93%
+• If the SHORT-specific win rate is below 40% → reject ALL SHORTs unless confidence ≥ 95%. Prefer STAY OUT on shorts.
+• If the SHORT-specific win rate is below 35% → OUTPUT ZERO SHORTS. LONGS ONLY until short WR recovers.
+• If the recent win rate is above 65% → current strategy is working — maintain standards
+• Avoid generating a SHORT on a coin that recently hit TP3 or TP4 as a LONG (momentum still intact)
+• Do not repeat a LONG on a coin whose last trade was a LOSS at SL (stopped out — momentum broken)
+• BULL MARKET SHORT VETO: If BTC 7d% > +8% OR market regime = Bull Expansion, SKIP ALL SHORTS unless confidence ≥ 97% with confirmed exhaustion pattern (distribution, bearish divergence, high-volume rejection). Alt shorts in bull markets are the #1 cause of losses.
+
+{SIGNAL_GRAVEYARD}
+════════════════════════════════════════════════════════════
+
+DATA TO ANALYZE:
+→ See MARKET DATA section in user message below.
+════════════════════════════════════════════════════════════
+"""
+
+# ── Derived static system prompt (placeholders replaced with references) ──
+# This is sent as the cached "system" block — identical every run = cache hit.
+WHALE_STREAM_SYSTEM = (
+    WHALE_STREAM_PROMPT
+    .replace(
+        "{BTC_DOMINANCE_GATE}",
+        "→ LIVE BTC DOMINANCE READING: provided in the LIVE GATES section of the user message."
+    )
+    .replace(
+        "{FEAR_GREED_GATE}",
+        "→ LIVE FEAR & GREED READING: provided in the LIVE GATES section of the user message."
+    )
+    .replace(
+        "{BTC_MOVE_GATE}",
+        "→ LIVE BTC 30-MIN MOVE READING: provided in the LIVE GATES section of the user message."
+    )
+    .replace(
+        "{BTC_24H_GATE}",
+        "→ LIVE BTC 24H MOMENTUM READING: provided in the LIVE GATES section of the user message."
+    )
+    .replace(
+        "{COIN_PERFORMANCE}",
+        "→ LONG COIN PERFORMANCE SUMMARY: provided in the LIVE GATES section of the user message."
+    )
+    .replace(
+        "{SIGNAL_GRAVEYARD}",
+        "→ SIGNAL GRAVEYARD: provided in the LIVE GATES section of the user message."
+    )
+    .replace(
+        "→ See MARKET DATA section in user message below.\n════════════════════════════════════════════════════════════",
+        "→ MARKET DATA: provided in the MARKET DATA section of the user message."
+    )
+)
+
+# ── Dynamic user message template (changes every run — not cached) ──
+DYNAMIC_DATA_TEMPLATE = """\
+════════════════════════════════════════════════════════════
+LIVE INTELLIGENCE GATES (apply BEFORE scoring any coin):
+
+BTC DOMINANCE GATE:
+{BTC_DOMINANCE_GATE}
+
+FEAR & GREED GATE:
+{FEAR_GREED_GATE}
+
+BTC 30-MIN MOVE GATE:
+{BTC_MOVE_GATE}
+
+BTC 24H MOMENTUM GATE (Short-Side Guard):
+{BTC_24H_GATE}
+
+════════════════════════════════════════════════════════════
+{COIN_PERFORMANCE}
+
+════════════════════════════════════════════════════════════
+SIGNAL GRAVEYARD — RECENT TRADE OUTCOMES (Self-Learning Feedback):
+{SIGNAL_GRAVEYARD}
+
+════════════════════════════════════════════════════════════
+DATA TO ANALYZE:
+{MARKET_DATA}
+{BATCH_NOTE}"""
+
+# ─────────────────────────────────────────────────────────────
+# SECTION 3: MAIN CODE  ← No need to change anything below
+# ─────────────────────────────────────────────────────────────
+
+import requests
+import time
+import re
+import os
+from datetime import datetime, timezone, timedelta
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+def check_macro_event_risk(window_high_h: float = 4, window_medium_h: float = 12) -> list:
+    """
+    Return warning strings for FOMC/CPI events within the risk window.
+    Empty list = no events → trade normally.
+
+    Risk tiers:
+      HIGH   (≤4h)  → 🔴 avoid new entries, confidence ≥93% required
+      MEDIUM (≤12h) → 🟡 prefer SHORT/mean-reversion, caution on LONGs
+      POST   (0-2h after event) → 🔴 market still settling, avoid entries
+    """
+    now = datetime.now(timezone.utc)
+    warnings = []
+    for date_str, time_str, name, note in MACRO_EVENTS_2026:
+        event_dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+        event_dt = event_dt.replace(tzinfo=timezone.utc)
+        delta_h = (event_dt - now).total_seconds() / 3600
+        if -2 <= delta_h <= 0:
+            warnings.append(
+                f"🔴 {name} JUST HAPPENED {abs(delta_h):.1f}h AGO — market still volatile. "
+                f"AVOID NEW ENTRIES for at least 2h post-event. ({note})"
+            )
+        elif 0 < delta_h <= window_high_h:
+            warnings.append(
+                f"🔴 {name} IN {delta_h:.1f}h — HIGH RISK WINDOW. {note}. "
+                f"Only output signals confidence ≥93%. Default action = STAY OUT."
+            )
+        elif window_high_h < delta_h <= window_medium_h:
+            warnings.append(
+                f"🟡 {name} IN {delta_h:.0f}h — CAUTION WINDOW. {note}. "
+                f"Prefer SHORT/mean-reversion setups. Avoid LONG breakouts."
+            )
+    return warnings
+
+
+def check_token_unlock_risk(horizon_hours: int = 48, threshold_pct: float = 3.0) -> list:
+    """
+    Check DefiLlama emission API for upcoming large token unlocks.
+    Warns when ≥threshold_pct% of circulating supply unlocks within horizon_hours.
+    Fails silently — never blocks the trading cycle.
+
+    Returns list of warning strings (empty = no large unlocks found or API unavailable).
+    """
+    warnings = []
+    try:
+        now_utc = datetime.now(timezone.utc)
+        horizon_dt = now_utc + timedelta(hours=horizon_hours)
+
+        for coin, slug in _UNLOCK_SLUG_MAP.items():
+            try:
+                url = f"https://api.llama.fi/emission/{slug}"
+                resp = _SESSION.get(url, timeout=5)
+                if resp.status_code != 200:
+                    continue
+                data = resp.json()
+                if not isinstance(data, dict):
+                    continue
+
+                # DefiLlama emission format:
+                # { "circSupply": float, "maxSupply": float,
+                #   "events": [{"date": unix_ts, "amount": tokens, "category": "..."}, ...] }
+                circ = float(data.get("circSupply") or 0)
+                if circ <= 0:
+                    continue
+
+                for event in (data.get("events") or []):
+                    ts = event.get("date", 0)
+                    if not ts:
+                        continue
+                    event_dt = datetime.fromtimestamp(float(ts), tz=timezone.utc)
+                    if now_utc <= event_dt <= horizon_dt:
+                        amount = float(event.get("amount") or 0)
+                        pct = (amount / circ) * 100
+                        if pct >= threshold_pct:
+                            hours_until = (event_dt - now_utc).total_seconds() / 3600
+                            category = event.get("category", "unlock")
+                            warnings.append(
+                                f"⚠️ TOKEN UNLOCK — {coin}: {pct:.1f}% of circulating supply "
+                                f"unlocks in {hours_until:.0f}h ({category}). "
+                                f"AVOID LONG {coin}. Consider SHORT if setup confirms."
+                            )
+            except Exception:
+                pass  # per-coin failure — skip and continue
+
+    except Exception:
+        pass  # whole function fail — never crash the bot
+
+    return warnings
+
+
+def _make_retry_session(retries=4, backoff=1.5):
+    """Create a requests Session with automatic retry on transient errors."""
+    session = requests.Session()
+    retry = Retry(
+        total=retries,
+        backoff_factor=backoff,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET"],
+    )
+    session.mount("https://", HTTPAdapter(max_retries=retry))
+    return session
+
+_SESSION = _make_retry_session()
+
+# Always resolve paths relative to this script's folder
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+def fetch_bybit_funding_rates():
+    """
+    Fetch ALL Bybit linear perpetual tickers in one call.
+    Returns dict: { "BTC": {"funding_rate": 0.0001, "oi_usd": 1234567890}, ... }
+    Funding rate > 0 = longs pay shorts (bullish sentiment, potential SHORT squeeze).
+    Funding rate < 0 = shorts pay longs (bearish sentiment, potential LONG squeeze).
+    """
+    url = "https://api.bybit.com/v5/market/tickers"
+    try:
+        resp = _SESSION.get(url, params={"category": "linear"}, timeout=15)
+        resp.raise_for_status()
+        tickers = resp.json().get("result", {}).get("list", [])
+        funding_map = {}
+        for t in tickers:
+            sym = t.get("symbol", "")
+            if sym.endswith("USDT") and not sym.endswith("USDT3L") and not sym.endswith("USDT3S"):
+                coin = sym[:-4]
+                try:
+                    fr  = float(t.get("fundingRate", 0) or 0)
+                    oi  = float(t.get("openInterestValue", 0) or 0)
+                    funding_map[coin] = {"funding_rate": fr, "oi_usd": oi}
+                except (ValueError, TypeError):
+                    pass
+        print(f"   ✓ Bybit: {len(funding_map)} perp funding rates loaded")
+        return funding_map
+    except Exception as e:
+        print(f"   ⚠ Bybit funding rate fetch failed ({e}) — skipping")
+        return {}
+
+
+def fetch_signal_graveyard():
+    """
+    Read the last 20 WIN/LOSS resolved trades from Google Sheets.
+    Returns a formatted table string injected into the Claude prompt.
+    This creates a self-improving feedback loop — Claude learns from its own
+    recent performance before generating new signals.
+    """
+    import gspread
+    from google.oauth2.service_account import Credentials
+
+    try:
+        creds_path = os.path.join(SCRIPT_DIR, GOOGLE_CREDENTIALS_FILE)
+        if not os.path.exists(creds_path):
+            return "", 50
+
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        creds  = Credentials.from_service_account_file(creds_path, scopes=scopes)
+        client = gspread.authorize(creds)
+        sheet  = client.open_by_key(GOOGLE_SHEET_ID).sheet1
+
+        all_rows = sheet.get_all_values()
+        if len(all_rows) < 2:
+            return "", 50
+
+        # Collect all WIN/LOSS rows (skip OPEN, EXPIRED, NO SIGNAL)
+        resolved = []
+        for row in all_rows[1:]:  # skip header
+            while len(row) < 17:
+                row.append("")
+            status = row[11].strip()
+            if status not in ("WIN", "LOSS"):
+                continue
+            signal_col = row[1].strip()
+            direction  = "LONG" if ("Long" in signal_col or "🟢" in signal_col) else "SHORT"
+            pattern    = row[9].strip()
+
+            # Skip malformed / fake entries so they don't corrupt Claude's
+            # feedback loop. Two types:
+            # 1. Wrong P&L sign (SL/TP on wrong side of entry)
+            # 2. Tiny P&L abs < 5% — fake instant resolution (TP/SL within
+            #    noise of entry price). Real 10x trades always move ≥ 0.5% raw.
+            try:
+                pnl_val = float(row[15].strip().replace("%", ""))
+                if direction == "SHORT" and status == "LOSS" and pnl_val > 0:
+                    continue  # malformed SHORT — SL below entry
+                if direction == "LONG" and status == "WIN" and pnl_val < 0:
+                    continue  # malformed LONG — TP below entry
+                if abs(pnl_val) < 5:
+                    continue  # fake instant resolution — too small to be real
+            except (ValueError, TypeError):
+                pass  # can't parse P&L — leave entry in
+
+            resolved.append({
+                "coin":      row[0].strip(),
+                "direction": direction,
+                "pattern":   (pattern[:38] + "…") if len(pattern) > 38 else (pattern or "—"),
+                "entry":     row[3].strip(),
+                "tp_hit":    row[14].strip() or "—",
+                "pnl":       row[15].strip() or "—",
+                "status":    status,
+            })
+
+        if not resolved:
+            return "", 50
+
+        # ── Coin performance summary (last 30 resolved LONGs) ──────
+        _coin_perf = {}
+        _resolved_longs = [r for r in resolved if r["direction"] == "LONG"]
+        _recent_longs_30 = _resolved_longs[-30:]  # last 30 resolved LONGs
+        for _row in _recent_longs_30:
+            _coin = _row["coin"]
+            if _coin not in _coin_perf:
+                _coin_perf[_coin] = {"w": 0, "l": 0}
+            if _row["status"] == "WIN":
+                _coin_perf[_coin]["w"] += 1
+            else:
+                _coin_perf[_coin]["l"] += 1
+
+        _coin_lines = []
+        for _coin, _stats in sorted(_coin_perf.items(), key=lambda x: -(x[1]["w"] / (x[1]["w"] + x[1]["l"]))):
+            _n = _stats["w"] + _stats["l"]
+            if _n < 2:
+                continue
+            _wr = _stats["w"] / _n
+            _emoji = "⭐" if _wr >= 0.70 else "✅" if _wr >= 0.55 else "⚠️" if _wr >= 0.40 else "❌"
+            _coin_lines.append(f"  {_emoji} {_coin:<10} {_stats['w']}W/{_stats['l']}L ({_wr*100:.0f}%)")
+
+        if _coin_lines:
+            coin_perf_text = (
+                f"LONG COIN PERFORMANCE (last 30 resolved, min 2 trades):\n"
+                + "\n".join(_coin_lines[:10])
+            )
+        else:
+            coin_perf_text = "LONG COIN PERFORMANCE: insufficient data (need ≥2 resolved LONGs per coin)"
+
+        # Most recent 20 only
+        recent   = resolved[-20:]
+        wins     = sum(1 for r in recent if r["status"] == "WIN")
+        losses   = len(recent) - wins
+        win_rate = wins / len(recent) * 100
+
+        # SHORT-specific stats from recent 20
+        recent_shorts = [r for r in recent if r["direction"] == "SHORT"]
+        recent_longs  = [r for r in recent if r["direction"] == "LONG"]
+        short_wins    = sum(1 for r in recent_shorts if r["status"] == "WIN")
+        long_wins     = sum(1 for r in recent_longs  if r["status"] == "WIN")
+        short_wr = (short_wins / len(recent_shorts) * 100) if recent_shorts else 0
+        long_wr  = (long_wins  / len(recent_longs)  * 100) if recent_longs  else 0
+
+        # Auto-blacklist: coins with 3+ SHORT losses and 0 SHORT wins (ALL resolved, not just recent 20)
+        all_shorts     = [r for r in resolved if r["direction"] == "SHORT"]
+        short_loss_map = {}
+        short_win_map  = {}
+        for r in all_shorts:
+            c = r["coin"]
+            if r["status"] == "LOSS":
+                short_loss_map[c] = short_loss_map.get(c, 0) + 1
+            else:
+                short_win_map[c]  = short_win_map.get(c, 0) + 1
+        blacklisted = [c for c, cnt in short_loss_map.items()
+                       if cnt >= 3 and short_win_map.get(c, 0) == 0]
+
+        lines = []
+        lines.append(f"Recent {len(recent)} trades  |  Overall WR: {win_rate:.0f}%  ({wins}W / {losses}L)")
+        lines.append(f"LONG  WR (recent): {long_wr:.0f}%  ({long_wins}W / {len(recent_longs) - long_wins}L)")
+        lines.append(f"SHORT WR (recent): {short_wr:.0f}%  ({short_wins}W / {len(recent_shorts) - short_wins}L)")
+        _in_repair_mode = os.path.exists(os.path.join(SCRIPT_DIR, "short_repair.flag"))
+        if not _in_repair_mode:
+            # Only show threshold warnings when NOT in REPAIR MODE (repair guidance supersedes these)
+            if short_wr < 40:
+                lines.append(f"⚠️  SHORT WR CRITICAL ({short_wr:.0f}% < 40%) — REQUIRE SHORT CONFIDENCE ≥ 95% OR SKIP SHORTS")
+            elif short_wr < 45:
+                lines.append(f"⚠️  SHORT WR BELOW TARGET ({short_wr:.0f}% < 45%) — REQUIRE SHORT CONFIDENCE ≥ 93%")
+        if blacklisted:
+            lines.append(f"🚫 AUTO-BLACKLIST (3+ SHORT losses, 0 wins) — DO NOT SHORT: {', '.join(blacklisted)}")
+        # Always remind Claude of the permanent ban list — these are code-blocked at system level.
+        _perm_ban = sorted(SHORT_COIN_BLOCKLIST)
+        lines.append(f"🚫 PERMANENT SHORT BAN (code-enforced, will be rejected even if output): {', '.join(_perm_ban)}")
+        lines.append(f"   → Do NOT output SHORT signals for any of these coins. They are PERMANENTLY BANNED.")
+        lines.append("─" * 100)
+        lines.append(
+            f"{'Coin':<8} {'Dir':<6} {'Pattern':<40} {'Entry':<16} "
+            f"{'TP Hit':<8} {'P&L%':<10} Result"
+        )
+        lines.append("─" * 100)
+        for r in recent:
+            icon = "✅ WIN " if r["status"] == "WIN" else "❌ LOSS"
+            lines.append(
+                f"{r['coin']:<8} {r['direction']:<6} {r['pattern']:<40} {r['entry']:<16} "
+                f"{r['tp_hit']:<8} {r['pnl']:<10} {icon}"
+            )
+
+        # ── SHORT recovery guidance (injected when repair mode is active) ──
+        if _in_repair_mode:
+            lines.append("─" * 100)
+            # Compute H/FF/CHZ WRs dynamically from current resolved data
+            _rc_coins = {"H": (0, 0), "FF": (0, 0), "CHZ": (0, 0)}
+            for _rr in resolved:
+                _rrc = _rr.get("coin", "").upper()
+                if _rrc in _rc_coins and _rr["direction"] == "SHORT":
+                    _rw, _rl = _rc_coins[_rrc]
+                    if _rr["status"] == "WIN":
+                        _rc_coins[_rrc] = (_rw + 1, _rl)
+                    else:
+                        _rc_coins[_rrc] = (_rw, _rl + 1)
+            def _rc_fmt(coin, w, l):
+                _tot = w + l
+                _wr = f"{w/(_tot)*100:.0f}%" if _tot > 0 else "N/A"
+                _note = (
+                    "← BEST — prioritise" if w > 0 and l == 0 else
+                    "← Promising" if w > 0 and (l == 0 or w >= l) else
+                    "← Monitor closely" if _tot > 0 else
+                    "← No trades yet"
+                )
+                return f"   {coin:<5} ({w}W/{l}L — {_wr} WR) {_note}"
+            _rc_lines = [_rc_fmt(c, *v) for c, v in _rc_coins.items()]
+            lines.append(
+                "⚠️  SHORT RECOVERY MODE ACTIVE — ONLY output SHORT signals for these approved coins:\n"
+                + "\n".join(_rc_lines) + "\n"
+                "   For all other coins: DO NOT output SHORT signals during recovery phase.\n"
+                "   Exception: if setup is 95%+ confidence and coin is NOT on the permanent ban list,\n"
+                "   you may include it — but default to STAY OUT for SHORTs on unknown coins."
+            )
+
+        # ── LONG avoid list (coins with 0% WR over 3+ LONGs — injected at runtime) ─
+        _long_loss_map = {}
+        _long_win_map  = {}
+        for _lr in _resolved_longs:
+            _lc = _lr["coin"]
+            if _lr["status"] == "LOSS":
+                _long_loss_map[_lc] = _long_loss_map.get(_lc, 0) + 1
+            else:
+                _long_win_map[_lc]  = _long_win_map.get(_lc, 0) + 1
+        _long_avoid = sorted([c for c, cnt in _long_loss_map.items()
+                              if cnt >= 2 and _long_win_map.get(c, 0) == 0])
+        # Always show code-enforced LONG blocklist even if dynamic list is empty
+        _long_perm_ban = sorted(LONG_COIN_BLOCKLIST)
+        if _long_perm_ban:
+            lines.append(f"🚫 PERMANENT LONG BAN (code-enforced, will be rejected even if output): {', '.join(_long_perm_ban)}")
+            lines.append(f"   → Do NOT output LONG signals for any of these coins. They are PERMANENTLY BANNED.")
+        if _long_avoid:
+            # Exclude already-mentioned permanent bans to avoid duplication
+            _long_avoid_extra = [c for c in _long_avoid if c not in LONG_COIN_BLOCKLIST]
+            if _long_avoid_extra:
+                lines.append("─" * 100)
+                lines.append(
+                    f"🚫 LONG AVOID LIST — DO NOT LONG these coins ({len(_long_avoid_extra)} coin(s) — 0% WR over 2+ LONGs):\n"
+                    f"   Affected: {', '.join(_long_avoid_extra)}\n"
+                    f"   Each of these coins has failed every LONG setup logged — no wins, 2+ losses.\n"
+                    f"   DO NOT output a LONG signal for any of these coins unless confidence is 97%+\n"
+                    f"   with explicit written justification. Default action = SKIP the LONG entirely."
+            )
+
+        graveyard_text = "\n".join(lines)
+        print(f"   ✓ Signal Graveyard: {len(recent)} trades (overall {win_rate:.0f}% WR | long {long_wr:.0f}% | short {short_wr:.0f}%)")
+        if blacklisted:
+            print(f"   🚫 Short blacklist: {', '.join(blacklisted)}")
+        if _long_avoid:
+            print(f"   🚫 Long avoid list : {', '.join(_long_avoid)}")
+        print(f"   📈 Coin perf summary: {len(_coin_lines)} coins ranked (from last 30 resolved LONGs)")
+        if _in_repair_mode:
+            print(f"   🔧 SHORT RECOVERY MODE — approved coins injected into graveyard prompt")
+        return graveyard_text, short_wr, coin_perf_text
+
+    except Exception as e:
+        print(f"   ⚠ Signal Graveyard fetch failed ({e}) — skipping")
+        try:
+            send_to_telegram(None, formatted_msg=(
+                f"⚠️ <b>WHALE-STREAM BOT WARNING</b>\n"
+                f"Signal Graveyard fetch failed — Claude will run without trade history.\n"
+                f"Error: {str(e)[:200]}"
+            ))
+        except Exception:
+            pass
+        return "", 50, ""  # neutral WR — no filtering applied when graveyard unavailable
+
+
+def fetch_btc_dominance():
+    """
+    Fetch BTC dominance % from CoinGecko global endpoint (free, no key).
+    Returns a formatted context string for injection into the Claude prompt.
+    BTC dominance rising = alts underperform = penalize LONG signals.
+    BTC dominance falling = alt season = boost LONG confidence.
+    """
+    url = "https://api.coingecko.com/api/v3/global"
+    try:
+        resp = _SESSION.get(url, timeout=15)
+        resp.raise_for_status()
+        data  = resp.json().get("data", {})
+        btc_d = data.get("market_cap_percentage", {}).get("btc", 0)
+        eth_d = data.get("market_cap_percentage", {}).get("eth", 0)
+        total_mcap_chg = data.get("market_cap_change_percentage_24h_usd", 0)
+
+        # Classify dominance regime
+        if btc_d >= 58:
+            level    = "EXTREME — Severe alt headwind"
+            guidance = (
+                "BTC is absorbing nearly all capital. "
+                "REJECT all alt LONG signals with confidence < 92%. "
+                "SHORT setups on weak alts are strongly favored."
+            )
+        elif btc_d >= 54:
+            level    = "HIGH — Moderate alt headwind"
+            guidance = (
+                "BTC dominance elevated. Rotation INTO BTC likely. "
+                "Apply -8 point penalty to all alt LONG scores. "
+                "Only select alt LONGs with rock-solid setups (90%+ confidence)."
+            )
+        elif btc_d >= 50:
+            level    = "NEUTRAL — Balanced market"
+            guidance = (
+                "BTC and alts roughly balanced. "
+                "Apply standard confidence thresholds. "
+                "No bonus or penalty for LONG/SHORT."
+            )
+        elif btc_d >= 45:
+            level    = "LOW — Alt season conditions"
+            guidance = (
+                "Capital rotating INTO alts. Favorable for alt LONGs. "
+                "Apply +5 point bonus to high-conviction alt LONG scores. "
+                "SHORT signals need extra confirmation — momentum favors bulls."
+            )
+        else:
+            level    = "VERY LOW — Peak alt season"
+            guidance = (
+                "Peak alt season. Alts outperforming BTC across the board. "
+                "Maximize LONG opportunities. "
+                "SHORT signals require extremely strong exhaustion evidence."
+            )
+
+        lines = [
+            f"BTC Dominance : {btc_d:.2f}%  [{level}]",
+            f"ETH Dominance : {eth_d:.2f}%",
+            f"Total MCap 24h: {total_mcap_chg:+.2f}%",
+            f"Gate Rule     : {guidance}",
+        ]
+        result = "\n".join(lines)
+        print(f"   ✓ BTC Dominance: {btc_d:.2f}% [{level}]")
+        return result
+
+    except Exception as e:
+        print(f"   ⚠ BTC Dominance fetch failed ({e}) — skipping gate")
+        return "BTC Dominance: unavailable — apply standard thresholds."
+
+
+def fetch_fear_greed():
+    """
+    Fetch Crypto Fear & Greed Index from alternative.me (free, no key).
+    Gets today + yesterday to calculate momentum (rising/falling sentiment).
+    Returns formatted string for Claude prompt injection.
+    0-24 = Extreme Fear | 25-44 = Fear | 45-55 = Neutral
+    56-74 = Greed | 75-100 = Extreme Greed
+    """
+    url = "https://api.alternative.me/fng/?limit=2"
+    try:
+        resp = _SESSION.get(url, timeout=15)
+        resp.raise_for_status()
+        entries = resp.json().get("data", [])
+        if not entries:
+            return "Fear & Greed Index: unavailable — apply standard thresholds."
+
+        today     = entries[0]
+        yesterday = entries[1] if len(entries) > 1 else None
+
+        score_now  = int(today.get("value", 50))
+        label_now  = today.get("value_classification", "Neutral")
+        score_prev = int(yesterday.get("value", score_now)) if yesterday else score_now
+        delta      = score_now - score_prev
+        trend      = f"{'▲ Rising' if delta > 0 else '▼ Falling' if delta < 0 else '→ Flat'} ({delta:+d} from yesterday)"
+
+        # Classify and generate trading guidance
+        if score_now <= 24:
+            zone     = "EXTREME FEAR"
+            guidance = (
+                "Market in panic. Historically the best LONG entry zone. "
+                "Smart money accumulates here. Strongly favor LONG setups. "
+                "SHORTs are contrarian and risky — avoid unless technical breakdown is clear."
+            )
+        elif score_now <= 44:
+            zone     = "FEAR"
+            guidance = (
+                "Market cautious. Good conditions for LONGs on strong setups. "
+                "Avoid forcing trades. Quality over quantity."
+            )
+        elif score_now <= 55:
+            zone     = "NEUTRAL"
+            guidance = (
+                "Balanced sentiment. No emotional edge either direction. "
+                "Apply standard analysis. Let technicals decide."
+            )
+        elif score_now <= 74:
+            zone     = "GREED"
+            guidance = (
+                "Market getting greedy. LONG setups need extra confirmation — "
+                "late buyers get trapped. SHORT setups on exhausted coins are attractive. "
+                "Tighten confidence threshold for LONGs to 90%+."
+            )
+        else:
+            zone     = "EXTREME GREED"
+            guidance = (
+                "Market in euphoria — historically the highest-risk zone for LONGs. "
+                "REJECT alt LONG signals below 93% confidence. "
+                "HIGH-PRIORITY SHORT setups on overextended coins. "
+                "Apply ANTI-FOMO filter aggressively."
+            )
+
+        # Trend modifier
+        if delta >= 10:
+            trend_note = "Sentiment ACCELERATING upward — crowd FOMO building."
+        elif delta <= -10:
+            trend_note = "Sentiment COLLAPSING — panic selling, watch for capitulation LONG entries."
+        else:
+            trend_note = "Sentiment relatively stable."
+
+        lines = [
+            f"Fear & Greed Index : {score_now}/100  [{zone}]",
+            f"Yesterday          : {score_prev}/100  |  Trend: {trend}",
+            f"Trend Note         : {trend_note}",
+            f"Gate Rule          : {guidance}",
+        ]
+        result = "\n".join(lines)
+        print(f"   ✓ Fear & Greed: {score_now}/100 [{zone}] {trend}")
+        return result
+
+    except Exception as e:
+        print(f"   ⚠ Fear & Greed fetch failed ({e}) — skipping")
+        return "Fear & Greed Index: unavailable — apply standard thresholds."
+
+
+def fetch_btc_move_gate():
+    """
+    Check if BTC made a sharp move (>2%) in the last 30 minutes.
+    Uses Bybit kline (candlestick) API — free, no key needed.
+    Sharp BTC moves mean the market is repricing — signals on stale data are dangerous.
+    """
+    url = "https://api.bybit.com/v5/market/kline"
+    try:
+        resp = _SESSION.get(url, params={
+            "category": "spot",
+            "symbol":   "BTCUSDT",
+            "interval": "30",    # 30-minute candles
+            "limit":    "3",     # current + 2 completed candles (90 min window)
+        }, timeout=15)
+        resp.raise_for_status()
+        candles = resp.json().get("result", {}).get("list", [])
+
+        if len(candles) < 2:
+            return "BTC 30-min move: unavailable — proceed with standard caution."
+
+        # Bybit kline format: [startTime, open, high, low, close, volume, turnover]
+        # candles[0] = most recent (current/forming candle)
+        # candles[1] = last completed 30-min candle
+        current = candles[0]
+        prev    = candles[1]
+        prev2   = candles[2] if len(candles) > 2 else candles[1]
+
+        close_now  = float(current[4])
+        open_30m   = float(prev[1])
+        open_60m   = float(prev2[1])
+        move_30m   = (close_now - open_30m) / open_30m * 100
+        move_60m   = (close_now - open_60m) / open_60m * 100
+        abs_30m    = abs(move_30m)
+
+        if abs_30m >= 3.0:
+            alert = "🚨 EXTREME MOVE"
+            guidance = (
+                f"BTC moved {move_30m:+.2f}% in 30 minutes. Market is violently repricing. "
+                "Signals generated now are on stale data. "
+                "STRONGLY RECOMMENDED: Output STAY OUT unless a setup is >93% confidence. "
+                "If outputting signals, widen all stop losses by 2% to absorb volatility noise."
+            )
+        elif abs_30m >= 2.0:
+            alert = "⚠️ SIGNIFICANT MOVE"
+            guidance = (
+                f"BTC moved {move_30m:+.2f}% in 30 minutes. Elevated volatility. "
+                "Tighten confidence threshold to 91%+. "
+                "Widen stop losses by 1-2%. Prefer signals moving WITH BTC direction."
+            )
+        elif abs_30m >= 1.0:
+            alert = "📊 MODERATE MOVE"
+            guidance = (
+                f"BTC moved {move_30m:+.2f}% in 30 minutes. Normal trading range. "
+                "Proceed with standard analysis. Monitor closely after entry."
+            )
+        else:
+            alert = "✅ STABLE"
+            guidance = (
+                f"BTC flat ({move_30m:+.2f}% in 30min). "
+                "Excellent conditions for signal analysis. Standard thresholds apply."
+            )
+
+        lines = [
+            f"BTC Price Now : ${close_now:>10,.2f}",
+            f"30-min Move   : {move_30m:+.2f}%  {'📈 UP' if move_30m > 0 else '📉 DOWN'}  [{alert}]",
+            f"60-min Move   : {move_60m:+.2f}%  {'📈 UP' if move_60m > 0 else '📉 DOWN'}",
+            f"Gate Rule     : {guidance}",
+        ]
+        result = "\n".join(lines)
+        print(f"   ✓ BTC Move Gate: {move_30m:+.2f}% (30min) [{alert}]")
+        return result
+
+    except Exception as e:
+        print(f"   ⚠ BTC Move Gate fetch failed ({e}) — skipping")
+        return "BTC 30-min move: unavailable — proceed with standard caution."
+
+
+def fetch_btc_24h_momentum():
+    """
+    Fetch BTC 24h price change % from Bybit public tickers API.
+    Used as a SHORT-SIDE GUARD: when BTC rallies, alt short signals fail catastrophically.
+    Historical data (80 trades): 10 consecutive SHORT losses during June 12-15 BTC rally.
+    """
+    try:
+        resp = _SESSION.get(
+            "https://api.bybit.com/v5/market/tickers",
+            params={"category": "linear", "symbol": "BTCUSDT"},
+            timeout=10,
+        )
+        data = resp.json()
+        if data.get("retCode") == 0:
+            items = data["result"].get("list", [])
+            if items:
+                pct_str   = items[0].get("price24hPcnt", "0")
+                change_24h = float(pct_str) * 100
+                price      = float(items[0].get("lastPrice", 0))
+
+                if change_24h >= 3.0:
+                    alert    = "🚀 STRONG RALLY"
+                    guidance = (
+                        f"BTC is UP {change_24h:+.1f}% in 24h (${price:,.0f}). "
+                        "⚠ DANGER ZONE FOR SHORTS. Historical data shows cascading SHORT failures during BTC rallies. "
+                        "MANDATORY RULE: Output MAXIMUM 1 SHORT this run, confidence ≥93% only. "
+                        "If no SHORT qualifies at ≥93%, output 0 SHORTs — replace with a 5th LONG instead."
+                    )
+                elif change_24h >= 1.5:
+                    alert    = "📈 UPTREND"
+                    guidance = (
+                        f"BTC is UP {change_24h:+.1f}% in 24h (${price:,.0f}). "
+                        "Caution on SHORTs — uptrend environment. "
+                        "Limit to maximum 2 SHORTs. Each SHORT must be ≥92% confidence. "
+                        "Prefer SHORTs on coins showing clear exhaustion/rejection, not just downtrending."
+                    )
+                elif change_24h <= -3.0:
+                    alert    = "🐻 STRONG DOWNTREND"
+                    guidance = (
+                        f"BTC is DOWN {change_24h:+.1f}% in 24h (${price:,.0f}). "
+                        "FAVOURABLE SHORT environment. Historical data shows SHORTs perform well in BTC downtrends. "
+                        "Standard SHORT thresholds apply (≥91%). Up to 3 SHORTs allowed."
+                    )
+                elif change_24h <= -1.5:
+                    alert    = "📉 DOWNTREND"
+                    guidance = (
+                        f"BTC is DOWN {change_24h:+.1f}% in 24h (${price:,.0f}). "
+                        "Mild downtrend — SHORTs have reasonable conditions. "
+                        "Standard SHORT thresholds apply (≥91%). Up to 3 SHORTs allowed."
+                    )
+                else:
+                    alert    = "➡ NEUTRAL"
+                    guidance = (
+                        f"BTC is {change_24h:+.1f}% in 24h (${price:,.0f}). "
+                        "Neutral/ranging — standard analysis applies. "
+                        "SHORT signals require ≥91% confidence. Up to 3 SHORTs allowed."
+                    )
+
+                result = f"BTC 24h Change: {change_24h:+.1f}% [{alert}] at ${price:,.0f}\n{guidance}"
+                print(f"   ✓ BTC 24h Momentum: {change_24h:+.1f}% [{alert}]")
+                return result
+    except Exception as e:
+        print(f"   ⚠ BTC 24h momentum fetch failed ({e})")
+    return "BTC 24h momentum: unavailable — apply standard SHORT thresholds (≥91%, max 3 SHORTs)."
+
+
+def fetch_bybit_realtime():
+    """
+    Fetch ALL spot tickers from Bybit in one single call — real-time data, no API key needed.
+    Returns dict: { "BTC": {price, ch_24h, volume_usd, high, low}, ... }
+    """
+    url = "https://api.bybit.com/v5/market/tickers"
+    try:
+        resp = _SESSION.get(url, params={"category": "spot"}, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+        tickers = data.get("result", {}).get("list", [])
+        bybit_map = {}
+        for t in tickers:
+            sym = t.get("symbol", "")
+            if sym.endswith("USDT") and not sym.endswith("USDT3L") and not sym.endswith("USDT3S"):
+                coin = sym[:-4]   # strip USDT → "BTC", "ETH", etc.
+                try:
+                    bybit_map[coin] = {
+                        "price":      float(t.get("lastPrice",    0) or 0),
+                        "ch_24h":     float(t.get("price24hPcnt", 0) or 0) * 100,
+                        "volume_usd": float(t.get("turnover24h",  0) or 0),
+                        "high":       float(t.get("highPrice24h", 0) or 0),
+                        "low":        float(t.get("lowPrice24h",  0) or 0),
+                    }
+                except (ValueError, TypeError):
+                    pass
+        print(f"   ✓ Bybit: {len(bybit_map)} USDT pairs loaded (real-time)")
+        return bybit_map
+    except Exception as e:
+        print(f"   ⚠ Bybit fetch failed ({e}) — will use CoinGecko prices only")
+        return {}
+
+
+def fetch_top_300_coins():
+    """
+    Hybrid data fetch (v45.1 — top 200 coins, down from 300):
+      • Bybit  → real-time price, 24h%, volume, high/low  (1 fast call, no rate limit)
+      • CoinGecko → market cap ranking + 7d%              (needed for $150M short filter)
+    Bybit data overwrites CoinGecko where available.
+    Top 200 coins cover 99%+ of all tradeable volume — the same signals fire.
+    Saves ~33% of Claude input tokens per run (≈$4-6/month at current cadence).
+    """
+    # ── Step A: Bybit real-time snapshot (single call) ──
+    print("⚡ Fetching real-time data from Bybit...")
+    bybit    = fetch_bybit_realtime()
+    funding  = fetch_bybit_funding_rates()
+
+    # ── Step B: CoinGecko for market cap + 7d% + ranking ──
+    print("📊 Fetching market cap rankings from CoinGecko...")
+    all_coins = []
+    for page in range(1, 3):  # 2 pages × 100 = 200 coins (was 3 pages = 300)
+        url = "https://api.coingecko.com/api/v3/coins/markets"
+        params = {
+            "vs_currency": "usd",
+            "order": "market_cap_desc",
+            "per_page": 100,
+            "page": page,
+            "price_change_percentage": "24h,7d",
+            "sparkline": "false"
+        }
+        try:
+            resp = _SESSION.get(url, params=params, timeout=30)
+            resp.raise_for_status()
+            coins = resp.json()
+            all_coins.extend(coins)
+            print(f"   ✓ CoinGecko page {page}: {len(coins)} coins (total: {len(all_coins)})")
+        except Exception as e:
+            print(f"   ✗ CoinGecko page {page} failed: {e}")
+        if page < 3:
+            time.sleep(2)
+
+    # ── Step C: Merge — Bybit overwrites price/volume fields + funding ──
+    enriched = 0
+    for coin in all_coins:
+        symbol = (coin.get("symbol") or "").upper()
+        if symbol in bybit:
+            b = bybit[symbol]
+            if b["price"] > 0:
+                coin["current_price"]                      = b["price"]
+                coin["price_change_percentage_24h"]        = b["ch_24h"]
+                coin["total_volume"]                       = b["volume_usd"]
+                coin["high_24h"]                           = b["high"]
+                coin["low_24h"]                            = b["low"]
+                enriched += 1
+        # Attach funding rate + open interest from perp market
+        if symbol in funding:
+            coin["funding_rate"] = funding[symbol]["funding_rate"]
+            coin["open_interest"] = funding[symbol]["oi_usd"]
+        else:
+            coin["funding_rate"]  = None
+            coin["open_interest"] = None
+
+    print(f"   ✓ {enriched}/{len(all_coins)} coins enriched with Bybit real-time data")
+
+    # ── Step D: Filter to Bybit-listed coins with valid price only (v46.2 fix) ──────
+    # Coins not on Bybit spot (or with price=0) cannot be traded or tracked — remove them.
+    # v46.1 BUG: checked `symbol in bybit` but coins with price=0 passed the filter.
+    # v46.2 FIX: require price > 0 — ensures coin has a real, tradeable market on Bybit.
+    # This eliminates signals for ZEC, XMR, DASH, TAO, DEXE, AKT (when delisted)
+    # that accumulate as EXPIRED and pollute win-rate data.
+    before = len(all_coins)
+    all_coins = [
+        c for c in all_coins
+        if bybit.get((c.get("symbol") or "").upper(), {}).get("price", 0) > 0
+    ]
+    removed = before - len(all_coins)
+    if removed:
+        print(f"   ✓ Bybit filter (price>0): {len(all_coins)} tradeable coins kept ({removed} coins removed)")
+
+    return all_coins
+
+
+def format_market_data(all_coins):
+    """
+    Format coin data into the structured table format
+    your WHALE-STREAM prompt expects.
+    """
+    batches = []
+
+    for batch_num in range(1, 3):   # 2 batches × 100 = 200 coins
+        start = (batch_num - 1) * 100
+        end   = batch_num * 100
+        coins = all_coins[start:end]
+
+        lines = []
+        lines.append(f"\n{'═'*95}")
+        lines.append(f"  BATCH {batch_num}  —  Rank #{start+1} to #{end}  (Top {end} by Market Cap)")
+        lines.append(f"{'═'*95}")
+        lines.append(
+            f"{'Rank':<5} {'Symbol':<10} {'Name':<20} "
+            f"{'Price (USD)':>14} {'24h%':>8} {'7d%':>8} "
+            f"{'Market Cap':>18} {'24h Volume':>18} {'Vol/MCap':>10} "
+            f"{'24h High':>14} {'24h Low':>13} {'FundRate':>10} {'OI (USD)':>16}"
+        )
+        lines.append("─" * 160)
+
+        for i, coin in enumerate(coins):
+            rank        = start + i + 1
+            symbol      = (coin.get("symbol") or "").upper()
+            name        = (coin.get("name") or "")[:18]
+            price       = coin.get("current_price") or 0
+            ch_24h      = coin.get("price_change_percentage_24h") or 0
+            ch_7d       = coin.get("price_change_percentage_7d_in_currency") or 0
+            mcap        = coin.get("market_cap") or 0
+            volume      = coin.get("total_volume") or 0
+            high_24h    = coin.get("high_24h") or price
+            low_24h     = coin.get("low_24h") or price
+            vol_mcap    = (volume / mcap) if mcap > 0 else 0
+            fr          = coin.get("funding_rate")
+            oi          = coin.get("open_interest")
+
+            # Format price nicely depending on magnitude
+            if price >= 1000:
+                price_str = f"${price:>12,.2f}"
+            elif price >= 1:
+                price_str = f"${price:>12,.4f}"
+            elif price >= 0.001:
+                price_str = f"${price:>12,.6f}"
+            else:
+                price_str = f"${price:>12,.8f}"
+
+            fr_str = f"{fr*100:>+8.4f}%" if fr is not None else "      N/A"
+            oi_str = f"${oi:>14,.0f}"    if oi is not None else "             N/A"
+
+            lines.append(
+                f"{rank:<5} {symbol:<10} {name:<20} "
+                f"{price_str} {ch_24h:>+7.2f}% {ch_7d:>+7.2f}% "
+                f"${mcap:>17,.0f} ${volume:>17,.0f} {vol_mcap:>9.3f} "
+                f"${high_24h:>13,.4f} ${low_24h:>12,.4f} {fr_str} {oi_str}"
+            )
+
+        batches.append("\n".join(lines))
+
+    return batches   # list of 2 strings — caller makes 2 separate Claude calls
+
+
+def analyze_with_claude(market_data_text, graveyard_text="", dominance_text="", fear_greed_text="", btc_move_text="", btc_24h_text="", batch_note="", coin_perf_text=""):
+    """
+    Send market data to Claude using WHALE-STREAM prompt with prompt caching.
+
+    Cost optimisations (v45.1):
+      • Static trading rules sent as SYSTEM with cache_control — charged at 10% on cache hits
+      • Dynamic gates + market data sent as USER message — never cached (changes every run)
+      • 200 coins instead of 300 — saves ~33% of input tokens per run
+
+    5 intelligence layers injected every run:
+      1. Signal Graveyard     — last 20 WIN/LOSS outcomes (self-learning)
+      2. BTC Dominance Gate   — macro capital flow direction
+      3. Fear & Greed Gate    — crowd psychology / sentiment
+      4. BTC 30-min Move Gate — real-time volatility / repricing alert
+      5. BTC 24h Momentum     — short-side guard (new: blocks shorts during BTC rallies)
+    """
+    import anthropic
+    print("🧠 Sending to Claude for WHALE-STREAM analysis...")
+    print(f"   Model: {CLAUDE_MODEL}")
+    print(f"   🪦 Graveyard    : {'injected' if graveyard_text else 'empty (no resolved trades yet)'}")
+    print(f"   📊 BTC.D Gate   : {'injected' if dominance_text else 'unavailable'}")
+    print(f"   😱 F&G Gate     : {'injected' if fear_greed_text else 'unavailable'}")
+    print(f"   ⚡ BTC Move Gate: {'injected' if btc_move_text else 'unavailable'}")
+    print(f"   📈 BTC 24h Gate : {'injected' if btc_24h_text else 'unavailable'}")
+
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
+    no_history_msg   = "  No resolved trades yet — this is your first or early session. Apply standard confidence thresholds."
+    graveyard_block  = graveyard_text  if graveyard_text  else no_history_msg
+    dominance_block  = dominance_text  if dominance_text  else "BTC Dominance: unavailable — apply standard thresholds."
+    fear_greed_block = fear_greed_text if fear_greed_text else "Fear & Greed Index: unavailable — apply standard thresholds."
+    btc_move_block   = btc_move_text   if btc_move_text   else "BTC 30-min move: unavailable — proceed with standard caution."
+    btc_24h_block    = btc_24h_text    if btc_24h_text    else "BTC 24h momentum: unavailable — apply standard SHORT thresholds (≥91%, max 3 SHORTs)."
+    coin_perf_block  = coin_perf_text  if coin_perf_text  else "LONG COIN PERFORMANCE: insufficient data (no resolved LONGs yet)"
+
+    # Build dynamic user message (gates + graveyard + market data — changes every run)
+    user_content = DYNAMIC_DATA_TEMPLATE.format(
+        BTC_DOMINANCE_GATE = dominance_block,
+        FEAR_GREED_GATE    = fear_greed_block,
+        BTC_MOVE_GATE      = btc_move_block,
+        BTC_24H_GATE       = btc_24h_block,
+        COIN_PERFORMANCE   = coin_perf_block,
+        SIGNAL_GRAVEYARD   = graveyard_block,
+        MARKET_DATA        = market_data_text,
+        BATCH_NOTE         = batch_note,
+    )
+
+    # ── API call with prompt caching on the static system prompt ──
+    # WHALE_STREAM_SYSTEM is identical every run → Anthropic caches it.
+    # Cache hits cost 10% of normal input price = significant savings on test runs
+    # and any back-to-back runs. Scheduled 4-hour runs get a cache WRITE benefit
+    # (the first run writes the cache; TTL may extend with repeated use).
+    # max_tokens=16000: raised from 8000 — full analysis (regime + 6 signals + explanations)
+    # routinely exceeded 8k tokens, causing silent truncation and ##JSON_START## loss.
+    message = client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=16000,
+        system=[
+            {
+                "type": "text",
+                "text": WHALE_STREAM_SYSTEM,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
+        messages=[
+            {"role": "user", "content": user_content}
+        ],
+    )
+
+    result      = message.content[0].text
+    stop_reason = message.stop_reason
+
+    # ── Token usage report ──
+    usage       = message.usage
+    inp         = getattr(usage, "input_tokens",               0) or 0
+    out         = getattr(usage, "output_tokens",              0) or 0
+    cache_write = getattr(usage, "cache_creation_input_tokens", 0) or 0
+    cache_read  = getattr(usage, "cache_read_input_tokens",     0) or 0
+    print(f"   ✓ Analysis complete ({len(result)} chars, stop={stop_reason})")
+    print(f"   📊 Tokens — Input: {inp:,} | Output: {out:,} | Cache write: {cache_write:,} | Cache read: {cache_read:,}")
+    if cache_read > 0:
+        saved_usd = cache_read / 1_000_000 * 3.00 * 0.90   # 90% discount on cache hits
+        print(f"   💰 Cache HIT — saved ~${saved_usd:.4f} on {cache_read:,} cached tokens!")
+    elif cache_write > 0:
+        print(f"   📝 Cache WRITE — {cache_write:,} tokens cached for future runs.")
+
+    # ── Rescue retry: output was cut off AND JSON block is missing ────────────
+    # Safety net for the rare case where 16k tokens still isn't enough, or the model
+    # emitted preamble text that pushed the JSON past the token limit.
+    # Strategy: pass the truncated response as the "assistant" turn, then ask Claude
+    # to complete ONLY the JSON block. This is cheap (~2k tokens output) and reliable
+    # because Claude already did the analysis — it just needs to write out the JSON.
+    if stop_reason == "max_tokens" and "##JSON_START##" not in result:
+        print("   ⚠ Output cut off AND no JSON found — sending rescue call...")
+        try:
+            rescue_msg = client.messages.create(
+                model=CLAUDE_MODEL,
+                max_tokens=2000,
+                system=[
+                    {
+                        "type": "text",
+                        "text": WHALE_STREAM_SYSTEM,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ],
+                messages=[
+                    {"role": "user",      "content": user_content},
+                    {"role": "assistant", "content": result},
+                    {"role": "user",      "content": (
+                        "Your previous response was cut off by the token limit before you output "
+                        "the ##JSON_START## block. Please output ONLY the ##JSON_START## JSON block "
+                        "from your analysis right now. Single line, no other text before or after."
+                    )},
+                ],
+            )
+            rescue_text = rescue_msg.content[0].text
+            rescue_out  = getattr(rescue_msg.usage, "output_tokens", 0) or 0
+            if "##JSON_START##" in rescue_text:
+                print(f"   ✅ Rescue call succeeded! ({rescue_out} tokens) — JSON recovered")
+                result = rescue_text   # use rescue text as the result
+            else:
+                print(f"   ✗ Rescue call also failed to produce ##JSON_START## ({rescue_out} tokens)")
+                print(f"   Rescue tail: {rescue_text[-200:]}")
+        except Exception as rescue_err:
+            print(f"   ✗ Rescue call exception: {rescue_err}")
+
+    # ── Debug: verify JSON block present ──────────────────────────────────────
+    if "##JSON_START##" in result:
+        idx = result.find("##JSON_START##")
+        print(f"   ✓ ##JSON_START## found at char {idx}")
+        print(f"   JSON preview: {result[idx:idx+300]}")
+    else:
+        print("   ✗ ##JSON_START## NOT found — will fall back to STAY OUT")
+        print(f"   Last 400 chars: {result[-400:]}")
+
+    return result
+
+
+def parse_json_signals(analysis_text):
+    """
+    Extract the structured JSON block from Claude's output.
+    Looks for ##JSON_START## ... ##JSON_END## delimiters.
+    Returns a dict with verdict, regime, longs[], shorts[].
+    """
+    import json
+
+    # Primary: custom delimiters — greedy so we capture full nested JSON
+    match = re.search(r'##JSON_START##\s*(\{.*\})\s*##JSON_END##', analysis_text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(1))
+        except Exception as e:
+            print(f"   ⚠ JSON parse error (delimiters): {e}")
+            print(f"      Raw JSON snippet: {match.group(1)[:200]}")
+
+    # Fallback: markdown code fence — greedy
+    match = re.search(r'```json\s*(\{.*\})\s*```', analysis_text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(1))
+        except Exception as e:
+            print(f"   ⚠ JSON parse error (code fence): {e}")
+
+    # Fallback: find first { and last } in the text after ##JSON_START##
+    start_idx = analysis_text.find('##JSON_START##')
+    if start_idx != -1:
+        snippet = analysis_text[start_idx:]
+        brace_start = snippet.find('{')
+        brace_end   = snippet.rfind('}')
+        if brace_start != -1 and brace_end > brace_start:
+            try:
+                return json.loads(snippet[brace_start:brace_end+1])
+            except Exception as e:
+                print(f"   ⚠ JSON parse error (brace search): {e}")
+
+    return None
+
+
+def build_telegram_message(data, bkk_time, graveyard_text=""):
+    """
+    Clean, compact Telegram message optimised for phone screens.
+    graveyard_text: raw graveyard string — used to extract SHORT WR line for phone visibility.
+    """
+    ts     = bkk_time.strftime("%a %Y-%m-%d %H:%M GMT+7")
+    longs  = data.get("longs",  [])
+    shorts = data.get("shorts", [])
+
+    lines = []
+    lines.append(f"🐳 WHALE-STREAM v46.38")
+    lines.append(f"📅 {ts}")
+
+    # ── Market regime summary ─────────────────────────────────
+    regime   = data.get("regime",   "")
+    risk_env = data.get("risk_env", "")
+    if regime:
+        lines.append(f"📊 {regime}")
+    if risk_env:
+        # Shorten to first clause
+        short_risk = risk_env.split("—")[0].strip() if "—" in risk_env else risk_env[:50]
+        lines.append(f"⚡ {short_risk}")
+
+    # ── SHORT WR status from graveyard ───────────────────────
+    if graveyard_text:
+        for gline in graveyard_text.splitlines():
+            if "SHORT WR" in gline or "AUTO-BLACKLIST" in gline:
+                lines.append(gline.strip())
+    # ── Signal quality summary line ───────────────────────────
+    def _avg_conf(signals):
+        vals = []
+        for s in signals:
+            try: vals.append(int(str(s.get("conf","0")).replace("%","").strip()))
+            except: pass
+        return round(sum(vals)/len(vals)) if vals else 0
+
+    l_conf = _avg_conf(longs)
+    s_conf = _avg_conf(shorts)
+    summary_parts = []
+    if longs:  summary_parts.append(f"{len(longs)}🟢 avg {l_conf}%")
+    if shorts: summary_parts.append(f"{len(shorts)}🔴 avg {s_conf}%")
+    if not longs and not shorts: summary_parts.append("STAY OUT")
+    lines.append("📈 " + " · ".join(summary_parts))
+    # ─────────────────────────────────────────────────────────
+
+    def signal_block(s, emoji):
+        conf = s.get("conf", "")
+        # Shorten pattern to first sentence / 60 chars
+        pattern = s.get("pattern", "")
+        if len(pattern) > 60:
+            pattern = pattern[:57].rstrip(" ,—-") + "…"
+        return [
+            "",
+            f"{emoji} {s['coin']}  {conf}",
+            f"📥 {s.get('entry','')}  🛑 {s.get('sl','')}",
+            f"🎯 {s.get('tp1','')} · {s.get('tp2','')} · {s.get('tp3','')} · {s.get('tp4','')}",
+            f"💡 {pattern}" if pattern else "",
+        ]
+
+    if longs:
+        lines.append("")
+        lines.append("─── 🟢 LONG ───")
+        for s in longs:
+            lines.extend(signal_block(s, "🟢"))
+    else:
+        lines.append("")
+        lines.append("🟢 No long setups met threshold")
+
+    if shorts:
+        lines.append("")
+        lines.append("─── 🔴 SHORT ───")
+        for s in shorts:
+            lines.extend(signal_block(s, "🔴"))
+    else:
+        lines.append("")
+        lines.append("🔴 No short setups met threshold")
+
+    return "\n".join(l for l in lines if l != "")
+
+
+def send_to_telegram(analysis_text, formatted_msg=None):
+    """
+    Send the nicely formatted signal message to Telegram.
+    Uses formatted_msg if provided, otherwise falls back to raw analysis.
+    """
+    print("📨 Sending analysis to Telegram...")
+
+    full_message = formatted_msg if formatted_msg else analysis_text
+    base_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+
+    # Split into 4000-char chunks (leave buffer below 4096 limit)
+    chunk_size = 4000
+    chunks = []
+    remaining = full_message
+    while remaining:
+        if len(remaining) <= chunk_size:
+            chunks.append(remaining)
+            break
+        # Try to split at a newline boundary
+        split_at = remaining.rfind("\n", 0, chunk_size)
+        if split_at == -1:
+            split_at = chunk_size
+        chunks.append(remaining[:split_at])
+        remaining = remaining[split_at:].lstrip("\n")
+
+    for idx, chunk in enumerate(chunks, 1):
+        payload = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": chunk,
+        }
+        try:
+            resp = requests.post(base_url, json=payload, timeout=15)
+            if not resp.ok:
+                print(f"   ✗ Telegram error (chunk {idx}): {resp.status_code}")
+                print(f"      Reason: {resp.json().get('description', resp.text)}")
+            else:
+                print(f"   ✓ Telegram message {idx}/{len(chunks)} sent")
+        except Exception as e:
+            print(f"   ✗ Telegram error (chunk {idx}): {e}")
+
+        if idx < len(chunks):
+            time.sleep(0.5)
+
+
+def parse_signals_from_analysis(analysis_text):
+    """
+    Extract trade signals (up to 5 LONG + 3 SHORT) from Claude's markdown output.
+    Handles both markdown pipe tables and box-drawing character tables.
+    """
+    signals = []
+    lines = analysis_text.split("\n")
+
+    direction = None
+
+    for i, line in enumerate(lines):
+        upper = line.upper()
+
+        # Detect section headers
+        if "TOP 5 LONG" in upper or "TOP 4 LONG" in upper or "TOP 3 LONG" in upper or "LONG SETUP" in upper:
+            direction = "LONG"
+            continue
+        if "TOP 3 SHORT" in upper or "SHORT SETUP" in upper:
+            direction = "SHORT"
+            continue
+        if "CEO VERDICT" in upper or "FINAL VERDICT" in upper:
+            direction = None
+            continue
+
+        if direction is None:
+            continue
+
+        # Skip separator/header rows (lines with only dashes, equals, pipes, spaces)
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if re.match(r'^[\s\|\-\+\=\─\═\┼\┬\┴]+$', stripped):
+            continue
+        if re.match(r'^[│\|]\s*#\s*[│\|]', stripped, re.IGNORECASE):
+            continue  # header row
+
+        # Match pipe-delimited rows: | 1 | BTC | 92% | 94 | 62500 | ...
+        cells = re.split(r'[│|]', stripped)
+        cells = [c.strip() for c in cells if c.strip()]
+
+        if len(cells) >= 10:
+            try:
+                # Validate first cell is a rank number (1–5 for LONGs, 1–3 for SHORTs)
+                rank = cells[0].strip('#').strip()
+                if rank not in ('1', '2', '3', '4', '5'):
+                    continue
+
+                # Extract coin symbol — take only uppercase letters
+                coin_raw = cells[1]
+                coin = re.sub(r'[^A-Za-z0-9]', '', coin_raw).upper()
+                if not coin or len(coin) > 10:
+                    continue
+
+                def clean_num(s):
+                    return re.sub(r'[^0-9.]', '', s)
+
+                signals.append({
+                    "direction":  direction,
+                    "rank":       rank,
+                    "coin":       coin,
+                    "confidence": cells[2],
+                    "score":      clean_num(cells[3]),
+                    "entry":      clean_num(cells[4]),
+                    "sl":         clean_num(cells[5]),
+                    "tp1":        clean_num(cells[6]),
+                    "tp2":        clean_num(cells[7]) if len(cells) > 7 else "",
+                    "tp3":        clean_num(cells[8]) if len(cells) > 8 else "",
+                    "tp4":        clean_num(cells[9]) if len(cells) > 9 else "",
+                    "pattern":    cells[10] if len(cells) > 10 else "",
+                })
+            except Exception:
+                continue
+
+        # Also handle bold markdown lines like: **1. BTC** — Entry: 62500 | SL: 60000 | TP1: 65000
+        elif direction and re.search(r'\b(entry|sl|stop|tp1)\b', stripped, re.IGNORECASE):
+            try:
+                coin_m   = re.search(r'\*{0,2}#?\d[\.\s]+([A-Z]{2,10})\b', stripped)
+                entry_m  = re.search(r'entry[:\s]+\$?([\d,\.]+)', stripped, re.IGNORECASE)
+                sl_m     = re.search(r'(?:sl|stop)[:\s]+\$?([\d,\.]+)', stripped, re.IGNORECASE)
+                tp1_m    = re.search(r'tp1[:\s]+\$?([\d,\.]+)', stripped, re.IGNORECASE)
+                tp2_m    = re.search(r'tp2[:\s]+\$?([\d,\.]+)', stripped, re.IGNORECASE)
+                tp3_m    = re.search(r'tp3[:\s]+\$?([\d,\.]+)', stripped, re.IGNORECASE)
+                tp4_m    = re.search(r'tp4[:\s]+\$?([\d,\.]+)', stripped, re.IGNORECASE)
+                conf_m   = re.search(r'conf[a-z]*[:\s]+(\d+%?)', stripped, re.IGNORECASE)
+                score_m  = re.search(r'score[:\s]+(\d+)', stripped, re.IGNORECASE)
+
+                if coin_m and entry_m:
+                    signals.append({
+                        "direction":  direction,
+                        "rank":       str(len([s for s in signals if s["direction"] == direction]) + 1),
+                        "coin":       coin_m.group(1),
+                        "confidence": conf_m.group(1)  if conf_m  else "",
+                        "score":      score_m.group(1) if score_m else "",
+                        "entry":      entry_m.group(1).replace(",", ""),
+                        "sl":         sl_m.group(1).replace(",", "")  if sl_m  else "",
+                        "tp1":        tp1_m.group(1).replace(",", "") if tp1_m else "",
+                        "tp2":        tp2_m.group(1).replace(",", "") if tp2_m else "",
+                        "tp3":        tp3_m.group(1).replace(",", "") if tp3_m else "",
+                        "tp4":        tp4_m.group(1).replace(",", "") if tp4_m else "",
+                        "pattern":    "",
+                    })
+            except Exception:
+                continue
+
+    return signals
+
+
+def log_to_google_sheets(data, bkk_time):
+    """
+    Log all trade signals (up to 5 LONG + 3 SHORT) to Google Sheets.
+    Columns: Coin | Signal | Confidence | Entry Zone | Stop Loss |
+             TP1 | TP2 | TP3 | TP4 | Pattern | Timestamp |
+             Status | Entry Price | Exit Price | TP Hit | P&L % | Resolved At
+    """
+    import gspread
+    from google.oauth2.service_account import Credentials
+    print("📝 Logging to Google Sheets...")
+
+    timestamp = bkk_time.strftime("%Y-%m-%d %H:%M")
+
+    # Resolve credentials path relative to script folder
+    creds_path = os.path.join(SCRIPT_DIR, GOOGLE_CREDENTIALS_FILE)
+    if not os.path.exists(creds_path):
+        raise FileNotFoundError(
+            f"google_credentials.json not found.\n"
+            f"Please copy it to: {SCRIPT_DIR}"
+        )
+
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds  = Credentials.from_service_account_file(creds_path, scopes=scopes)
+    client = gspread.authorize(creds)
+    sheet  = client.open_by_key(GOOGLE_SHEET_ID).sheet1
+
+    HEADERS = [
+        "Coin", "Signal", "Confidence", "Entry Zone", "Stop Loss",
+        "TP1", "TP2", "TP3", "TP4", "Pattern", "Timestamp",
+        "Status", "Entry Price", "Exit Price", "TP Hit", "P&L %", "Resolved At"
+    ]
+
+    # Always ensure headers are correct (17 columns now)
+    existing = sheet.row_values(1)
+    if not existing or existing[0] != "Coin" or len(existing) < len(HEADERS):
+        sheet.update(range_name='A1', values=[HEADERS])
+        # Add dropdown to TP Hit column (col O = index 14) and Status col (col L = index 11)
+        spreadsheet = client.open_by_key(GOOGLE_SHEET_ID)
+        spreadsheet.batch_update({"requests": [
+            {
+                "setDataValidation": {
+                    "range": {
+                        "sheetId": sheet.id,
+                        "startRowIndex": 1, "endRowIndex": 2000,
+                        "startColumnIndex": 14, "endColumnIndex": 15,  # TP Hit
+                    },
+                    "rule": {
+                        "condition": {
+                            "type": "ONE_OF_LIST",
+                            "values": [
+                                {"userEnteredValue": "SL"},
+                                {"userEnteredValue": "TP1"},
+                                {"userEnteredValue": "TP2"},
+                                {"userEnteredValue": "TP3"},
+                                {"userEnteredValue": "TP4"},
+                            ]
+                        },
+                        "showCustomUi": True,
+                        "strict": False,
+                    }
+                }
+            },
+            {
+                "setDataValidation": {
+                    "range": {
+                        "sheetId": sheet.id,
+                        "startRowIndex": 1, "endRowIndex": 2000,
+                        "startColumnIndex": 11, "endColumnIndex": 12,  # Status
+                    },
+                    "rule": {
+                        "condition": {
+                            "type": "ONE_OF_LIST",
+                            "values": [
+                                {"userEnteredValue": "OPEN"},
+                                {"userEnteredValue": "WIN"},
+                                {"userEnteredValue": "LOSS"},
+                                {"userEnteredValue": "EXPIRED"},
+                                {"userEnteredValue": "NO SIGNAL"},
+                            ]
+                        },
+                        "showCustomUi": True,
+                        "strict": False,
+                    }
+                }
+            }
+        ]})
+
+    all_signals = (
+        [dict(s, direction="LONG")  for s in data.get("longs",  [])] +
+        [dict(s, direction="SHORT") for s in data.get("shorts", [])]
+    )
+
+    if all_signals:
+        # ── Dedup: skip same coin+direction already OPEN today ───
+        today_str = bkk_time.strftime("%Y-%m-%d")
+        existing_rows = sheet.get_all_values()[1:]  # skip header
+        # Count resolved trades for Gate 1 progress
+        _gate1_resolved = sum(
+            1 for r in existing_rows
+            if len(r) >= 12 and r[11].strip() in ("WIN", "LOSS")
+        )
+        _open_count = sum(
+            1 for r in existing_rows
+            if len(r) >= 12 and r[11].strip() == "OPEN"
+        )
+        already_open = set()
+        for r in existing_rows:
+            if len(r) >= 12 and r[11] == "OPEN" and r[10].startswith(today_str):
+                coin_key = r[0].upper()
+                # r[1] is like "🟢 Long" or "🔴 Short"
+                dir_key  = "LONG" if "Long" in r[1] else "SHORT"
+                already_open.add(f"{coin_key}_{dir_key}")
+        if already_open:
+            print(f"   ℹ Skipping duplicates (coin+direction) already OPEN today: {len(already_open)} combos")
+        # ─────────────────────────────────────────────────────────
+        def _parse_entry_mid(entry_zone):
+            """Return midpoint of a range like '$435-$445', or single value."""
+            import re as _re
+            nums = _re.findall(r'[\d]+\.?[\d]*', str(entry_zone).replace(",", ""))
+            if len(nums) >= 2:
+                return (float(nums[0]) + float(nums[1])) / 2
+            elif len(nums) == 1:
+                return float(nums[0])
+            return None
+
+        def _parse_price_val(price_str):
+            """Strip $ signs and convert to float."""
+            import re as _re
+            nums = _re.findall(r'[\d]+\.?[\d]*', str(price_str).replace(",", ""))
+            return float(nums[0]) if nums else None
+
+        rows = []
+        invalid_rows = []
+        for s in all_signals:
+            coin      = s.get("coin", "")
+            direction = s.get("direction", "")
+            combo_key = f"{coin.upper()}_{direction.upper()}"
+            if combo_key in already_open:
+                continue   # same coin + same direction already OPEN today
+            signal_emoji = "🟢 Long" if direction == "LONG" else "🔴 Short"
+
+            # ── SHORT coin blocklist (code-level enforcement) ──────────
+            if direction == "SHORT" and coin.upper() in SHORT_COIN_BLOCKLIST:
+                print(f"   🚫 BLOCKLISTED SHORT COIN — {coin}: permanently banned (0% historical WR)")
+                invalid_rows.append([
+                    coin,
+                    signal_emoji,
+                    s.get("conf", ""),
+                    s.get("entry", ""),
+                    s.get("sl", ""),
+                    s.get("tp1", ""),
+                    s.get("tp2", ""),
+                    s.get("tp3", ""),
+                    s.get("tp4", ""),
+                    s.get("pattern", ""),
+                    timestamp,
+                    "INVALID",  # Status — blocklisted coin
+                    "",         # Entry Price
+                    "",         # Exit Price
+                    "",         # TP Hit
+                    "",         # P&L %
+                    "",         # Resolved At
+                ])
+                continue
+            # ── end SHORT coin blocklist ────────────────────────────────
+
+            # ── LONG coin blocklist (code-level enforcement) ──────────────────────────────
+            if direction == "LONG" and coin.upper() in LONG_COIN_BLOCKLIST:
+                print(f"   🚫 BLOCKLISTED LONG COIN — {coin}: 0% historical LONG WR")
+                invalid_rows.append([
+                    coin,
+                    signal_emoji,
+                    s.get("conf", ""),
+                    s.get("entry", ""),
+                    s.get("sl", ""),
+                    s.get("tp1", ""),
+                    s.get("tp2", ""),
+                    s.get("tp3", ""),
+                    s.get("tp4", ""),
+                    s.get("pattern", ""),
+                    timestamp,
+                    "INVALID",  # Status — blocklisted LONG coin
+                    "",         # Entry Price
+                    "",         # Exit Price
+                    "",         # TP Hit
+                    "",         # P&L %
+                    "",         # Resolved At
+                ])
+                continue
+            # ── end LONG coin blocklist ─────────────────────────────────────
+
+            # ── Malformed coin blocklist (BOTH directions) ────────────────
+            if coin.upper() in MALFORMED_COIN_BLOCKLIST:
+                print(f"   ⚠ {coin}: SKIPPING — in MALFORMED_COIN_BLOCKLIST (consistently invalid SL levels)")
+                continue  # do NOT write to sheet at all
+            # ── end malformed coin blocklist ──────────────────────────────
+
+            # ── SL/TP direction validation ──────────────────────────────
+            entry_mid = _parse_entry_mid(s.get("entry", ""))
+            sl_val    = _parse_price_val(s.get("sl",    ""))
+            tp1_val   = _parse_price_val(s.get("tp1",   ""))
+            malformed_reason = None
+            if entry_mid is not None and sl_val is not None and tp1_val is not None:
+                if direction == "LONG":
+                    if sl_val >= entry_mid:
+                        malformed_reason = f"LONG SL ({sl_val}) >= entry ({entry_mid:.4f}) — SL must be below entry"
+                    elif tp1_val <= entry_mid:
+                        malformed_reason = f"LONG TP1 ({tp1_val}) <= entry ({entry_mid:.4f}) — TP1 must be above entry"
+                    else:
+                        _tp1_dist = (tp1_val - entry_mid) / entry_mid * 100
+                        if _tp1_dist < 2.5:
+                            malformed_reason = f"LONG TP1 only {_tp1_dist:.2f}% from entry — minimum 2.5% required"
+                elif direction == "SHORT":
+                    if sl_val <= entry_mid:
+                        malformed_reason = f"SHORT SL ({sl_val}) <= entry ({entry_mid:.4f}) — SL must be above entry"
+                    elif tp1_val >= entry_mid:
+                        malformed_reason = f"SHORT TP1 ({tp1_val}) >= entry ({entry_mid:.4f}) — TP1 must be below entry"
+                    else:
+                        _tp1_dist = (entry_mid - tp1_val) / entry_mid * 100
+                        if _tp1_dist < 3.0:
+                            malformed_reason = f"SHORT TP1 only {_tp1_dist:.2f}% from entry — minimum 3.0% required (was the root cause of fake +1% WINs)"
+            if malformed_reason:
+                # Skip entirely — do NOT write to sheet (not even as INVALID).
+                # Writing INVALID rows still wastes sheet capacity and confuses the tracker.
+                print(f"   ⚠ {coin}: SKIPPING malformed {direction} — {malformed_reason}")
+                continue  # do NOT write as OPEN or INVALID
+            # ────────────────────────────────────────────────────────────
+
+            rows.append([
+                coin,
+                signal_emoji,
+                s.get("conf", ""),
+                s.get("entry", ""),
+                s.get("sl", ""),
+                s.get("tp1", ""),
+                s.get("tp2", ""),
+                s.get("tp3", ""),
+                s.get("tp4", ""),
+                s.get("pattern", ""),
+                timestamp,
+                "OPEN",  # Status  — tracker will update this
+                "",      # Entry Price (midpoint, filled by tracker)
+                "",      # Exit Price
+                "",      # TP Hit
+                "",      # P&L %
+                "",      # Resolved At
+            ])
+        if invalid_rows:
+            sheet.append_rows(invalid_rows, value_input_option="USER_ENTERED")
+            print(f"   ⚠ {len(invalid_rows)} malformed signal(s) written as INVALID (paper trail)")
+        if rows:
+            sheet.append_rows(rows, value_input_option="USER_ENTERED")
+            print(f"   ✓ {len(rows)} signal(s) logged as OPEN in Google Sheets")
+        else:
+            print("   ℹ All signals already logged today — nothing new added")
+
+        valid_count   = len(rows)
+        invalid_count = len(invalid_rows)
+        blocked_coins = [r[0] for r in invalid_rows]  # first cell = coin name
+    else:
+        existing_rows = sheet.get_all_values()[1:]
+        _gate1_resolved = sum(
+            1 for r in existing_rows
+            if len(r) >= 12 and r[11].strip() in ("WIN", "LOSS")
+        )
+        _open_count = sum(
+            1 for r in existing_rows
+            if len(r) >= 12 and r[11].strip() == "OPEN"
+        )
+        sheet.append_row([
+            "STAY OUT", "—", "—", "—", "—",
+            "—", "—", "—", "—", "—", timestamp,
+            "NO SIGNAL", "", "", "", "", ""
+        ])
+        print("   ⚠ STAY OUT — logged summary row")
+        valid_count   = 0
+        invalid_count = 0
+        blocked_coins = []
+
+    return valid_count, invalid_count, blocked_coins, _gate1_resolved, _open_count
+
+
+# ─────────────────────────────────────────────────────────────
+# MAIN ENTRY POINT
+# ─────────────────────────────────────────────────────────────
+
+def main():
+    print()
+    print("╔══════════════════════════════════════════════════╗")
+    print("║   🐳  WHALE-STREAM v46.38 — AUTO BOT STARTING    ║")
+    print("╚══════════════════════════════════════════════════╝")
+    print()
+
+    # ── Step 1: Load Signal Graveyard (past outcomes → feedback loop) ──
+    print("🪦 Loading Signal Graveyard from Google Sheets...")
+    graveyard, short_wr_recent, coin_perf = fetch_signal_graveyard()
+
+    # ── Step 1b: Macro Event Guard + Token Unlock Risk ──────
+    print("📅 Checking macro event calendar + token unlock risk...")
+    macro_risks  = check_macro_event_risk()
+    unlock_risks = check_token_unlock_risk()
+    all_risks    = macro_risks + unlock_risks
+    if all_risks:
+        risk_block = (
+            "\n" + "═" * 80 + "\n"
+            "⚠️  MARKET EVENT RISK — READ BEFORE SCORING ANY COIN:\n"
+            + "\n".join(f"   {r}" for r in all_risks)
+            + "\n" + "═" * 80
+        )
+        graveyard = (graveyard + risk_block) if graveyard else risk_block.strip()
+        _macro_count  = len(macro_risks)
+        _unlock_count = len(unlock_risks)
+        print(f"   🚨 Event risks injected: {_macro_count} macro, {_unlock_count} token unlock")
+        for _r in all_risks:
+            print(f"      {_r[:100]}")
+    else:
+        print("   ✅ No macro or token unlock events in risk window")
+
+    # ── Step 1d: Fetch BTC Dominance Gate ───────────────────
+    print("📊 Fetching BTC Dominance Gate...")
+    dominance = fetch_btc_dominance()
+
+    # ── Step 1e: Fetch Fear & Greed Index ───────────────────
+    print("😱 Fetching Fear & Greed Index...")
+    fear_greed = fetch_fear_greed()
+
+    # ── Step 1f: Fetch BTC 30-min Move Gate ─────────────────
+    print("⚡ Fetching BTC 30-min Move Gate (volatility check)...")
+    btc_move = fetch_btc_move_gate()
+
+    # ── Step 1g: Fetch BTC 24h Momentum (short-side guard) ───
+    print("📈 Fetching BTC 24h Momentum Gate (short-side guard)...")
+    btc_24h = fetch_btc_24h_momentum()
+
+    # ── Step 2: Fetch market data ───────────────────────────
+    all_coins = fetch_top_300_coins()
+    if len(all_coins) < 80:
+        print("✗ ERROR: Not enough coins fetched. Check your internet connection.")
+        return
+
+    # ── Step 3: Format into WHALE-STREAM table format ───────
+    print("🔧 Formatting market data into 2 batches (100 coins each)...")
+    batches = format_market_data(all_coins)   # list of 2 strings
+
+    # ── Step 4: Analyze with Claude — 2 separate calls to exploit prompt caching ──
+    # v45.2: Batch 1 WRITES the system-prompt cache (4,442 tokens at 125% cost).
+    #         Batch 2 READS the cache within the same run  (4,442 tokens at  10% cost).
+    #         Net saving vs single call: ~90% on 4,442 cached tokens per run.
+    _STANDALONE = (
+        "\n════════════════════════════════════════════════════════════\n"
+        "⚡ INSTRUCTION: This is a complete, self-contained analysis request.\n"
+        "Analyze ALL coins in the DATA above and output your FULL ##JSON_START## JSON block\n"
+        "immediately. Do NOT wait for any additional batches — produce final signals now.\n"
+        "════════════════════════════════════════════════════════════"
+    )
+
+    try:
+        print("🧠 Batch 1/2 — Claude analysis (coins #1–100, cache WRITE expected)...")
+        analysis1 = analyze_with_claude(
+            batches[0],
+            graveyard_text=graveyard, dominance_text=dominance,
+            fear_greed_text=fear_greed, btc_move_text=btc_move,
+            btc_24h_text=btc_24h, batch_note=_STANDALONE,
+            coin_perf_text=coin_perf,
+        )
+    except Exception as e:
+        print(f"✗ Claude analysis failed (batch 1): {e}")
+        return
+
+    analysis2 = ""
+    if len(batches) > 1:
+        try:
+            print("🧠 Batch 2/2 — Claude analysis (coins #101–200, cache READ expected)...")
+            analysis2 = analyze_with_claude(
+                batches[1],
+                graveyard_text=graveyard, dominance_text=dominance,
+                fear_greed_text=fear_greed, btc_move_text=btc_move,
+                btc_24h_text=btc_24h, batch_note=_STANDALONE,
+                coin_perf_text=coin_perf,
+            )
+        except Exception as e:
+            print(f"⚠ Claude analysis failed (batch 2): {e} — continuing with batch 1 only")
+
+    # Bangkok time used across all outputs
+    bkk_time = datetime.now(timezone(timedelta(hours=7)))
+
+    # ── Step 5: Parse + merge JSON signals from both batches ────────────
+    def _make_fallback(raw_text):
+        regime_m = re.search(r'(?:BEAR|BULL|RANGE)[^\n]{0,30}(?:EXPANSION|CONSOLIDATION|RANGE)', raw_text, re.IGNORECASE)
+        btc_m    = re.search(r'BTC Bias\s*[:\-]+\s*([^\n]{5,40})', raw_text, re.IGNORECASE)
+        eth_m    = re.search(r'ETH Bias\s*[:\-]+\s*([^\n]{5,40})', raw_text, re.IGNORECASE)
+        risk_m   = re.search(r'Risk Env[^\n]*[:\-]+\s*([^\n]{5,40})', raw_text, re.IGNORECASE)
+        return {
+            "verdict":  "STAY OUT",
+            "regime":   regime_m.group(0).strip() if regime_m else "Unknown",
+            "btc_bias": btc_m.group(1).strip()    if btc_m   else "—",
+            "eth_bias": eth_m.group(1).strip()    if eth_m   else "—",
+            "risk_env": risk_m.group(1).strip()   if risk_m  else "—",
+            "longs":    [],
+            "shorts":   [],
+        }
+
+    data1 = parse_json_signals(analysis1)
+    data2 = parse_json_signals(analysis2) if analysis2 else None
+
+    if not data1:
+        print("   ⚠ Batch 1 JSON parse failed — building STAY OUT fallback")
+        data1 = _make_fallback(analysis1)
+    if not data2:
+        if analysis2:
+            print("   ⚠ Batch 2 JSON parse failed — using batch 1 signals only")
+        data2 = {"longs": [], "shorts": []}
+
+    # Merge longs + shorts from both batches, deduplicate by coin symbol
+    seen_l, seen_s = set(), set()
+    merged_longs, merged_shorts = [], []
+    for sig in data1.get("longs", []) + data2.get("longs", []):
+        sym = sig.get("coin", "").upper()
+        if sym and sym not in seen_l:
+            seen_l.add(sym)
+            merged_longs.append(sig)
+    for sig in data1.get("shorts", []) + data2.get("shorts", []):
+        sym = sig.get("coin", "").upper()
+        if sym and sym not in seen_s:
+            seen_s.add(sym)
+            merged_shorts.append(sig)
+
+    # ── Programmatic SHORT confidence filter (belt + suspenders) ──────────────
+    # If SHORT WR is critical, strip any shorts Claude emitted below the threshold,
+    # even if Claude didn't obey the graveyard instruction.
+    if short_wr_recent < 40:
+        min_short_conf = 95
+    elif short_wr_recent < 45:
+        min_short_conf = 93
+    else:
+        min_short_conf = 0  # no filter needed
+
+    if min_short_conf > 0:
+        before = len(merged_shorts)
+        def _conf_int(sig):
+            try:
+                return int(str(sig.get("conf", "0")).replace("%", "").strip())
+            except (ValueError, TypeError):
+                return 0
+
+        merged_shorts = [s for s in merged_shorts if _conf_int(s) >= min_short_conf]
+        dropped = before - len(merged_shorts)
+        if dropped:
+            print(f"   🛡  SHORT WR {short_wr_recent:.0f}% → AUTO-DROPPED {dropped} short(s) below {min_short_conf}% confidence")
+
+    signal_data = {
+        "verdict":  data1.get("verdict",  "TRADE"),
+        "regime":   data1.get("regime",   ""),
+        "btc_bias": data1.get("btc_bias", ""),
+        "eth_bias": data1.get("eth_bias", ""),
+        "risk_env": data1.get("risk_env", ""),
+        "longs":    merged_longs,
+        "shorts":   merged_shorts,
+    }
+    print(f"   ✓ Merged: {len(merged_longs)} LONG + {len(merged_shorts)} SHORT signals from 2 batches")
+
+    tg_msg = build_telegram_message(signal_data, bkk_time, graveyard_text=graveyard)
+    print("\n" + "─"*60)
+    print(tg_msg)
+    print("─"*60 + "\n")
+
+    # ── Step 6: Send to Telegram (always uses clean formatted message) ──
+    try:
+        send_to_telegram(analysis1, formatted_msg=tg_msg)
+    except Exception as e:
+        print(f"✗ Telegram send failed: {e}")
+
+    # ── Step 7: Log to Google Sheets ────────────────────────
+    valid_logged   = 0
+    invalid_logged = 0
+    blocked_coins  = []
+    gate1_total    = 0
+    open_pipeline  = 0
+    try:
+        valid_logged, invalid_logged, blocked_coins, gate1_total, open_pipeline = log_to_google_sheets(signal_data, bkk_time)
+    except Exception as e:
+        print(f"✗ Google Sheets logging failed: {e}")
+        print("  (Check that GOOGLE_CREDENTIALS_FILE exists and GOOGLE_SHEET_ID is correct)")
+
+    # ── Step 8: Send end-of-run Signal Quality summary to Telegram ──
+    try:
+        _ts    = bkk_time.strftime("%a %Y-%m-%d %H:%M GMT+7")
+        _n_long  = len(signal_data.get("longs",  []))
+        _n_short = len(signal_data.get("shorts", []))
+
+        if invalid_logged == 0:
+            _quality_line = f"🛡 Signal quality: {valid_logged} valid | 0 INVALID (all clean)"
+        else:
+            _blocked_str  = ", ".join(blocked_coins) if blocked_coins else "unknown"
+            _quality_line = (
+                f"⚠️ Signal quality: {valid_logged} valid | {invalid_logged} INVALID (blocked)\n"
+                f"🚫 Blocked coins: {_blocked_str}"
+            )
+
+        _gate1_pct = min(gate1_total / 150 * 100, 100)
+        _gate1_bar = "✅ CLEARED" if gate1_total >= 150 else f"{gate1_total}/150 ({_gate1_pct:.0f}%)"
+        # In REPAIR MODE, name the recovery coins that were signaled as SHORTs
+        _repair_active = os.path.exists(os.path.join(SCRIPT_DIR, "short_repair.flag"))
+        if _repair_active and _n_short > 0:
+            _short_coins = [s.get("coin", "?").upper() for s in signal_data.get("shorts", [])]
+            _short_label = f"{_n_short}🔴 SHORT [{', '.join(_short_coins)} — recovery]"
+        else:
+            _short_label = f"{_n_short}🔴 SHORT"
+        _summary = (
+            f"📋 Run summary — {_ts}\n"
+            f"  Signals: {_n_long}🟢 LONG · {_short_label}\n"
+            f"  🎯 Gate 1: {_gate1_bar}\n"
+            f"  ⏳ Pipeline: {open_pipeline} OPEN signals waiting\n"
+            f"  {_quality_line}"
+        )
+        send_to_telegram(None, formatted_msg=_summary)
+    except Exception as e:
+        print(f"⚠ End-of-run Telegram summary failed: {e}")
+
+    print()
+    print("✅  WHALE-STREAM run complete!")
+    print()
+
+
+if __name__ == "__main__":
+    main()

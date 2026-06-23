@@ -1,0 +1,40 @@
+# ─── Secrets (NEVER commit) ──────────────────────────────────────
+google_credentials.json
+local_config.py
+
+# ─── Large auto-generated logs ───────────────────────────────────
+tracker_log.txt
+trader_log.txt
+bot_log.txt
+briefing_log.txt
+monitor_log.txt
+orphan_log.txt
+log_analyzer_log.txt
+analyze_logs.txt
+analysis_shorts.txt
+whale_stream_log.txt
+check_bybit_orphans.txt
+
+# ─── Runtime / generated output ──────────────────────────────────
+dashboard.html
+
+# ─── Runtime flag files ───────────────────────────────────────────
+*.flag
+paused.flag
+short_repair.flag
+
+# ─── Runtime state (changes every run) ───────────────────────────
+bybit_balance.json
+monitor_state.json
+cb_paused_prev.json
+
+# ─── Python cache ────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ─── Windows artifacts ───────────────────────────────────────────
+Thumbs.db
+desktop.ini
+ehthumbs.db
