@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v45.0  —  FULL AUTOMATION BOT           ║
+║        WHALE-STREAM v46.41  —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 coins from CoinGecko (free, no key)     ║
@@ -187,7 +187,7 @@ CLAUDE_MODEL = "claude-sonnet-4-6"
 # SECTION 2: YOUR WHALE-STREAM PROMPT  ← Do not change this
 # ─────────────────────────────────────────────────────────────
 
-WHALE_STREAM_PROMPT = """WHALE-STREAM v46.40 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
+WHALE_STREAM_PROMPT = """WHALE-STREAM v46.41 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
 ROLE:
 You are an Institutional Multi-Agent Trading Committee composed of:
 • Market Regime Analyst • Smart Money Concepts Specialist • Quantitative Momentum Analyst • Liquidity & Stop-Hunt Analyst • Wyckoff Structure Analyst • Relative Strength Analyst • Breakout Probability Engine • Reversal Probability Engine • Continuation Probability Engine • Risk Management Committee
@@ -435,7 +435,7 @@ OUTPUT FORMAT:
 ⚡ STEP 1 — OUTPUT THE JSON BLOCK FIRST (MANDATORY, BEFORE ANYTHING ELSE):
 
 ##JSON_START##
-{"verdict":"GO","regime":"Bull Consolidation","btc_bias":"BULLISH","eth_bias":"BULLISH","risk_env":"RISK-ON","longs":[{"rank":1,"coin":"ZEC","conf":"94%","score":"94.3","entry":"$375-$390","sl":"$362","tp1":"$425","tp2":"$455","tp3":"$490","tp4":"$540","pattern":"Stage 2 breakout retest + negative funding"},{"rank":2,"coin":"ADA","conf":"92%","score":"92.0","entry":"$0.152-$0.158","sl":"$0.147","tp1":"$0.172","tp2":"$0.185","tp3":"$0.200","tp4":"$0.220","pattern":"Bull flag + RS vs BTC"},{"rank":3,"coin":"IOTA","conf":"88%","score":"88.1","entry":"$0.0420-$0.0440","sl":"$0.0402","tp1":"$0.0500","tp2":"$0.0560","tp3":"$0.0620","tp4":"$0.0700","pattern":"Support reclaim"}],"shorts":[{"rank":1,"coin":"FF","conf":"96%","score":"96.0","entry":"$0.100-$0.104","sl":"$0.109","tp1":"$0.089","tp2":"$0.079","tp3":"$0.068","tp4":"$0.055","pattern":"Stage 5 distribution + RS failure"},{"rank":2,"coin":"CHZ","conf":"95%","score":"95.2","entry":"$0.042-$0.044","sl":"$0.047","tp1":"$0.037","tp2":"$0.033","tp3":"$0.029","tp4":"$0.024","pattern":"Dead-cat bounce rejection"}]}
+{"verdict":"GO","regime":"Bull Consolidation","btc_bias":"BULLISH","eth_bias":"BULLISH","risk_env":"RISK-ON","longs":[{"rank":1,"coin":"ZEC","conf":"94%","score":"94.3","entry":"$375-$390","sl":"$362","tp1":"$425","tp2":"$455","tp3":"$490","tp4":"$540","pattern":"Stage 2 breakout retest + negative funding"},{"rank":2,"coin":"ADA","conf":"92%","score":"92.0","entry":"$0.152-$0.158","sl":"$0.147","tp1":"$0.172","tp2":"$0.185","tp3":"$0.200","tp4":"$0.220","pattern":"Bull flag + RS vs BTC"},{"rank":3,"coin":"IOTA","conf":"88%","score":"88.1","entry":"$0.0420-$0.0440","sl":"$0.0402","tp1":"$0.0500","tp2":"$0.0560","tp3":"$0.0620","tp4":"$0.0700","pattern":"Support reclaim"}],"shorts":[{"rank":1,"coin":"FF","conf":"96%","score":"96.0","entry":"$0.100-$0.104","sl":"$0.109","tp1":"$0.089","tp2":"$0.079","tp3":"$0.068","tp4":"$0.055","pattern":"Stage 5 distribution + RS failure"},{"rank":2,"coin":"H","conf":"95%","score":"95.2","entry":"$0.0021-$0.0022","sl":"$0.0024","tp1":"$0.0018","tp2":"$0.0016","tp3":"$0.0014","tp4":"$0.0012","pattern":"Stage 5 distribution failure + declining volume"}]}
 ##JSON_END##
 
 For STAY OUT verdict use:
@@ -874,8 +874,8 @@ def fetch_signal_graveyard():
         # ── SHORT recovery guidance (injected when repair mode is active) ──
         if _in_repair_mode:
             lines.append("─" * 100)
-            # Compute H/FF/CHZ WRs dynamically from current resolved data
-            _rc_coins = {"H": (0, 0), "FF": (0, 0), "CHZ": (0, 0)}
+            # Compute H/FF WRs dynamically from current resolved data
+            _rc_coins = {"H": (0, 0), "FF": (0, 0)}
             for _rr in resolved:
                 _rrc = _rr.get("coin", "").upper()
                 if _rrc in _rc_coins and _rr["direction"] == "SHORT":
@@ -1226,21 +1226,21 @@ def fetch_btc_24h_momentum():
                     guidance = (
                         f"BTC is DOWN {change_24h:+.1f}% in 24h (${price:,.0f}). "
                         "FAVOURABLE SHORT environment. Historical data shows SHORTs perform well in BTC downtrends. "
-                        "Standard SHORT thresholds apply (≥91%). Up to 3 SHORTs allowed."
+                        "SHORT thresholds: ≥95% in REPAIR MODE (see SHORT SIGNAL STRATEGY above). Up to 3 SHORTs allowed."
                     )
                 elif change_24h <= -1.5:
                     alert    = "📉 DOWNTREND"
                     guidance = (
                         f"BTC is DOWN {change_24h:+.1f}% in 24h (${price:,.0f}). "
                         "Mild downtrend — SHORTs have reasonable conditions. "
-                        "Standard SHORT thresholds apply (≥91%). Up to 3 SHORTs allowed."
+                        "SHORT thresholds: ≥95% in REPAIR MODE (see SHORT SIGNAL STRATEGY above). Up to 3 SHORTs allowed."
                     )
                 else:
                     alert    = "➡ NEUTRAL"
                     guidance = (
                         f"BTC is {change_24h:+.1f}% in 24h (${price:,.0f}). "
                         "Neutral/ranging — standard analysis applies. "
-                        "SHORT signals require ≥91% confidence. Up to 3 SHORTs allowed."
+                        "SHORT signals require ≥95% in REPAIR MODE (see SHORT SIGNAL STRATEGY above). Up to 3 SHORTs allowed."
                     )
 
                 result = f"BTC 24h Change: {change_24h:+.1f}% [{alert}] at ${price:,.0f}\n{guidance}"
@@ -1248,7 +1248,7 @@ def fetch_btc_24h_momentum():
                 return result
     except Exception as e:
         print(f"   ⚠ BTC 24h momentum fetch failed ({e})")
-    return "BTC 24h momentum: unavailable — apply standard SHORT thresholds (≥91%, max 3 SHORTs)."
+    return "BTC 24h momentum: unavailable — apply SHORT thresholds per REPAIR MODE rules (≥95%, max 3 SHORTs)."
 
 
 def fetch_bybit_realtime():
@@ -1615,7 +1615,7 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     shorts = data.get("shorts", [])
 
     lines = []
-    lines.append(f"🐳 WHALE-STREAM v46.40")
+    lines.append(f"🐳 WHALE-STREAM v46.41")
     lines.append(f"📅 {ts}")
 
     # ── Market regime summary ─────────────────────────────────
@@ -2128,7 +2128,7 @@ def log_to_google_sheets(data, bkk_time):
 def main():
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🐳  WHALE-STREAM v46.40 — AUTO BOT STARTING    ║")
+    print("║   🐳  WHALE-STREAM v46.41 — AUTO BOT STARTING    ║")
     print("╚══════════════════════════════════════════════════╝")
     print()
 

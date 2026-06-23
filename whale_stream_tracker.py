@@ -614,8 +614,8 @@ def write_dashboard_html(all_rows):
     # SHORT repair mode flag
     short_repair_active = os.path.exists(os.path.join(SCRIPT_DIR, "short_repair.flag"))
 
-    # Recovery coin stats (H/FF/CHZ) — for dashboard when in REPAIR MODE
-    _rc_set = {"H", "FF", "CHZ"}
+    # Recovery coin stats (H/FF) — for dashboard when in REPAIR MODE
+    _rc_set = {"H", "FF"}
     _rc_stats = {}
     for _rcc in _rc_set:
         _rcc_trades = [r for r in short_real if r.get("coin", "").upper() == _rcc]
@@ -627,7 +627,6 @@ def write_dashboard_html(all_rows):
     rc_wins_needed = max(0, 10 - _s20r_w)
     rc_h_w,   rc_h_l   = _rc_stats.get("H",   (0, 0))
     rc_ff_w,  rc_ff_l  = _rc_stats.get("FF",  (0, 0))
-    rc_chz_w, rc_chz_l = _rc_stats.get("CHZ", (0, 0))
 
     # Pre-compute SHORT recovery HTML block (avoids nested f-string quote conflict)
     def _rc_color(w, l):
@@ -638,13 +637,11 @@ def write_dashboard_html(all_rows):
             'border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;'
             'gap:24px;flex-wrap:wrap;">'
             '<span style="color:#ffc107;font-weight:600;font-size:13px;">'
-            '🔧 SHORT RECOVERY — H / FF / CHZ</span>'
+            '🔧 SHORT RECOVERY — H / FF</span>'
             f'<span style="font-size:12px;color:var(--text2);">H: '
             f'<b style="color:{_rc_color(rc_h_w,rc_h_l)}">{rc_h_w}W/{rc_h_l}L</b></span>'
             f'<span style="font-size:12px;color:var(--text2);">FF: '
             f'<b style="color:{_rc_color(rc_ff_w,rc_ff_l)}">{rc_ff_w}W/{rc_ff_l}L</b></span>'
-            f'<span style="font-size:12px;color:var(--text2);">CHZ: '
-            f'<b style="color:{_rc_color(rc_chz_w,rc_chz_l)}">{rc_chz_w}W/{rc_chz_l}L</b></span>'
             f'<span style="font-size:12px;color:var(--text2);">| Need '
             f'<b style="color:#ffc107">{rc_wins_needed}</b> more win(s) → 50% last-20</span>'
             '</div>'
@@ -889,7 +886,7 @@ def write_dashboard_html(all_rows):
   <div class="card">
     <div class="label">📉 Gate 3 — SHORT WR</div>
     <div class="value {gate3_color}">{true_short_wr:.1f}%</div>
-    <div class="sub">{"⏸ REPAIR MODE — recovery: H/FF/CHZ only | " if short_repair_active else "✅ FULL MODE | "}{true_short_wins}W/{true_short_total-true_short_wins}L real trades</div>
+    <div class="sub">{"⏸ REPAIR MODE — recovery: H/FF only | " if short_repair_active else "✅ FULL MODE | "}{true_short_wins}W/{true_short_total-true_short_wins}L real trades</div>
   </div>
   <div class="card">
     <div class="label">📅 Gate 6 — Weekly Streak</div>
@@ -1943,10 +1940,10 @@ def main():
             "  ✅ SHORT: FULL MODE"
         )
 
-        # SHORT recovery coin progress (H/FF/CHZ) — shown only in REPAIR MODE
+        # SHORT recovery coin progress (H/FF) — shown only in REPAIR MODE
         _rc_line = None
         if _in_repair:
-            _rc_coins = {"H", "FF", "CHZ"}
+            _rc_coins = {"H", "FF"}
             _rc_real_shorts = [
                 r for r in all_parsed
                 if ("SHORT" in r.get("signal", "").upper() or "🔴" in r.get("signal", ""))
@@ -1964,7 +1961,7 @@ def main():
                         os.remove(_repair_flag)
                         send_telegram_alert(
                             f"🎉 <b>SHORT REPAIR MODE LIFTED</b>\n"
-                            f"  H/FF/CHZ combined WR: {_rc_exit_wr:.0f}%"
+                            f"  H/FF combined WR: {_rc_exit_wr:.0f}%"
                             f" over {len(_rc_real_shorts)} trades\n"
                             f"  Exit criteria met (≥55% WR, ≥6 trades).\n"
                             f"  SHORT signals now open to all non-blacklisted coins."
@@ -1982,7 +1979,7 @@ def main():
 
             if _rc_real_shorts:
                 _rc_parts = []
-                for _rc in ["H", "FF", "CHZ"]:
+                for _rc in ["H", "FF"]:
                     _rc_t = [r for r in _rc_real_shorts if r.get("coin", "").upper() == _rc]
                     if _rc_t:
                         _rc_w = sum(1 for r in _rc_t if r["status"] == "WIN")
@@ -1996,7 +1993,7 @@ def main():
                 _wins_needed = max(0, 10 - _s20_w)
                 _rc_line = f"  🔄 Recovery: {' '.join(_rc_parts)} | need {_wins_needed} more win(s)"
             else:
-                _rc_line = "  🔄 Recovery: H/FF/CHZ SHORTs unlocked — no trades placed yet"
+                _rc_line = "  🔄 Recovery: H/FF SHORTs unlocked — no trades placed yet"
 
         _lines = [
             f"📊 <b>TRACKER RUN — {_bkk_now.strftime('%a %H:%M')} BKK</b>",

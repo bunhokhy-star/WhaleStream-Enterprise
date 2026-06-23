@@ -848,7 +848,7 @@ def main():
         print(f"── {coin} {dir_label} ──────────────────────────")
 
         # ── SHORT REPAIR MODE — skip unless approved recovery coin ─────────────
-        # SHORT_RECOVERY_COINS (H, FF, CHZ) defined at module level — bypass REPAIR MODE
+        # SHORT_RECOVERY_COINS (H, FF) defined at module level — bypass REPAIR MODE
         if side == "Sell" and os.path.exists(SHORT_REPAIR_FILE):
             if coin.upper() in SHORT_RECOVERY_COINS:
                 log(f"ALLOW {coin} SHORT — approved recovery coin (REPAIR MODE active)")
@@ -1114,7 +1114,7 @@ def main():
         send_telegram_alert(
             f"⏸ <b>REPAIR MODE — {n} SHORT signal(s) skipped</b>\n"
             f"  Coins: {coins_str}\n"
-            f"  SHORT WR is in repair (< 50% threshold). Only H/FF/CHZ allowed.\n"
+            f"  SHORT WR is in repair (< 50% threshold). Only H/FF allowed.\n"
             f"  To resume SHORTs: run LIFT_SHORT_REPAIR.bat (or delete short_repair.flag).\n"
             f"  Auto-resumes when analyze_shorts.py confirms WR ≥ 50% over 20+ trades."
         )

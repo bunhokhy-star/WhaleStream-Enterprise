@@ -1,5 +1,20 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.41 — 2026-06-23 (Complete CHZ Cleanup — second-pass audit)
+
+### 6 Fixes Shipped (all CHZ residue from v46.40 partial cleanup)
+
+| # | File | Fix |
+|---|------|-----|
+| 1 | whale_stream_bot.py | Header banner `v45.0` → `v46.41`; version strings in prompt, Telegram, and startup banner bumped to v46.41 |
+| 2 | whale_stream_bot.py | `_rc_coins` dict removed CHZ entry (`{"H": (0,0), "FF": (0,0), "CHZ": (0,0)}` → `{"H": (0,0), "FF": (0,0)}`); comment updated |
+| 3 | whale_stream_bot.py | BTC momentum gate strings corrected: `≥91%` → `≥95% REPAIR MODE` in 4 places + fallback string |
+| 4 | whale_stream_bot.py | Example JSON rank-2 SHORT was CHZ (malformed coin) — replaced with H using realistic price levels |
+| 5 | whale_stream_trader.py | Comment `SHORT_RECOVERY_COINS (H, FF, CHZ)` → `(H, FF)`; Telegram message `"Only H/FF/CHZ allowed."` → `"Only H/FF allowed."` |
+| 6 | whale_stream_tracker.py | `_rc_set`, `_rc_coins` removed CHZ; removed `rc_chz_w/rc_chz_l` variable; dashboard HTML header + CHZ span removed; Gate 3 sub text `H/FF/CHZ` → `H/FF`; Telegram repair-mode auto-exit message `H/FF/CHZ` → `H/FF`; recovery loop `["H","FF","CHZ"]` → `["H","FF"]`; no-trades-yet message updated |
+
+---
+
 ## v46.40 — 2026-06-23 (Security Hardening + Sonnet Restored + CHZ Fix)
 
 ### 3 Fixes Shipped
