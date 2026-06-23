@@ -177,14 +177,17 @@ GOOGLE_SHEET_ID = "1R21mkduSpbki2HmlNJMHM95-LkGS0q-AKHE1HVIfMmI"
 # See SETUP_GUIDE.md Step 4 to get this file
 GOOGLE_CREDENTIALS_FILE = "google_credentials.json"
 
-# Which Claude model to use (claude-sonnet-4-6 = faster/cheaper, claude-opus-4-6 = smarter)
-CLAUDE_MODEL = "claude-sonnet-4-6"
+# Which Claude model to use:
+#   claude-haiku-4-5-20251001  ← ACTIVE  (cheapest, ~75% less than Sonnet, good for structured prompts)
+#   claude-sonnet-4-6           (balanced quality/cost — switch back if signal quality drops)
+#   claude-opus-4-6             (smartest, most expensive)
+CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 
 # ─────────────────────────────────────────────────────────────
 # SECTION 2: YOUR WHALE-STREAM PROMPT  ← Do not change this
 # ─────────────────────────────────────────────────────────────
 
-WHALE_STREAM_PROMPT = """WHALE-STREAM v46.38 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
+WHALE_STREAM_PROMPT = """WHALE-STREAM v46.39 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
 ROLE:
 You are an Institutional Multi-Agent Trading Committee composed of:
 • Market Regime Analyst • Smart Money Concepts Specialist • Quantitative Momentum Analyst • Liquidity & Stop-Hunt Analyst • Wyckoff Structure Analyst • Relative Strength Analyst • Breakout Probability Engine • Reversal Probability Engine • Continuation Probability Engine • Risk Management Committee
@@ -1610,7 +1613,7 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     shorts = data.get("shorts", [])
 
     lines = []
-    lines.append(f"🐳 WHALE-STREAM v46.38")
+    lines.append(f"🐳 WHALE-STREAM v46.39")
     lines.append(f"📅 {ts}")
 
     # ── Market regime summary ─────────────────────────────────
@@ -2123,7 +2126,7 @@ def log_to_google_sheets(data, bkk_time):
 def main():
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🐳  WHALE-STREAM v46.38 — AUTO BOT STARTING    ║")
+    print("║   🐳  WHALE-STREAM v46.39 — AUTO BOT STARTING    ║")
     print("╚══════════════════════════════════════════════════╝")
     print()
 
