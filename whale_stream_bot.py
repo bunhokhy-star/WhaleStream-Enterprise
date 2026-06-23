@@ -187,7 +187,7 @@ CLAUDE_MODEL = "claude-sonnet-4-6"
 # SECTION 2: YOUR WHALE-STREAM PROMPT  ← Do not change this
 # ─────────────────────────────────────────────────────────────
 
-WHALE_STREAM_PROMPT = """WHALE-STREAM v46.41 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
+WHALE_STREAM_PROMPT = """WHALE-STREAM v46.42 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
 ROLE:
 You are an Institutional Multi-Agent Trading Committee composed of:
 • Market Regime Analyst • Smart Money Concepts Specialist • Quantitative Momentum Analyst • Liquidity & Stop-Hunt Analyst • Wyckoff Structure Analyst • Relative Strength Analyst • Breakout Probability Engine • Reversal Probability Engine • Continuation Probability Engine • Risk Management Committee
@@ -1615,7 +1615,7 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     shorts = data.get("shorts", [])
 
     lines = []
-    lines.append(f"🐳 WHALE-STREAM v46.41")
+    lines.append(f"🐳 WHALE-STREAM v46.42")
     lines.append(f"📅 {ts}")
 
     # ── Market regime summary ─────────────────────────────────
@@ -2128,13 +2128,36 @@ def log_to_google_sheets(data, bkk_time):
 def main():
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🐳  WHALE-STREAM v46.41 — AUTO BOT STARTING    ║")
+    print("║   🐳  WHALE-STREAM v46.42 — AUTO BOT STARTING    ║")
     print("╚══════════════════════════════════════════════════╝")
+    # Check conservative flag early so we can show it in the startup banner
+    _short_conservative_early = os.path.exists(os.path.join(SCRIPT_DIR, "short_conservative.flag"))
+    if _short_conservative_early:
+        print("⚠️ SHORT CONSERVATIVE PHASE ACTIVE (recently exited repair mode)")
     print()
 
     # ── Step 1: Load Signal Graveyard (past outcomes → feedback loop) ──
     print("🪦 Loading Signal Graveyard from Google Sheets...")
     graveyard, short_wr_recent, coin_perf = fetch_signal_graveyard()
+
+    # ── Flag checks ──────────────────────────────────────────
+    _short_conservative = os.path.exists(os.path.join(SCRIPT_DIR, "short_conservative.flag"))
+
+    # ── Inject SHORT CONSERVATIVE PHASE block into graveyard prompt ──
+    # Only inject when conservative flag is active AND repair mode is NOT active
+    # (repair mode guidance supersedes conservative — they are mutually exclusive).
+    _repair_flag_active = os.path.exists(os.path.join(SCRIPT_DIR, "short_repair.flag"))
+    if _short_conservative and not _repair_flag_active:
+        _conservative_block = (
+            "\n" + "─" * 100 + "\n"
+            "⚠️ SHORT CONSERVATIVE PHASE ACTIVE (recently exited repair mode)\n"
+            "- Maximum 1 SHORT signal this run (rank 2 slot only — never rank 1)\n"
+            "- SHORT confidence floor: ≥93% (higher than normal ≥90%)\n"
+            "- Allowed SHORT coins: H, FF only — same restriction as REPAIR MODE\n"
+            "- Rationale: Ramp back gradually. Prove SHORTs work before full access."
+        )
+        graveyard = (graveyard + _conservative_block) if graveyard else _conservative_block.strip()
+        print("   ⚠️ SHORT CONSERVATIVE PHASE — block injected into graveyard prompt")
 
     # ── Step 1b: Macro Event Guard + Token Unlock Risk ──────
     print("📅 Checking macro event calendar + token unlock risk...")
@@ -2340,11 +2363,14 @@ def main():
 
         _gate1_pct = min(gate1_total / 150 * 100, 100)
         _gate1_bar = "✅ CLEARED" if gate1_total >= 150 else f"{gate1_total}/150 ({_gate1_pct:.0f}%)"
-        # In REPAIR MODE, name the recovery coins that were signaled as SHORTs
+        # In REPAIR MODE, name the recovery coins that were signaled as SHORTs.
+        # In CONSERVATIVE PHASE, show the restricted status instead of the normal SHORT count.
         _repair_active = os.path.exists(os.path.join(SCRIPT_DIR, "short_repair.flag"))
         if _repair_active and _n_short > 0:
             _short_coins = [s.get("coin", "?").upper() for s in signal_data.get("shorts", [])]
             _short_label = f"{_n_short}🔴 SHORT [{', '.join(_short_coins)} — recovery]"
+        elif _short_conservative and not _repair_active:
+            _short_label = f"⏸ SHORT: CONSERVATIVE phase (H/FF only, ≥93%, max 1/run)"
         else:
             _short_label = f"{_n_short}🔴 SHORT"
         _summary = (

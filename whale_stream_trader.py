@@ -482,13 +482,14 @@ def fmt_price(price, tick_size):
     return f"{price:.{decimals}f}"
 
 
-def calc_qty(entry_price, info):
+def calc_qty(entry_price, info, size_mult=1.0):
     """
     Calculate order quantity.
     Position value = TRADE_MARGIN_USDT × LEVERAGE
     qty = position_value / entry_price, rounded to qty_step
+    size_mult: drawdown-based scaling factor (0.0–1.0). Default 1.0 = full size.
     """
-    position_value = TRADE_MARGIN_USDT * LEVERAGE   # $200
+    position_value = TRADE_MARGIN_USDT * LEVERAGE * size_mult   # e.g. $200 × 0.75 = $150
     raw_qty        = position_value / entry_price
     qty            = round_to_step(raw_qty, info["qty_step"])
     qty            = max(qty, info["min_qty"])
@@ -806,6 +807,62 @@ def main():
     # ── Write balance file for dashboard ─────────────────────
     write_balance_file(total_balance, open_positions=n_positions)
 
+    # ── Fix 1: Hard cap — max 8 concurrent open positions ─────
+    # Read bybit_balance.json to get the live open_positions count.
+    # If >= 8 simultaneous trades are already active, skip ALL orders
+    # this run to prevent a market turn from triggering a cascade of SLs.
+    _bb_open_positions = n_positions   # fallback: use the live count we just fetched
+    try:
+        with open(BYBIT_BALANCE_FILE, "r", encoding="utf-8") as _bb_f:
+            _bb_data = json.load(_bb_f)
+            _bb_open_positions = int(_bb_data.get("open_positions", n_positions))
+    except Exception:
+        pass   # use live n_positions as fallback
+
+    MAX_CONCURRENT_POSITIONS = 8
+    if _bb_open_positions >= MAX_CONCURRENT_POSITIONS:
+        _cap_msg = (
+            f"⚠️ POSITION CAP — {_bb_open_positions} open trades already active. "
+            f"Skipping this run to protect capital."
+        )
+        log(f"POSITION CAP — {_bb_open_positions}/{MAX_CONCURRENT_POSITIONS} positions open, skipping all orders")
+        print(f"\n   ⚠ POSITION CAP: {_bb_open_positions} open trades >= {MAX_CONCURRENT_POSITIONS} limit")
+        print("   No new orders placed this run to avoid cascade SL exposure.")
+        send_telegram_alert(_cap_msg)
+        return
+
+    # ── Fix 2: Drawdown-based position size scaling ────────────
+    # As drawdown grows, reduce size to slow capital erosion.
+    #   < 8% drawdown  → full size (1.0×)
+    #   8–12% drawdown → 75% size (caution zone)
+    #   ≥ 12% drawdown → 60% size (danger zone — currently here at ~13.2%)
+    _bb_balance       = total_balance   # live Bybit balance
+    _bb_start_balance = BYBIT_START_BALANCE
+    try:
+        with open(BYBIT_BALANCE_FILE, "r", encoding="utf-8") as _bb_f2:
+            _bb_data2 = json.load(_bb_f2)
+            _bb_balance       = float(_bb_data2.get("balance",       total_balance))
+            _bb_start_balance = float(_bb_data2.get("start_balance", BYBIT_START_BALANCE))
+    except Exception:
+        pass   # use live values as fallback
+
+    _drawdown_pct = (_bb_start_balance - _bb_balance) / _bb_start_balance * 100 if _bb_start_balance > 0 else 0.0
+    if _drawdown_pct < 8:
+        _size_mult = 1.0      # full size
+    elif _drawdown_pct < 12:
+        _size_mult = 0.75     # 75% — caution zone
+    else:
+        _size_mult = 0.60     # 60% — danger zone
+
+    if _size_mult < 1.0:
+        log(f"DRAWDOWN SCALING — {_drawdown_pct:.1f}% drawdown → size multiplier {_size_mult:.2f}x "
+            f"(${_bb_balance:.2f} / ${_bb_start_balance:.2f})")
+        print(f"\n   ⚠ DRAWDOWN SCALING: {_drawdown_pct:.1f}% drawdown → "
+              f"trading at {int(_size_mult*100)}% size ({_size_mult:.2f}×)")
+    else:
+        log(f"DRAWDOWN OK — {_drawdown_pct:.1f}% drawdown → full size (1.0×)")
+        print(f"   ✓ Drawdown {_drawdown_pct:.1f}% — full position size (1.0×)")
+
     # ── Risk cap: max 50% of total balance deployed ───────────
     deployed_est = len(already_active) * TRADE_MARGIN_USDT  # includes pending entry orders
     deployed_pct = (deployed_est / total_balance * 100) if total_balance > 0 else 0
@@ -1012,8 +1069,8 @@ def main():
             print(f"   ✗ Could not set {LEVERAGE}x leverage for {symbol}")
             continue
 
-        # Calculate qty
-        qty = calc_qty(entry, info)
+        # Calculate qty — apply drawdown-based size multiplier
+        qty = calc_qty(entry, info, size_mult=_size_mult)
         if qty <= 0:
             print(f"   ✗ Position too small for {symbol} (min qty: {info['min_qty']}) — skipping")
             print(f"     Try increasing TRADE_MARGIN_USDT or reducing leverage")
@@ -1091,10 +1148,14 @@ def main():
                 _tier_tag = " 🟡 TIER 3"
             else:
                 _tier_tag = ""
+            _scale_notice = (
+                f"\n  ⚠️ Size scaled to {int(_size_mult*100)}% (drawdown {_drawdown_pct:.1f}%)"
+                if _size_mult < 1.0 else ""
+            )
             send_telegram_alert(
                 f"✅ <b>DEMO ORDER PLACED</b> — {coin} {dir_label}{_tier_tag}\n"
                 f"  Entry {entry:.6g} | SL {sl:.6g} | {tp_label} {bybit_tp:.6g}{partial_detail}\n"
-                f"  Conf: {conf_val:.0f}% | Qty {qty} × ${TRADE_MARGIN_USDT} margin (${qty*entry:.0f} pos)\n"
+                f"  Conf: {conf_val:.0f}% | Qty {qty} × ${TRADE_MARGIN_USDT} margin (${qty*entry:.0f} pos){_scale_notice}\n"
                 f"  ID: {order_id}"
             )
             time.sleep(0.5)   # small delay between orders

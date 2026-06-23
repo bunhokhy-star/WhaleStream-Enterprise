@@ -11,7 +11,7 @@ git add .
 REM Commit with today's date
 for /f "tokens=2 delims==" %%I in ('wmic os get localdatetime /value') do set dt=%%I
 set TODAY=%dt:~0,4%-%dt:~4,2%-%dt:~6,2%
-git commit -m "v46.41 — %TODAY% Complete CHZ cleanup (tracker + bot version strings)"
+git commit -m "v46.42 — %TODAY% Capital protection: position cap + drawdown scaling + SHORT conservative phase"
 
 echo.
 echo Pushing to GitHub...

@@ -1,5 +1,17 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.42 — 2026-06-24 (Capital Protection + SHORT Conservative Phase)
+
+### 3 Improvements Shipped — direct response to $66 drawdown root-cause analysis
+
+| # | Severity | Improvement | File |
+|---|----------|-------------|------|
+| 1 | HIGH | **Max 8 concurrent open positions cap.** Before placing any order, reads `bybit_balance.json` → `open_positions`. If ≥ 8, skips the entire run and fires Telegram alert. Prevents multiple SL hits simultaneously wiping the Gate 4 buffer. At current 11 open positions, this activates immediately. | whale_stream_trader.py |
+| 2 | HIGH | **Drawdown-based position size scaling.** Computes live drawdown from `bybit_balance.json`. Full size if drawdown < 8%; 75% size if 8–12%; 60% size if ≥ 12%. At current 13.2% drawdown, all new orders trade at 60% size. Scales back up automatically as balance recovers. Per-order Telegram shows the scaling notice. | whale_stream_trader.py |
+| 3 | MEDIUM | **SHORT Conservative Phase (soft landing after REPAIR MODE).** When repair mode auto-exits, a `short_conservative.flag` is created. While active: bot prompt restricts to max 1 SHORT/run, ≥93% confidence, H/FF only. Tracker counts H/FF SHORTs resolved — exits conservative phase after 10 trades with ≥50% WR (extends by 10 more if WR < 50%). Dashboard shows blue 🔵 banner. Full lifecycle: flag creation (tracker) → prompt injection (bot) → auto-exit (tracker). | whale_stream_tracker.py, whale_stream_bot.py |
+
+---
+
 ## v46.41 — 2026-06-23 (Complete CHZ Cleanup — second-pass audit)
 
 ### 6 Fixes Shipped (all CHZ residue from v46.40 partial cleanup)

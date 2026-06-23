@@ -649,6 +649,34 @@ def write_dashboard_html(all_rows):
     else:
         rc_recovery_html = ""
 
+    # Conservative phase banner (blue — shown when repair is NOT active but cons flag exists)
+    _cons_flag_path = os.path.join(SCRIPT_DIR, "short_conservative.flag")
+    if not short_repair_active and os.path.exists(_cons_flag_path):
+        try:
+            import json as _consjson
+            with open(_cons_flag_path, "r") as _consf:
+                _cons_info = _consjson.load(_consf)
+            _cons_created = _cons_info.get("created_at", "")
+            _cons_hff_dash = [
+                r for r in resolved
+                if ("SHORT" in r["signal"].upper() or "🔴" in r["signal"])
+                and _is_real_pnl(r.get("pnl"))
+                and r.get("coin", "").upper() in {"H", "FF"}
+                and r.get("resolved_at", "") > _cons_created[:10]
+            ]
+            _cons_n_dash = len(_cons_hff_dash)
+        except Exception:
+            _cons_n_dash = 0
+        cons_html = (
+            '<div style="background:rgba(33,150,243,0.08);border:1px solid rgba(33,150,243,0.3);'
+            'border-radius:8px;padding:12px 16px;margin-bottom:16px;">'
+            f'<span style="color:#2196f3;font-weight:600;font-size:13px;">'
+            f'🔵 SHORT CONSERVATIVE PHASE — ramp-back {_cons_n_dash}/10 trades complete</span>'
+            '</div>'
+        )
+    else:
+        cons_html = ""
+
     # Generated timestamp
     bkk_time = datetime.now(timezone(timedelta(hours=7)))
     gen_time = bkk_time.strftime("%Y-%m-%d %H:%M BKK")
@@ -896,6 +924,7 @@ def write_dashboard_html(all_rows):
 </div>
 
 {rc_recovery_html}
+{cons_html}
 
 <!-- STAT CARDS -->
 <div class="grid-6">
@@ -1959,12 +1988,17 @@ def main():
                 if _rc_exit_wr >= 55:
                     try:
                         os.remove(_repair_flag)
+                        _cons_flag = os.path.join(SCRIPT_DIR, "short_conservative.flag")
+                        import json as _json
+                        with open(_cons_flag, "w") as _cf:
+                            _json.dump({"created_at": datetime.utcnow().isoformat(), "trades_target": 10}, _cf)
                         send_telegram_alert(
                             f"🎉 <b>SHORT REPAIR MODE LIFTED</b>\n"
                             f"  H/FF combined WR: {_rc_exit_wr:.0f}%"
                             f" over {len(_rc_real_shorts)} trades\n"
                             f"  Exit criteria met (≥55% WR, ≥6 trades).\n"
-                            f"  SHORT signals now open to all non-blacklisted coins."
+                            f"  SHORT signals now open to all non-blacklisted coins.\n"
+                            f"  Entering SHORT CONSERVATIVE phase — H/FF only, ≥93% conf, max 1/run for next 10 trades."
                         )
                         _in_repair = False
                         _short_status_line = (
@@ -1994,6 +2028,50 @@ def main():
                 _rc_line = f"  🔄 Recovery: {' '.join(_rc_parts)} | need {_wins_needed} more win(s)"
             else:
                 _rc_line = "  🔄 Recovery: H/FF SHORTs unlocked — no trades placed yet"
+
+        # ── Conservative phase auto-exit check ────────────────────
+        _cons_flag_path = os.path.join(SCRIPT_DIR, "short_conservative.flag")
+        if not _in_repair and os.path.exists(_cons_flag_path):
+            try:
+                import json as _cjson
+                with open(_cons_flag_path, "r") as _cff:
+                    _cons_data = _cjson.load(_cff)
+                _cons_created_at = _cons_data.get("created_at", "")
+                _cons_target     = _cons_data.get("trades_target", 10)
+                # Count H/FF SHORTs resolved AFTER the flag's created_at
+                _cons_hff_all = [
+                    r for r in all_parsed
+                    if ("SHORT" in r.get("signal", "").upper() or "🔴" in r.get("signal", ""))
+                    and _is_real_pnl(r.get("pnl"))
+                    and r.get("coin", "").upper() in {"H", "FF"}
+                    and r.get("status") in ("WIN", "LOSS")
+                    and r.get("resolved_at", "") > _cons_created_at[:10]
+                ]
+                _cons_count = len(_cons_hff_all)
+                _cons_wins  = sum(1 for r in _cons_hff_all if r["status"] == "WIN")
+                _cons_wr    = (_cons_wins / _cons_count * 100) if _cons_count > 0 else 0.0
+                if _cons_count >= _cons_target and _cons_wr >= 50:
+                    os.remove(_cons_flag_path)
+                    send_telegram_alert(
+                        f"✅ SHORT CONSERVATIVE phase complete — {_cons_count} SHORTs at {_cons_wr:.0f}% WR."
+                        f" Full SHORT access restored to all non-blacklisted coins."
+                    )
+                    print(f"   ✅ SHORT CONSERVATIVE phase complete — {_cons_count} trades @ {_cons_wr:.0f}% WR")
+                    _short_status_line = "  ✅ SHORT: FULL MODE (conservative phase COMPLETE this run 🎉)"
+                elif _cons_count >= _cons_target and _cons_wr < 50:
+                    _new_target = _cons_count + 10
+                    with open(_cons_flag_path, "w") as _cfw:
+                        _cjson.dump({"created_at": _cons_created_at, "trades_target": _new_target}, _cfw)
+                    send_telegram_alert(
+                        f"⚠️ SHORT CONSERVATIVE extended — {_cons_count} trades but only {_cons_wr:.0f}% WR."
+                        f" Need ≥50% to unlock. Continuing 10 more trades."
+                    )
+                    print(f"   ⚠ SHORT CONSERVATIVE extended — {_cons_count} trades @ {_cons_wr:.0f}% WR, need ≥50%")
+                    _short_status_line = f"  ⚠️ SHORT: CONSERVATIVE phase ({_cons_count}/{_new_target} trades, {_cons_wr:.0f}% WR)"
+                else:
+                    _short_status_line = f"  ⚠️ SHORT: CONSERVATIVE phase ({_cons_count}/10 trades, {_cons_wr:.0f}% WR)"
+            except Exception as _ce:
+                print(f"   ⚠ Conservative phase check failed: {_ce}")
 
         _lines = [
             f"📊 <b>TRACKER RUN — {_bkk_now.strftime('%a %H:%M')} BKK</b>",
