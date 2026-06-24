@@ -1,5 +1,27 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.44 — 2026-06-24 (Gate 4 Breach Mode + Balance Staleness Fix + Entry Price Rules)
+
+### 3 Improvements — parallel agent delivery, capital protection layer 2
+
+| # | Severity | Improvement | File |
+|---|----------|-------------|------|
+| 1 | CRITICAL | **Balance file written even when circuit breaker is paused.** Moved Bybit balance fetch + `write_balance_file()` to execute BEFORE the `paused.flag` guard. Previously, `bybit_balance.json` went stale for the entire duration of any circuit breaker pause — the June 23 circuit breaker ran for 14+ hours and the morning briefing showed $434 (stale) instead of $405.35 (real). Now the balance file is always current. | whale_stream_trader.py |
+| 2 | HIGH | **Gate 4 breach capital preservation mode.** When drawdown exceeds 15%, overrides size multiplier to 0.40 (below the normal 0.60 floor), blocks ALL SHORT signals, caps positions at 4, and fires a 🔴 GATE 4 BREACH MODE Telegram alert. Activates automatically — no human intervention needed. | whale_stream_trader.py |
+| 3 | HIGH | **Entry price deviation rules in bot prompt.** Added explicit Bybit limit order constraints to signal generation: LONGs 0.5–2% below mark, SHORTs 0.5–2% above mark, hard reject if >4% deviation. Directly targets the repeated retCode=10001 "Price invalid" failures (H SHORT at 7.6% from mark, etc.) that have been wasting runs for days. | whale_stream_bot.py |
+
+---
+
+## v46.43 — 2026-06-24 (Morning Briefing Capital Health Alerts)
+
+### 1 Critical Fix — morning briefing was blind to circuit breaker and Gate 4 breach
+
+| # | Severity | Fix | File |
+|---|----------|-----|------|
+| 1 | CRITICAL | **Capital health section in morning_briefing.py.** Added: drawdown % calculation, Gate 4 status line (OK/Warning/Breach), circuit breaker detection (`paused.flag`), stale balance warning when trader is paused, system flags section (repair/conservative/paused), and trader status now says "🚨 PAUSED" instead of a false "✅ Running". The June 23 circuit breaker fired at 18:20 BKK and the 7am June 24 briefing would have shown nothing — this fixes that permanently. | morning_briefing.py |
+
+---
+
 ## v46.42 — 2026-06-24 (Capital Protection + SHORT Conservative Phase)
 
 ### 3 Improvements Shipped — direct response to $66 drawdown root-cause analysis

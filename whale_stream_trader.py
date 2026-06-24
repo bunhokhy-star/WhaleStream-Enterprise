@@ -640,6 +640,28 @@ def main():
     print("╚══════════════════════════════════════════════════╝")
     print()
 
+    # ── Validate API keys ──────────────────────────────────────
+    if "YOUR_BYBIT" in BYBIT_API_KEY:
+        print("✗ ERROR: Please fill in BYBIT_API_KEY and BYBIT_API_SECRET in the CONFIG section.")
+        return
+
+    # ── Check wallet balance (runs even when paused — keeps balance file fresh) ──
+    print("💳 Checking Bybit demo wallet...")
+    balance, total_balance = get_wallet_balance()
+    if balance is None:
+        print("   ✗ Could not connect to Bybit. Check your API keys.")
+        return
+    print(f"   ✓ Available USDT: ${balance:,.2f}  (total: ${total_balance:,.2f})")
+
+    # ── Fetch open positions early (needed for balance file) ──
+    _early_open_positions = get_open_positions()
+    _early_n_positions    = len(_early_open_positions)
+
+    # ── Write balance file NOW — before pause check ───────────
+    # This ensures bybit_balance.json always reflects current Bybit reality
+    # even when the circuit breaker is holding (paused.flag present).
+    write_balance_file(total_balance, open_positions=_early_n_positions)
+
     # ── Circuit breaker: check for PAUSED flag ────────────────
     if os.path.exists(PAUSED_FILE):
         msg = (f"🚨 <b>TRADER PAUSED — CIRCUIT BREAKER ACTIVE</b>\n"
@@ -653,19 +675,6 @@ def main():
         send_telegram_alert(msg)
         log("PAUSED — circuit breaker flag present, skipping all orders")
         return
-
-    # ── Validate API keys ──────────────────────────────────────
-    if "YOUR_BYBIT" in BYBIT_API_KEY:
-        print("✗ ERROR: Please fill in BYBIT_API_KEY and BYBIT_API_SECRET in the CONFIG section.")
-        return
-
-    # ── Check wallet balance ───────────────────────────────────
-    print("💳 Checking Bybit demo wallet...")
-    balance, total_balance = get_wallet_balance()
-    if balance is None:
-        print("   ✗ Could not connect to Bybit. Check your API keys.")
-        return
-    print(f"   ✓ Available USDT: ${balance:,.2f}  (total: ${total_balance:,.2f})")
 
     # ── Low balance warning ────────────────────────────────────
     _BALANCE_WARN_THRESHOLD = 450.0   # warn when within $50 of Gate 4 floor
@@ -795,17 +804,16 @@ def main():
 
     # ── Check existing positions + open orders on Bybit ──────────
     print("\n📊 Checking existing Bybit positions and orders...")
-    open_positions = get_open_positions()
+    open_positions = _early_open_positions   # already fetched before pause check
     open_orders    = get_open_orders()
     already_active = open_positions | open_orders   # union of both sets
-    n_positions    = len(open_positions)
+    n_positions    = _early_n_positions      # already counted before pause check
     if already_active:
         print(f"   ⚠ Already active (position or order): {', '.join(already_active)}")
     else:
         print("   ✓ No existing positions or orders")
 
-    # ── Write balance file for dashboard ─────────────────────
-    write_balance_file(total_balance, open_positions=n_positions)
+    # balance file already written before the pause check — no second write needed
 
     # ── Fix 1: Hard cap — max 8 concurrent open positions ─────
     # Read bybit_balance.json to get the live open_positions count.
@@ -863,6 +871,19 @@ def main():
         log(f"DRAWDOWN OK — {_drawdown_pct:.1f}% drawdown → full size (1.0×)")
         print(f"   ✓ Drawdown {_drawdown_pct:.1f}% — full position size (1.0×)")
 
+    # ── Gate 4 breach override — drawdown > 15% ──────────────────────────────
+    _GATE4_BREACH = _drawdown_pct > 15.0
+    if _GATE4_BREACH:
+        _prev_mult = _size_mult
+        _size_mult = 0.40  # ultra-conservative: below the normal 0.60 floor
+        if _prev_mult != 0.40:  # only alert when first entering breach mode
+            _g4_msg = (
+                f"🔴 GATE 4 BREACH MODE — {_drawdown_pct:.1f}% drawdown exceeds 15% limit.\n"
+                f"  Ultra-conservative activated: 40% size, LONG only, max 4 positions."
+            )
+            send_telegram_alert(_g4_msg)
+            print(_g4_msg)
+
     # ── Risk cap: max 50% of total balance deployed ───────────
     deployed_est = len(already_active) * TRADE_MARGIN_USDT  # includes pending entry orders
     deployed_pct = (deployed_est / total_balance * 100) if total_balance > 0 else 0
@@ -916,6 +937,23 @@ def main():
                 print()
                 continue
         # ── end SHORT REPAIR MODE ──────────────────────────────────────────────
+
+        # ── Gate 4 breach mode — LONG only, max 4 positions ───────────────────
+        if _GATE4_BREACH:
+            if side == "Sell":
+                _g4_skip_msg = f"⛔ GATE 4 MODE — skipping SHORT {coin}"
+                print(f"   {_g4_skip_msg}")
+                log(_g4_skip_msg)
+                print()
+                continue
+            if n_positions >= 4:
+                _g4_cap_msg = (f"⛔ GATE 4 MODE — position cap reached "
+                               f"({n_positions}/4) — skipping {coin}")
+                print(f"   {_g4_cap_msg}")
+                log(_g4_cap_msg)
+                print()
+                continue
+        # ── end Gate 4 breach mode ─────────────────────────────────────────────
 
         # Skip if already have a position OR an unfilled order
         if symbol in already_active:

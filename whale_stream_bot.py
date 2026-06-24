@@ -187,7 +187,7 @@ CLAUDE_MODEL = "claude-sonnet-4-6"
 # SECTION 2: YOUR WHALE-STREAM PROMPT  ← Do not change this
 # ─────────────────────────────────────────────────────────────
 
-WHALE_STREAM_PROMPT = """WHALE-STREAM v46.42 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
+WHALE_STREAM_PROMPT = """WHALE-STREAM v46.44 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
 ROLE:
 You are an Institutional Multi-Agent Trading Committee composed of:
 • Market Regime Analyst • Smart Money Concepts Specialist • Quantitative Momentum Analyst • Liquidity & Stop-Hunt Analyst • Wyckoff Structure Analyst • Relative Strength Analyst • Breakout Probability Engine • Reversal Probability Engine • Continuation Probability Engine • Risk Management Committee
@@ -409,6 +409,22 @@ ENTRY ZONE WIDTH RULE (CRITICAL — REDUCES SIGNAL EXPIRY): Historical data show
   • For Stage 2 expansion plays already in motion (coin has already broken out and is trending): entry zone may overlap with current price (near-market entry), with SL below the breakout base.
   • PREFER FILLED SIGNALS: A signal that fills at a slightly wider zone beats a perfect signal that expires. Widen the zone rather than risk expiry.
 ENTRY RULE (SHORTS): Entry MUST be at Resistance Rejection / Failed Retest of Broken Support / Dead-Cat Bounce Top / High-Volume Reversal Candle. NEVER enter a short on a breakdown candle — wait for the bounce back to resistance, THEN enter. Entering on breakdown = chasing, SL gets hit on the bounce.
+════════════════════════════════════════════════════════════
+⚠️ ENTRY PRICE CONSTRAINTS (enforced by Bybit limit order rules):
+All entries are LIMIT orders. Bybit rejects orders where entry deviates >5% from mark price.
+
+LONG entries: Place entry 0.5%–2% BELOW current market.
+  ✓ Market at 1.00 → entry 0.98–0.995 ✓
+  ✗ Entry above market = invalid for a limit BUY
+  ✗ Entry more than 4% below market = will never fill before signal expires
+
+SHORT entries: Place entry 0.5%–2% ABOVE current market.
+  ✓ Market at 1.00 → entry 1.005–1.02 ✓
+  ✗ Entry more than 4% above market = Bybit "Price invalid" rejection
+  ✗ H and FF coins: keep SHORT entry within 2% above mark (tight deviation limits)
+
+Rule: If your ideal entry requires >4% deviation from current price → DO NOT generate this signal.
+Preference: Entries 1–2% from mark have highest fill rate.
 ════════════════════════════════════════════════════════════
 HARD RULES FOR SHORT SIGNALS — THESE ARE NON-NEGOTIABLE:
 • SL MUST be 5–7% ABOVE the entry midpoint. If you set SL below or at entry, the signal is INVALID.
@@ -1615,7 +1631,7 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     shorts = data.get("shorts", [])
 
     lines = []
-    lines.append(f"🐳 WHALE-STREAM v46.42")
+    lines.append(f"🐳 WHALE-STREAM v46.44")
     lines.append(f"📅 {ts}")
 
     # ── Market regime summary ─────────────────────────────────
@@ -2128,7 +2144,7 @@ def log_to_google_sheets(data, bkk_time):
 def main():
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🐳  WHALE-STREAM v46.42 — AUTO BOT STARTING    ║")
+    print("║   🐳  WHALE-STREAM v46.44 — AUTO BOT STARTING    ║")
     print("╚══════════════════════════════════════════════════╝")
     # Check conservative flag early so we can show it in the startup banner
     _short_conservative_early = os.path.exists(os.path.join(SCRIPT_DIR, "short_conservative.flag"))

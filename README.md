@@ -1,6 +1,6 @@
 # 🐳 WHALE-STREAM — Autonomous Crypto Trading System
 
-**Current version:** v46.42  
+**Current version:** v46.44  
 **Status:** Live on Bybit Demo · Gate 1 in progress · July 1 go-live target
 
 ---

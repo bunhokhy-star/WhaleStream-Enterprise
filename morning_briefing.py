@@ -382,17 +382,46 @@ def build_message():
     # ── Balance block ──
     total_bal    = bal.get("balance", 0.0)
     start_bal    = bal.get("start_balance", 500.0)
+    bal_updated  = bal.get("updated_at", "unknown")
     unreal_pnl   = sum(p["unrealisedPnl"] for p in positions)
-    margin_used  = total_bal - (total_bal - sum(
-        abs(p["size"] * p["avgPrice"]) / 10  # rough: position_value / leverage
-        for p in positions
-    ))
-    # Simpler margin estimate: total - available
-    # We don't have "available" directly; derive from position count and $20/trade
     margin_in_use = len(positions) * 20.0  # $20 margin per position at 10x
     available_bal = total_bal - margin_in_use
-
     pnl_sign = "+" if unreal_pnl >= 0 else ""
+
+    # ── Capital health ──
+    drawdown_pct = (start_bal - total_bal) / start_bal * 100 if start_bal > 0 else 0.0
+    if drawdown_pct >= 15:
+        gate4_line = f"  Gate 4: 🚨 BREACH — {drawdown_pct:.1f}% drawdown (limit 15%)"
+    elif drawdown_pct >= 12:
+        gate4_line = f"  Gate 4: ⚠️ WARNING — {drawdown_pct:.1f}% drawdown (limit 15%)"
+    elif drawdown_pct >= 8:
+        gate4_line = f"  Gate 4: 🟡 Monitoring — {drawdown_pct:.1f}% drawdown (limit 15%)"
+    else:
+        gate4_line = f"  Gate 4: ✅ OK — {drawdown_pct:.1f}% drawdown (limit 15%)"
+
+    # ── Flag files ──
+    paused_flag       = os.path.exists(os.path.join(BASE_DIR, "paused.flag"))
+    repair_flag       = os.path.exists(os.path.join(BASE_DIR, "short_repair.flag"))
+    conservative_flag = os.path.exists(os.path.join(BASE_DIR, "short_conservative.flag"))
+
+    # ── Size scaling (v46.42) ──
+    if drawdown_pct >= 12:
+        size_scale_pct = 60
+    elif drawdown_pct >= 8:
+        size_scale_pct = 75
+    else:
+        size_scale_pct = 100
+
+    # ── Critical alerts ──
+    alert_lines = []
+    if paused_flag:
+        alert_lines.append("🚨 CIRCUIT BREAKER ACTIVE — run CLEAR_PAUSE.bat to resume!")
+    if drawdown_pct >= 15:
+        alert_lines.append(f"🔴 GATE 4 BREACHED — {drawdown_pct:.1f}% drawdown exceeds 15% limit!")
+    elif drawdown_pct >= 12:
+        alert_lines.append(f"⚠️ DRAWDOWN WARNING — {drawdown_pct:.1f}% (approaching Gate 4 limit of 15%)")
+    if paused_flag:
+        alert_lines.append(f"⚠️ Balance shown may be STALE (written at {bal_updated}, trader paused)")
 
     # ── Gate 1 bar ──
     g1_done   = analysis["gate1_done"]
@@ -434,7 +463,6 @@ def build_message():
         side  = p["side"]
         size  = p["size"]
         price = p["avgPrice"]
-        # Format size: integers without decimals, else up to 2 dp
         size_str  = f"{size:.0f}" if size == int(size) else f"{size:.2f}"
         price_str = f"{price:.4g}"
         pos_lines.append(f"  {sym:<10} {side:<4} {size_str:>8} @ {price_str}")
@@ -460,30 +488,51 @@ def build_message():
     else:
         monitor_status = "❓ Unknown (no log)"
 
-    # ── Trader next run ──
-    trader_status = f"✅ Running (next: {trader['next_run_str']})"
+    # ── Trader status ──
+    if paused_flag:
+        trader_status = "🚨 PAUSED — circuit breaker active (run CLEAR_PAUSE.bat)"
+    else:
+        trader_status = f"✅ Running (next: {trader['next_run_str']})"
 
     # ── Assemble message ──
     lines = [
         f"🌅 WHALE-STREAM MORNING BRIEFING",
         f"{date_str} | {days_line}",
+    ]
+
+    # Critical alerts at top
+    if alert_lines:
+        lines.append("")
+        lines.append("⚠️ ALERTS")
+        for a in alert_lines:
+            lines.append(f"  {a}")
+
+    lines += [
         "",
         "💰 BYBIT BALANCE",
-        f"  Total:      ${total_bal:,.2f}",
+        f"  Total:      ${total_bal:,.2f}  (drawdown: {drawdown_pct:.1f}%)",
         f"  Available:  ${available_bal:,.2f}",
         f"  In Margin:  ${margin_in_use:,.2f}",
         f"  Unreal P&L: {pnl_sign}${unreal_pnl:,.2f}",
+        f"  Size scale: {size_scale_pct}%  (v46.42 drawdown protection)",
+        f"  Updated:    {bal_updated}",
         "",
         "📊 GATE PROGRESS",
         f"  Gate 1: {g1_done}/{g1_target}  {g1_bar} {g1_pct}",
         gate2_line,
         gate3_line,
+        gate4_line,
         gate6_line,
         "",
         "📈 RUNNING WIN RATE",
         f"  LONG:  {long_label}",
         f"  SHORT: {short_label}",
         f"  Total: {total_label}",
+        "",
+        "🚩 SYSTEM FLAGS",
+        f"  Circuit breaker: {'🚨 ACTIVE' if paused_flag else '✅ clear'}",
+        f"  SHORT repair:    {'🔧 ACTIVE' if repair_flag else '✅ clear'}",
+        f"  SHORT conserv:   {'⚠️ ACTIVE' if conservative_flag else '✅ clear'}",
         "",
         f"🏦 OPEN POSITIONS ({pos_count})",
     ]
