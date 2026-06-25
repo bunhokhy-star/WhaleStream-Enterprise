@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.52 — Debrief confidence cast fix + Strategist Task Scheduler + bot schedule correction"
+git commit -m "v46.53 — SHORT confidence hard floor 93% + 4h cadence + VVV blocklist comment update"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...

@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v46.49  —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v46.53  —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 coins from CoinGecko (free, no key)     ║
@@ -98,7 +98,7 @@ SHORT_COIN_BLOCKLIST = {
     "ENA",   # 0W/5L — 0% WR, avg -60.6%
     "XLM",   # 0W/2L — 0% WR, avg -38.0%
     "BCH",   # 0W/2L — 0% WR, avg -44.0%
-    "VVV",   # 0W/2L — 0% WR, avg -57.9%
+    "VVV",   # 0W/3L — 0% WR, avg -57.9%  ← updated count v46.53
     "ZRO",   # 0W/1L — 0% WR, avg -40.9%
     "WLD",   # 0W/2L — 0% WR, avg -49.7%  ← added v46.5
     "INJ",   # 0W/2L — 0% WR, avg -59.8%  ← added v46.5
@@ -530,11 +530,11 @@ RULES:
     - "RS failure" / "relative strength failure" → 0% WR (multiple samples). The momentum has already failed but the coin often bounces back up. SKIP.
     - "LH/LL breakdown" alone → 0% WR in several samples. Only trade if ALSO has Stage 4-5 characteristics.
     - "Dead cat bounce failure" → 0% WR. Avoid.
-  SHORT CONFIDENCE PARADOX (important):
-    - 90-92% confidence band: ONLY 36.4% WR — WORSE than the 85-88% band (83.3% WR)
-    - This means: do NOT upweight SHORTs just because they feel like 90-92% confidence
-    - Prefer 92%+ (100% WR) or 85-88% range with strong distribution patterns
-    - If a SHORT setup falls in 90-92% range without clear Stage 4-5 distribution → DOWNGRADE to 87% or SKIP
+  SHORT CONFIDENCE RULE (hard floor enforced in code):
+    - MINIMUM SHORT CONFIDENCE: 93% — any SHORT below 93% will be AUTO-DROPPED by the system
+    - 88-92% confidence band has 36-37% WR — do NOT output SHORTs in this range
+    - 93-95% band: 100% WR. 95%+ band: 91.7% WR. These are the ONLY acceptable SHORT zones.
+    - If a setup feels like 90-92% confidence → either find the extra edge to push to 93%+ or SKIP it entirely
   LONG PATTERNS THAT WIN (prioritize these):
     - "Stage 2 expansion" → 100% WR (3/3 trades)
     - "Stage 2 expansion retest" → 75% WR (3/4 trades)
@@ -2281,7 +2281,7 @@ def main():
             "\n" + "─" * 100 + "\n"
             "⚠️ SHORT CONSERVATIVE PHASE ACTIVE (recently exited repair mode)\n"
             "- Maximum 1 SHORT signal this run (rank 2 slot only — never rank 1)\n"
-            "- SHORT confidence floor: ≥93% (higher than normal ≥90%)\n"
+            "- SHORT confidence floor: ≥93% (system-wide hard floor since v46.53)\n"
             "- Allowed SHORT coins: H, FF only — same restriction as REPAIR MODE\n"
             "- Rationale: Ramp back gradually. Prove SHORTs work before full access."
         )
@@ -2426,7 +2426,7 @@ def main():
     elif short_wr_recent < 45:
         min_short_conf = 93
     else:
-        min_short_conf = 0  # no filter needed
+        min_short_conf = 93  # data-driven floor: 88-92% band has 36-37% WR (v46.53)
 
     if min_short_conf > 0:
         before = len(merged_shorts)

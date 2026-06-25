@@ -1,5 +1,38 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.53 — 2026-06-26 — SHORT confidence hard floor + 4h cadence + VVV blocklist update
+
+### 3 Improvements — data-driven quality over quantity
+
+| # | Severity | Improvement | File |
+|---|----------|-------------|------|
+| 1 | HIGH | **SHORT confidence hard floor raised to 93%.** Data analysis of 72 SHORT signals revealed the 88-92% confidence band has only 36-37% WR (disaster zone), while 93-95% = 100% WR and 95%+ = 91.7% WR. The `min_short_conf` variable in `bot.py` now permanently floors at 93 regardless of recent WR (was conditionally 0 when WR > 45%). Prompt text updated: renamed "SHORT CONFIDENCE PARADOX" → "SHORT CONFIDENCE RULE" with explicit hard-floor language so Claude stops generating signals in the loser zone. `whale_stream_strategist.py` veto rule updated to match. | whale_stream_bot.py |
+| 2 | MEDIUM | **Bot cadence changed from 2h → 4h (quality over quantity).** Gate 1 cleared (159+ resolved trades = sufficient sample size). Duplicate signals were appearing every 2h on the same coins before setups fully developed. 4h gives the market time to develop clean, high-conviction setups. `CHANGE_TO_4H.bat` created to update Task Scheduler. Bot schedule now aligns perfectly with Strategist (:10) and Trader (:20) on the same 4h cycle: 06:00/10:00/14:00/18:00/22:00/02:00 BKK. | CHANGE_TO_4H.bat (new) |
+| 3 | LOW | **VVV SHORT_COIN_BLOCKLIST comment updated 0W/2L → 0W/3L.** VVV took another SHORT loss, confirming its place in the blocklist. Comment updated to reflect current record. | whale_stream_bot.py |
+
+**SHORT confidence zone reference (72 signals analysed):**
+| Band | WR | Signals | Zone |
+|------|----|---------|------|
+| 95%+ | 91.7% | 24 | ✅ MONEY ZONE |
+| 93-95% | 100% | 9 | ✅ MONEY ZONE |
+| 90-92% | 36.4% | 11 | 🚫 DISASTER — hard floor blocks |
+| 88-90% | 37.5% | 16 | 🚫 DISASTER — hard floor blocks |
+| 85-88% | 83.3% | 12 | ✅ Acceptable (rare) |
+
+**Updated team schedule (as of v46.53):**
+| Role | Script | Schedule | Job |
+|------|--------|----------|-----|
+| 🔭 Scout | whale_stream_bot.py | :00 every **4h** | Screen 200 coins, generate 3+3 signals |
+| 🧠 Strategist | whale_stream_strategist.py | :10 every 4h | Review signals + read pattern memory |
+| ⚡ Trader | whale_stream_trader.py | :20 every 4h | Execute only approved signals |
+| 👁 Monitor | whale_stream_monitor.py | continuous | Track open position fills |
+| 📊 Tracker | whale_stream_tracker.py | every 30 min | Resolve trades + trigger Debrief |
+| 📓 Debrief | whale_stream_debrief.py | after each trade | Analyse WHY, write lesson to pattern_memory |
+| 🩺 Analyzer | RUN_ANALYZE_SHORTS.bat | Thu + Sun | Weekly pattern intelligence update |
+| 📢 Briefing | morning_briefing.py | 7 AM daily | Capital health + yesterday P&L |
+
+---
+
 ## v46.52 — 2026-06-25 — Debrief confidence cast fix + Strategist Task Scheduler
 
 ### 2 Fixes — runtime crash prevention, Strategist now live in scheduler
