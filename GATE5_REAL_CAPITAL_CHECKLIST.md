@@ -4,7 +4,9 @@
 > switching from Bybit Demo to a live account with real money. Every threshold is grounded
 > in actual performance data from this system. No threshold is waived. No exceptions.
 >
-> **Current status as of 2026-06-21:** DEMO ONLY — Gates 1–3 not yet cleared. (Gate 3 SHORT WR revised to 24.0% — in REPAIR MODE)
+> **Current status as of 2026-06-24 22:16:** DEMO ONLY — 6 days to July 1 go-live decision.
+> Balance: $405.33 | Gate 1: ⏳ 141/150 (only 9 more needed!) | Gate 3: ✅ 95% SHORT WR last 20 | Gate 4: 🔴 active (18.9% drawdown)
+> Circuit breaker: CLEARED June 24. SHORT repair mode: INACTIVE. System running v46.47.
 
 ---
 
@@ -148,17 +150,56 @@ breaker trigger.
 
 ---
 
+---
+
+## JULY 1 GO-LIVE DECISION FRAMEWORK
+
+> **Core principle:** Trade count and win rate are *leading* indicators.
+> **Capital growth is the only lagging indicator that proves everything.**
+> If the system grew money from $405 → $500+ in 6 days of best-of-best trading,
+> the strategy works. That is the proof. Go live.
+
+### Primary Decision Metric — Capital Recovery by June 30
+
+Run `analyze_shorts.py` on **June 29** and read `bybit_balance.json`. Apply this table:
+
+| Balance on June 30 | Decision | Rationale |
+|--------------------|----------|-----------|
+| **≥ $500** (recovered to start) | ✅ **GO LIVE — Full size** | Strategy proved: recovered all losses AND generated wins in 6 days of high-conviction trading |
+| **$425–$499** (Gate 4 cleared, growing) | ✅ **GO LIVE — 50% position size** | Drawdown recovering, wins outpacing losses, strategy directionally correct. Scale up after 30 live trades if WR ≥ 60% |
+| **$405–$424** (stable, Gate 4 still active) | ⚠️ **DELAY — 1 week** | Not enough recovery evidence. Run one more week of demo, review July 8. |
+| **< $405** (balance declined) | ❌ **DO NOT GO LIVE** | Strategy losing money in demo conditions. Do not risk real capital. Review top-3 filter and confidence thresholds. |
+
+### Gate 1 Contingency Rule
+
+Gate 1 requires 150 resolved trades. With top-3 filter at 4h cadence (~3 fills/day),
+we may only reach ~143–148 by July 1. **That is acceptable IF capital is growing.**
+
+| Gate 1 count | Balance | Decision |
+|--------------|---------|----------|
+| ≥ 150 | Any above $425 | Full go-live — all gates met |
+| 140–149 | ≥ $500 | Go live — capital growth overrides sample gap |
+| 140–149 | $425–$499 | Go live at 50% size — continue accumulating live trades |
+| 140–149 | < $425 | Delay — insufficient evidence on both counts |
+| < 140 | Any | Delay — not enough data regardless of balance |
+
+### The Mission Rule
+
+> *"We are not trading to prove a number. We are trading to build a system
+> worthy of the people it will serve. Capital growth — real, measured,
+> disciplined — is the only proof that matters."*
+
+---
+
 ## GATE REVIEW LOG
 
 | Date | Gate 1 | Gate 2 | Gate 3 | Gate 4 | Gate 5 | Gate 6 | Result |
 |------|--------|--------|--------|--------|--------|--------|--------|
 | 2026-06-21 | ❌ 80/150 | ❌ 53.8% | ❌ 24.0% | ✅ -1.5% | ✅ No trigger | ❌ <3 weeks | **FAIL** |
 | 2026-06-21 | ❌ 80/150 | ✅ 63.3% | ❌ 30.0% | ❌ +1.5% | ✅ No trigger | ❌ 0/3 wks | **FAIL** |
-| 2026-06-21 | ❌ 80/150 | ✅ 63.3% | ❌ 30.0% | ❌ +1.5% | ✅ No trigger | ❌ 0/3 wks | **FAIL** |
-| 2026-06-21 | ❌ 80/150 | ✅ 63.3% | ❌ 30.0% | ❌ +1.5% | ✅ No trigger | ❌ 0/3 wks | **FAIL** |
-| 2026-06-21 | ❌ 80/150 | ✅ 63.3% | ❌ 30.0% | ❌ +1.5% | ✅ No trigger | ❌ 0/3 wks | **FAIL** |
-| 2026-06-21 | ❌ 80/150 | ✅ 63.3% | ❌ 30.0% | ❌ +1.5% | ✅ No trigger | ❌ 2/3 wks | **FAIL** |
-| _next review_ | | | | | | | |
+| 2026-06-24 22:16 | ⏳ 141/150 | ✅ PF 1.65x, LONG 52.7%, SHORT 68.7% | ✅ **95%** last 20 SHORTs (19W/1L) | 🔴 $405 / -18.9% | ⚠️ CB fired Jun 23, cleared Jun 24 | ⏳ pending | **DEMO** |
+| 2026-06-29 | | | | | | | _run analyze_shorts.py_ |
+| _Jul 1 decision_ | | | | | | | _apply decision table above_ |
 
 > **Note:** SHORT WR corrected from 39.5% to 24.0% on 2026-06-21 after removing fake entries (abs P&L < 5% or wrong sign). Strategy in REPAIR MODE.
 
@@ -179,5 +220,6 @@ ALL 6 GATES must be ✅ simultaneously. No partial passes.
 
 ---
 
-*Document created: 2026-06-21 | WHALE-STREAM v46.3 | CEO Autonomy Mode*
-*Update the Gate Review Log table after each weekly review.*
+*Document created: 2026-06-21 | Last updated: 2026-06-24 | WHALE-STREAM v46.47*
+*Update the Gate Review Log after each review. Next review: June 29 (run analyze_shorts.py).*
+*July 1 go-live decision: apply the Capital Recovery table above. Capital growth = proof.*

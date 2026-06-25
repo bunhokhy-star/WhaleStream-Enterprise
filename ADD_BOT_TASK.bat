@@ -3,7 +3,7 @@
 :: WHALE-STREAM BOT — Add to Task Scheduler
 :: Right-click this file → "Run as administrator"
 :: Runs every 4 hours to generate fresh trading signals
-:: Schedule: 06:00, 10:00, 14:00, 18:00, 22:00, 02:00 BKK
+:: Schedule: 06:00 / 10:00 / 14:00 / 18:00 / 22:00 / 02:00 BKK
 :: ============================================================
 echo.
 echo ============================================================
@@ -27,10 +27,10 @@ echo.
 echo =====================================================
 echo   SUCCESS! WhaleStream-Bot scheduled.
 echo   Generates signals every 4 hours:
-echo     06:00 / 10:00 / 14:00 / 18:00 / 22:00 / 02:00 BKK
+echo     06:00 / 10:00 / 14:00 / 18:00 / 22:00 / 02:00
 echo.
 echo   WhaleStream-Trader picks up signals at:
-echo     06:20 / 08:20 / 10:20 / 12:20 / ...
+echo     06:20 / 10:20 / 14:20 / 18:20 / 22:20 / 02:20
 echo.
 echo   Running it NOW for first signal generation...
 echo =====================================================

@@ -1,12 +1,12 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v46.41  —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v46.49  —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 coins from CoinGecko (free, no key)     ║
 ║  2. Sends all data to Claude with your WHALE-STREAM prompt  ║
 ║  3. Posts the analysis result to your Telegram group         ║
-║  4. Logs up to 8 signals (5 LONG + 3 SHORT) to Google Sheets║
+║  4. Logs top 3 LONG + top 3 SHORT signals to Google Sheets  ║
 ║                                                              ║
 ║  HOW TO RUN:                                                 ║
 ║    python whale_stream_bot.py                                ║
@@ -80,11 +80,17 @@ print("   All libraries ready.\n")
 # Secrets loaded from local_config.py (gitignored). Fallback: env vars.
 try:
     from local_config import ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+    # TELEGRAM_SIGNAL_CHAT_ID is optional — if not set in local_config, signals go to ops channel
+    try:
+        from local_config import TELEGRAM_SIGNAL_CHAT_ID
+    except ImportError:
+        TELEGRAM_SIGNAL_CHAT_ID = TELEGRAM_CHAT_ID
 except ImportError:
     import os as _os
-    ANTHROPIC_API_KEY  = _os.getenv("ANTHROPIC_API_KEY", "")
-    TELEGRAM_BOT_TOKEN = _os.getenv("TELEGRAM_BOT_TOKEN", "")
-    TELEGRAM_CHAT_ID   = _os.getenv("TELEGRAM_CHAT_ID", "")
+    ANTHROPIC_API_KEY        = _os.getenv("ANTHROPIC_API_KEY", "")
+    TELEGRAM_BOT_TOKEN       = _os.getenv("TELEGRAM_BOT_TOKEN", "")
+    TELEGRAM_CHAT_ID         = _os.getenv("TELEGRAM_CHAT_ID", "")
+    TELEGRAM_SIGNAL_CHAT_ID  = _os.getenv("TELEGRAM_SIGNAL_CHAT_ID", TELEGRAM_CHAT_ID)
 
 # ── SHORT coin blocklist (code-level enforcement — mirrors prompt blocklist) ──
 # These coins have 0% SHORT WR in historical data and are permanently banned.
@@ -187,7 +193,7 @@ CLAUDE_MODEL = "claude-sonnet-4-6"
 # SECTION 2: YOUR WHALE-STREAM PROMPT  ← Do not change this
 # ─────────────────────────────────────────────────────────────
 
-WHALE_STREAM_PROMPT = """WHALE-STREAM v46.44 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
+WHALE_STREAM_PROMPT = """WHALE-STREAM v46.49 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
 ROLE:
 You are an Institutional Multi-Agent Trading Committee composed of:
 • Market Regime Analyst • Smart Money Concepts Specialist • Quantitative Momentum Analyst • Liquidity & Stop-Hunt Analyst • Wyckoff Structure Analyst • Relative Strength Analyst • Breakout Probability Engine • Reversal Probability Engine • Continuation Probability Engine • Risk Management Committee
@@ -380,13 +386,12 @@ Stability Score 15 | Liquidity Quality 10 | Exhaustion Probability 10 | Risk/Rew
 TOTAL = 100
 ════════════════════════════════════════════════════════════
 CONFIDENCE FILTER:
-• LONGS:  Reject < 85%. Output ONLY 85–100.
+• LONGS:  Reject < 90%. Output ONLY 90–100.
 • SHORTS: Reject < 95%. Output ONLY 95–100. (Raised from 91% — SHORT WR was 24% on real trades, strategy in repair mode)
 • In Bear Consolidation or BTC.D HIGH + Extreme Fear: Reject SHORTs entirely (output STAY OUT).
 
 CONFIDENCE CALIBRATION — LONG BANDS (MANDATORY — do not artificially cap at 90%):
-• 85–87%  TIER 3 — Minimum qualifying setup. Passes filters but lacks multiple confirmations.
-• 88–91%  TIER 2 — Good setup. Two or more factors confirmed, one uncertainty remains.
+• 90–91%  TIER 2 — Minimum qualifying setup. Two or more factors confirmed, one uncertainty remains.
 • 92–96%  TIER 1 — ELITE setup. Score HERE if THREE or more of the following are true:
     ✅ Market regime is Bull Expansion or Bull Consolidation
     ✅ Stage 2 or Stage 3 trend structure confirmed with rising OI
@@ -395,19 +400,20 @@ CONFIDENCE CALIBRATION — LONG BANDS (MANDATORY — do not artificially cap at 
     ✅ Continuation probability ≥ 75 AND reversal probability ≤ 25
     ✅ Multi-timeframe confluence: daily + 4h + 1h all aligned bullish
 IMPORTANT: If a setup meets 3+ TIER 1 criteria, it MUST be scored 92%+.
-Do NOT cap a genuinely elite setup at 88-90% out of conservatism — that defeats the scoring system.
+Do NOT cap a genuinely elite setup at 90% out of conservatism — that defeats the scoring system.
 TIER 1 OUTPUT REQUIREMENT: Any signal scored 92%+ MUST include a valid TP3 value.
   The auto-trader uses TP3 as the Bybit take-profit for TIER 1 trades (with 50% partial close at TP1).
   A TIER 1 signal without TP3 wastes the entire upside advantage of the elite classification.
   Calculate TP3 as the next major resistance or measured-move target above TP2 (typically 8–15% above entry).
-  If you cannot identify a credible TP3, downgrade the signal to TIER 2 (88–91%) rather than omit it.
+  If you cannot identify a credible TP3, downgrade the signal to TIER 2 (90–91%) rather than omit it.
 ════════════════════════════════════════════════════════════
 ENTRY RULE (LONGS): Entry MUST be Retest Zone / Liquidity Sweep Reclaim / Support-Resistance Reclaim / Breakout Retest. Never chase current price.
-ENTRY ZONE WIDTH RULE (CRITICAL — REDUCES SIGNAL EXPIRY): Historical data shows 67% of LONG signals expire because price never pulls back to the entry zone within 72 hours.
-  • Set entry zone TOP at most 1–3% below current price. Entry zone BOTTOM must be at least 5–8% below the TOP (giving price room to pull back).
+ENTRY ZONE WIDTH RULE (CRITICAL — REDUCES SIGNAL EXPIRY): Historical data shows 54% of LONG signals expire because price never pulls back to the entry zone within 72 hours.
+  • Set entry zone TOP at 1–3% below current price OR at current price if BTC momentum is positive (BTC 24h% > +1%) or funding rate is strongly negative (< −0.03%).
+  • Entry zone BOTTOM must be at least 5–8% below the TOP (giving price room to pull back).
   • Minimum zone width: entry_top - entry_bottom ≥ 4% of entry_top. A zone narrower than 4% will likely never fill.
   • For Stage 2 expansion plays already in motion (coin has already broken out and is trending): entry zone may overlap with current price (near-market entry), with SL below the breakout base.
-  • PREFER FILLED SIGNALS: A signal that fills at a slightly wider zone beats a perfect signal that expires. Widen the zone rather than risk expiry.
+  • PREFER FILLED SIGNALS: A signal that fills at a slightly wider zone beats a perfect signal that expires. Widen the zone rather than risk expiry. When BTC momentum is positive or funding is strongly negative, prefer entry zones that include current price.
 ENTRY RULE (SHORTS): Entry MUST be at Resistance Rejection / Failed Retest of Broken Support / Dead-Cat Bounce Top / High-Volume Reversal Candle. NEVER enter a short on a breakdown candle — wait for the bounce back to resistance, THEN enter. Entering on breakdown = chasing, SL gets hit on the bounce.
 ════════════════════════════════════════════════════════════
 ⚠️ ENTRY PRICE CONSTRAINTS (enforced by Bybit limit order rules):
@@ -451,7 +457,7 @@ OUTPUT FORMAT:
 ⚡ STEP 1 — OUTPUT THE JSON BLOCK FIRST (MANDATORY, BEFORE ANYTHING ELSE):
 
 ##JSON_START##
-{"verdict":"GO","regime":"Bull Consolidation","btc_bias":"BULLISH","eth_bias":"BULLISH","risk_env":"RISK-ON","longs":[{"rank":1,"coin":"ZEC","conf":"94%","score":"94.3","entry":"$375-$390","sl":"$362","tp1":"$425","tp2":"$455","tp3":"$490","tp4":"$540","pattern":"Stage 2 breakout retest + negative funding"},{"rank":2,"coin":"ADA","conf":"92%","score":"92.0","entry":"$0.152-$0.158","sl":"$0.147","tp1":"$0.172","tp2":"$0.185","tp3":"$0.200","tp4":"$0.220","pattern":"Bull flag + RS vs BTC"},{"rank":3,"coin":"IOTA","conf":"88%","score":"88.1","entry":"$0.0420-$0.0440","sl":"$0.0402","tp1":"$0.0500","tp2":"$0.0560","tp3":"$0.0620","tp4":"$0.0700","pattern":"Support reclaim"}],"shorts":[{"rank":1,"coin":"FF","conf":"96%","score":"96.0","entry":"$0.100-$0.104","sl":"$0.109","tp1":"$0.089","tp2":"$0.079","tp3":"$0.068","tp4":"$0.055","pattern":"Stage 5 distribution + RS failure"},{"rank":2,"coin":"H","conf":"95%","score":"95.2","entry":"$0.0021-$0.0022","sl":"$0.0024","tp1":"$0.0018","tp2":"$0.0016","tp3":"$0.0014","tp4":"$0.0012","pattern":"Stage 5 distribution failure + declining volume"}]}
+{"verdict":"GO","regime":"Bull Consolidation","btc_bias":"BULLISH","eth_bias":"BULLISH","risk_env":"RISK-ON","longs":[{"rank":1,"coin":"ZEC","conf":"94%","score":"94.3","entry":"$375-$390","sl":"$362","tp1":"$425","tp2":"$455","tp3":"$490","tp4":"$540","pattern":"Stage 2 breakout retest + negative funding"},{"rank":2,"coin":"ADA","conf":"92%","score":"92.0","entry":"$0.152-$0.158","sl":"$0.147","tp1":"$0.172","tp2":"$0.185","tp3":"$0.200","tp4":"$0.220","pattern":"Bull flag + RS vs BTC"},{"rank":3,"coin":"IOTA","conf":"90%","score":"90.1","entry":"$0.0420-$0.0440","sl":"$0.0402","tp1":"$0.0500","tp2":"$0.0560","tp3":"$0.0620","tp4":"$0.0700","pattern":"Support reclaim"}],"shorts":[{"rank":1,"coin":"FF","conf":"96%","score":"96.0","entry":"$0.100-$0.104","sl":"$0.109","tp1":"$0.089","tp2":"$0.079","tp3":"$0.068","tp4":"$0.055","pattern":"Stage 5 distribution + RS failure"},{"rank":2,"coin":"H","conf":"95%","score":"95.2","entry":"$0.0021-$0.0022","sl":"$0.0024","tp1":"$0.0018","tp2":"$0.0016","tp3":"$0.0014","tp4":"$0.0012","pattern":"Stage 5 distribution failure + declining volume"}]}
 ##JSON_END##
 
 For STAY OUT verdict use:
@@ -512,6 +518,41 @@ RULES:
 • Avoid generating a SHORT on a coin that recently hit TP3 or TP4 as a LONG (momentum still intact)
 • Do not repeat a LONG on a coin whose last trade was a LOSS at SL (stopped out — momentum broken)
 • BULL MARKET SHORT VETO: If BTC 7d% > +8% OR market regime = Bull Expansion, SKIP ALL SHORTS unless confidence ≥ 97% with confirmed exhaustion pattern (distribution, bearish divergence, high-volume rejection). Alt shorts in bull markets are the #1 cause of losses.
+• BEAR MARKET LONG VETO: If BTC 7d% < -8% OR market regime = Bear Expansion, SKIP ALL LONGs unless confidence ≥ 97% with confirmed accumulation pattern (Stage 2 base, capitulation wick, extreme negative funding, oversold RSI with bullish divergence). Alt longs in bear markets compound drawdowns and are the #1 cause of current losses.
+• Do not repeat a SHORT on a coin whose last trade was a LOSS at SL (stopped out — momentum broken, mirror rule of the LONG rule above).
+• PATTERN INTELLIGENCE — learned from 141 resolved live trades (Jun 2026):
+  SHORT PATTERNS THAT WIN (prioritize these):
+    - "Stage 5 distribution collapse" → 100% WR (5/5 trades)
+    - "Stage 4-5 distribution" → 90% WR (9/10 trades)
+    - "Stage 5 catastrophic distribution" → 85.7% WR (6/7 trades)
+    - "Stage 5 distribution" → 75% WR — solid
+  SHORT PATTERNS THAT LOSE (avoid these):
+    - "RS failure" / "relative strength failure" → 0% WR (multiple samples). The momentum has already failed but the coin often bounces back up. SKIP.
+    - "LH/LL breakdown" alone → 0% WR in several samples. Only trade if ALSO has Stage 4-5 characteristics.
+    - "Dead cat bounce failure" → 0% WR. Avoid.
+  SHORT CONFIDENCE PARADOX (important):
+    - 90-92% confidence band: ONLY 36.4% WR — WORSE than the 85-88% band (83.3% WR)
+    - This means: do NOT upweight SHORTs just because they feel like 90-92% confidence
+    - Prefer 92%+ (100% WR) or 85-88% range with strong distribution patterns
+    - If a SHORT setup falls in 90-92% range without clear Stage 4-5 distribution → DOWNGRADE to 87% or SKIP
+  LONG PATTERNS THAT WIN (prioritize these):
+    - "Stage 2 expansion" → 100% WR (3/3 trades)
+    - "Stage 2 expansion retest" → 75% WR (3/4 trades)
+    - "Stage 2-3 expansion retest" → 60% WR
+    - "Bull flag continuation with negative funding" → good
+  LONG PATTERNS THAT LOSE (avoid these):
+    - "Continuation breakout" standalone → 0% WR
+    - "Meme sector" patterns → 0% WR (AVOID meme coins as LONGs)
+    - "Momentum continuation" → 0% WR in multiple samples
+    - "Stage 2-3 breakout retest" → only 33.3% WR — be cautious
+  LONG STAR COINS (proven high WR over multiple trades):
+    - AERO: 100% WR (8/8 trades) — strong preference when in Stage 2
+    - TIA: 100% WR (4/4 trades) — strong preference
+    - JUP: 75% WR (3/4 trades) — good track record
+    - EIGEN: 67% WR — acceptable
+  LONG POOR COINS (blocked or weak — avoid as LONG signals):
+    - ZRO, HYPE, COMP: 0% WR → already code-blocked
+    - WIF, XLM, SOL: 33% WR → use only with very strong pattern confluence
 
 {SIGNAL_GRAVEYARD}
 ════════════════════════════════════════════════════════════
@@ -1475,7 +1516,7 @@ def analyze_with_claude(market_data_text, graveyard_text="", dominance_text="", 
     dominance_block  = dominance_text  if dominance_text  else "BTC Dominance: unavailable — apply standard thresholds."
     fear_greed_block = fear_greed_text if fear_greed_text else "Fear & Greed Index: unavailable — apply standard thresholds."
     btc_move_block   = btc_move_text   if btc_move_text   else "BTC 30-min move: unavailable — proceed with standard caution."
-    btc_24h_block    = btc_24h_text    if btc_24h_text    else "BTC 24h momentum: unavailable — apply standard SHORT thresholds (≥91%, max 3 SHORTs)."
+    btc_24h_block    = btc_24h_text    if btc_24h_text    else "BTC 24h momentum: unavailable — apply standard SHORT thresholds (≥95%, max 3 SHORTs)."
     coin_perf_block  = coin_perf_text  if coin_perf_text  else "LONG COIN PERFORMANCE: insufficient data (no resolved LONGs yet)"
 
     # Build dynamic user message (gates + graveyard + market data — changes every run)
@@ -1581,40 +1622,86 @@ def analyze_with_claude(market_data_text, graveyard_text="", dominance_text="", 
     return result
 
 
+def _extract_first_json_object(text):
+    """
+    Scan `text` for the first '{' then walk forward counting brace depth
+    to find its matching '}'. Returns the extracted JSON string, or None.
+    This is robust to concatenated JSON objects — only the first complete
+    object is returned, ignoring anything after the closing brace.
+    """
+    start = text.find('{')
+    if start == -1:
+        return None
+    depth = 0
+    in_string = False
+    escape_next = False
+    for i, ch in enumerate(text[start:], start):
+        if escape_next:
+            escape_next = False
+            continue
+        if ch == '\\' and in_string:
+            escape_next = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0:
+                return text[start:i+1]
+    return None
+
+
 def parse_json_signals(analysis_text):
     """
     Extract the structured JSON block from Claude's output.
     Looks for ##JSON_START## ... ##JSON_END## delimiters.
     Returns a dict with verdict, regime, longs[], shorts[].
+
+    Robust to concatenated JSON objects ("Extra data" error): uses brace-depth
+    scanning to extract ONLY the first complete JSON object, ignoring anything
+    after its closing brace.
     """
     import json
 
-    # Primary: custom delimiters — greedy so we capture full nested JSON
-    match = re.search(r'##JSON_START##\s*(\{.*\})\s*##JSON_END##', analysis_text, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group(1))
-        except Exception as e:
-            print(f"   ⚠ JSON parse error (delimiters): {e}")
-            print(f"      Raw JSON snippet: {match.group(1)[:200]}")
+    # Primary: custom delimiters — extract text between markers, then parse
+    # only the first complete JSON object (handles concatenated double-JSON).
+    start_marker = analysis_text.find('##JSON_START##')
+    if start_marker != -1:
+        after_marker = analysis_text[start_marker + len('##JSON_START##'):]
+        # Strip to end marker if present, otherwise use full remaining text
+        end_marker = after_marker.find('##JSON_END##')
+        candidate = after_marker[:end_marker].strip() if end_marker != -1 else after_marker.strip()
+        json_str = _extract_first_json_object(candidate)
+        if json_str:
+            try:
+                return json.loads(json_str)
+            except Exception as e:
+                print(f"   ⚠ JSON parse error (delimiters): {e}")
+                print(f"      Raw JSON snippet: {json_str[:200]}")
 
-    # Fallback: markdown code fence — greedy
-    match = re.search(r'```json\s*(\{.*\})\s*```', analysis_text, re.DOTALL)
+    # Fallback: markdown code fence — extract first complete JSON object
+    match = re.search(r'```json\s*(\{)', analysis_text, re.DOTALL)
     if match:
-        try:
-            return json.loads(match.group(1))
-        except Exception as e:
-            print(f"   ⚠ JSON parse error (code fence): {e}")
+        fence_content = analysis_text[match.start(1):]
+        json_str = _extract_first_json_object(fence_content)
+        if json_str:
+            try:
+                return json.loads(json_str)
+            except Exception as e:
+                print(f"   ⚠ JSON parse error (code fence): {e}")
 
-    # Fallback: find first { and last } in the text after ##JSON_START##
+    # Fallback: scan from ##JSON_START## position using brace-depth extractor
     start_idx = analysis_text.find('##JSON_START##')
     if start_idx != -1:
-        snippet = analysis_text[start_idx:]
-        brace_start = snippet.find('{')
-        brace_end   = snippet.rfind('}')
-        if brace_start != -1 and brace_end > brace_start:
+        json_str = _extract_first_json_object(analysis_text[start_idx:])
+        if json_str:
             try:
-                return json.loads(snippet[brace_start:brace_end+1])
+                return json.loads(json_str)
             except Exception as e:
                 print(f"   ⚠ JSON parse error (brace search): {e}")
 
@@ -1631,7 +1718,7 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     shorts = data.get("shorts", [])
 
     lines = []
-    lines.append(f"🐳 WHALE-STREAM v46.44")
+    lines.append(f"🐳 WHALE-STREAM v46.49")
     lines.append(f"📅 {ts}")
 
     # ── Market regime summary ─────────────────────────────────
@@ -1701,15 +1788,18 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     return "\n".join(l for l in lines if l != "")
 
 
-def send_to_telegram(analysis_text, formatted_msg=None):
+def send_to_telegram(analysis_text, formatted_msg=None, chat_id=None):
     """
     Send the nicely formatted signal message to Telegram.
+    chat_id defaults to TELEGRAM_CHAT_ID (ops channel).
+    Pass TELEGRAM_SIGNAL_CHAT_ID for clean signal-only posts.
     Uses formatted_msg if provided, otherwise falls back to raw analysis.
     """
     print("📨 Sending analysis to Telegram...")
 
-    full_message = formatted_msg if formatted_msg else analysis_text
-    base_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    full_message     = formatted_msg if formatted_msg else analysis_text
+    _target_chat_id  = chat_id if chat_id else TELEGRAM_CHAT_ID
+    base_url         = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
 
     # Split into 4000-char chunks (leave buffer below 4096 limit)
     chunk_size = 4000
@@ -1728,7 +1818,7 @@ def send_to_telegram(analysis_text, formatted_msg=None):
 
     for idx, chunk in enumerate(chunks, 1):
         payload = {
-            "chat_id": TELEGRAM_CHAT_ID,
+            "chat_id": _target_chat_id,
             "text": chunk,
         }
         try:
@@ -1947,6 +2037,29 @@ def log_to_google_sheets(data, bkk_time):
         [dict(s, direction="SHORT") for s in data.get("shorts", [])]
     )
 
+    # ── TOP-3 FILTER: keep only top 3 LONG + top 3 SHORT by confidence ──
+    # Goal: trade only the highest-conviction setups each run.
+    # Fewer trades = higher quality = better capital preservation.
+    def _parse_conf_val(s):
+        """Parse confidence as float: '92%' → 92.0, '91' → 91.0"""
+        import re as _re
+        raw = str(s.get("conf", s.get("confidence", "0")))
+        nums = _re.findall(r'[\d]+\.?[\d]*', raw)
+        return float(nums[0]) if nums else 0.0
+
+    _longs_all  = [s for s in all_signals if s["direction"] == "LONG"]
+    _shorts_all = [s for s in all_signals if s["direction"] == "SHORT"]
+    _top_longs  = sorted(_longs_all,  key=_parse_conf_val, reverse=True)[:3]
+    _top_shorts = sorted(_shorts_all, key=_parse_conf_val, reverse=True)[:3]
+    _pre_filter = len(all_signals)
+    all_signals = _top_longs + _top_shorts
+    _dropped = _pre_filter - len(all_signals)
+    if _dropped > 0:
+        print(f"   🎯 TOP-3 FILTER: {_pre_filter} raw signals → kept top {len(_top_longs)} LONG + {len(_top_shorts)} SHORT ({_dropped} lower-confidence signals dropped)")
+    else:
+        print(f"   🎯 TOP-3 FILTER: {_pre_filter} signals (all kept — already within top-3 per direction)")
+    # ── end top-3 filter ─────────────────────────────────────────────────
+
     if all_signals:
         # ── Dedup: skip same coin+direction already OPEN today ───
         today_str = bkk_time.strftime("%Y-%m-%d")
@@ -2144,7 +2257,7 @@ def log_to_google_sheets(data, bkk_time):
 def main():
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🐳  WHALE-STREAM v46.44 — AUTO BOT STARTING    ║")
+    print("║   🐳  WHALE-STREAM v46.49 — AUTO BOT STARTING    ║")
     print("╚══════════════════════════════════════════════════╝")
     # Check conservative flag early so we can show it in the startup banner
     _short_conservative_early = os.path.exists(os.path.join(SCRIPT_DIR, "short_conservative.flag"))
@@ -2339,14 +2452,36 @@ def main():
     }
     print(f"   ✓ Merged: {len(merged_longs)} LONG + {len(merged_shorts)} SHORT signals from 2 batches")
 
+    # ── TOP-3 FILTER (main): trim signal_data BEFORE Telegram + Sheets ──────
+    # This is the authoritative filter. The filter inside log_to_google_sheets()
+    # is a safety backstop only. signal_data is the single source of truth for
+    # Telegram, Sheets, and the trader. All three must see only top 3+3.
+    def _top3_key(sig):
+        import re as _re
+        raw = str(sig.get("conf", sig.get("confidence", "0")))
+        nums = _re.findall(r'[\d]+\.?[\d]*', raw)
+        return float(nums[0]) if nums else 0.0
+    _raw_n_long  = len(signal_data["longs"])
+    _raw_n_short = len(signal_data["shorts"])
+    signal_data["longs"]  = sorted(signal_data["longs"],  key=_top3_key, reverse=True)[:3]
+    signal_data["shorts"] = sorted(signal_data["shorts"], key=_top3_key, reverse=True)[:3]
+    _n_top_dropped = (_raw_n_long - len(signal_data["longs"])) + (_raw_n_short - len(signal_data["shorts"]))
+    if _n_top_dropped > 0:
+        print(f"   🎯 TOP-3 FILTER: {_raw_n_long}🟢 + {_raw_n_short}🔴 raw → kept top {len(signal_data['longs'])}🟢 + {len(signal_data['shorts'])}🔴 ({_n_top_dropped} dropped)")
+    else:
+        print(f"   🎯 TOP-3 FILTER: already within 3+3 limit — no signals dropped")
+    # ── end top-3 filter ─────────────────────────────────────────────────────
+
     tg_msg = build_telegram_message(signal_data, bkk_time, graveyard_text=graveyard)
     print("\n" + "─"*60)
     print(tg_msg)
     print("─"*60 + "\n")
 
-    # ── Step 6: Send to Telegram (always uses clean formatted message) ──
+    # ── Step 6: Send signals to signal channel, ops summary stays on ops channel ──
     try:
-        send_to_telegram(analysis1, formatted_msg=tg_msg)
+        # Signals → TELEGRAM_SIGNAL_CHAT_ID (clean signal-only channel)
+        # Falls back to TELEGRAM_CHAT_ID if signal channel not configured
+        send_to_telegram(analysis1, formatted_msg=tg_msg, chat_id=TELEGRAM_SIGNAL_CHAT_ID)
     except Exception as e:
         print(f"✗ Telegram send failed: {e}")
 

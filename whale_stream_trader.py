@@ -109,9 +109,16 @@ MAX_MARK_SKIPS = 3
 PAUSED_FILE    = os.path.join(SCRIPT_DIR, "paused.flag")  # must match tracker's PAUSED_FILE
 CIRCUIT_LOSSES = 3
 
+# Gate 4 breach sentinel — written on first entry, deleted on recovery.
+# Prevents the Telegram alert from firing every 4-hour run while breach persists.
+GATE4_BREACH_FILE = os.path.join(SCRIPT_DIR, "gate4_breach.flag")
+
 SHORT_REPAIR_FILE    = os.path.join(SCRIPT_DIR, "short_repair.flag")
 SHORT_RECOVERY_COINS = {"H", "FF"}  # approved recovery coins (bypass SHORT REPAIR MODE)
 # Note: CHZ removed — it's in MALFORMED_COIN_BLOCKLIST in bot.py (SL always invalid)
+
+# Coins with poor historical LONG win rate — skip LONG signals for these
+LONG_COIN_AVOID_LIST = ["COMP", "HYPE", "ZRO"]
 
 def log(msg):
     """Write to console and trader_log.txt with timestamp."""
@@ -188,6 +195,19 @@ def send_telegram_alert(msg):
 def write_balance_file(balance, open_positions=0):
     """Write Bybit Demo balance to JSON for the dashboard to display."""
     import json
+
+    # ── Gate 4 recovery detection — read old balance before overwriting ────────
+    _GATE4_RECOVERY_THRESHOLD = 425.0
+    _old_balance = None
+    try:
+        if os.path.exists(BYBIT_BALANCE_FILE):
+            with open(BYBIT_BALANCE_FILE, "r", encoding="utf-8") as _rf:
+                _old_data = json.load(_rf)
+                _old_balance = float(_old_data.get("balance", balance))
+    except Exception:
+        pass
+    # ── end Gate 4 recovery read ───────────────────────────────────────────────
+
     bkk = datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d %H:%M BKK")
     try:
         with open(BYBIT_BALANCE_FILE, "w", encoding="utf-8") as f:
@@ -199,6 +219,26 @@ def write_balance_file(balance, open_positions=0):
             }, f)
     except Exception:
         pass
+
+    # ── Gate 4 recovery alert — fires when balance crosses $425 from below ─────
+    if (_old_balance is not None
+            and _old_balance < _GATE4_RECOVERY_THRESHOLD
+            and balance >= _GATE4_RECOVERY_THRESHOLD):
+        _g4_recovery_msg = (
+            f"🟢 GATE 4 CLEARED!\n"
+            f"Balance: ${balance:.2f} recovered above $425\n"
+            f"Drawdown back below 15% ✅\n"
+            f"→ Review July 1 go-live decision."
+        )
+        send_telegram_alert(_g4_recovery_msg)
+        log(f"GATE 4 CLEARED — balance crossed $425 (was ${_old_balance:.2f}, now ${balance:.2f})")
+        # Remove the breach sentinel so the entry alert can fire again if balance dips again
+        try:
+            if os.path.exists(GATE4_BREACH_FILE):
+                os.remove(GATE4_BREACH_FILE)
+        except Exception:
+            pass
+    # ── end Gate 4 recovery alert ──────────────────────────────────────────────
 
 
 # ── Sheet column indices (0-based) ────────────────────────────
@@ -689,7 +729,7 @@ def main():
             f"  Drawdown        : {_dd_pct:.1f}% from ${BYBIT_START_BALANCE:.0f} start\n"
             f"  Gate 4 floor    : ${_BALANCE_GATE4_FLOOR:.0f} (real capital requires > this)\n"
             f"  Remaining margin: ${_remaining:,.2f} before Gate 4 breach\n"
-            f"  ⚡ SHORTs already suspended. LONGs continue but review open positions."
+            f"  ⚡ Gate 4 breach active: 40% size, max 4 positions, both LONG+SHORT allowed."
         )
         log(f"LOW BALANCE WARNING — ${balance:,.2f} ({_dd_pct:.1f}% drawdown)")
 
@@ -874,15 +914,25 @@ def main():
     # ── Gate 4 breach override — drawdown > 15% ──────────────────────────────
     _GATE4_BREACH = _drawdown_pct > 15.0
     if _GATE4_BREACH:
-        _prev_mult = _size_mult
         _size_mult = 0.40  # ultra-conservative: below the normal 0.60 floor
-        if _prev_mult != 0.40:  # only alert when first entering breach mode
+        # Only fire the Telegram alert once (when first entering breach mode).
+        # GATE4_BREACH_FILE is created here and deleted when balance recovers in
+        # write_balance_file() — this avoids spamming the alert every 4-hour run.
+        if not os.path.exists(GATE4_BREACH_FILE):
             _g4_msg = (
                 f"🔴 GATE 4 BREACH MODE — {_drawdown_pct:.1f}% drawdown exceeds 15% limit.\n"
-                f"  Ultra-conservative activated: 40% size, LONG only, max 4 positions."
+                f"  Ultra-conservative activated: 40% size, both LONG + SHORT, max 4 positions."
             )
             send_telegram_alert(_g4_msg)
             print(_g4_msg)
+            try:
+                bkk_g4 = datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d %H:%M BKK")
+                with open(GATE4_BREACH_FILE, "w", encoding="utf-8") as _g4f:
+                    _g4f.write(f"Gate 4 breach entered at {bkk_g4}\n"
+                               f"Balance: ${_bb_balance:.2f}  Drawdown: {_drawdown_pct:.1f}%\n"
+                               f"Deleted automatically when balance recovers above $425.\n")
+            except Exception:
+                pass
 
     # ── Risk cap: max 50% of total balance deployed ───────────
     deployed_est = len(already_active) * TRADE_MARGIN_USDT  # includes pending entry orders
@@ -900,6 +950,34 @@ def main():
     else:
         print(f"   💼 Risk check OK: ~${deployed_est} deployed ({deployed_pct:.0f}%) "
               f"— cap is {MAX_DEPLOYED_FRACTION*100:.0f}% (${cap_usdt:.0f})")
+
+    # ── Load Strategist decisions (written by whale_stream_strategist.py at :10) ──
+    # If the file exists, any coin+direction marked VETO will be skipped.
+    # If file doesn't exist (Strategist didn't run), we proceed normally — graceful degradation.
+    DECISIONS_FILE = os.path.join(SCRIPT_DIR, "strategist_decisions.json")
+    _strat_vetoes  = set()    # set of (coin, direction) pairs to skip
+    _strat_reduces = set()    # set of (coin, direction) pairs to trade at 50% size
+    _strat_loaded  = False
+    if os.path.exists(DECISIONS_FILE):
+        try:
+            with open(DECISIONS_FILE, "r", encoding="utf-8") as _sf:
+                _strat_data = json.load(_sf)
+            for _d in _strat_data.get("decisions", []):
+                _key = (_d.get("coin", "").upper(), _d.get("direction", "").upper())
+                if _d.get("decision") == "VETO":
+                    _strat_vetoes.add(_key)
+                elif _d.get("decision") == "REDUCE_SIZE":
+                    _strat_reduces.add(_key)
+            _strat_loaded = True
+            log(f"STRATEGIST loaded — {len(_strat_vetoes)} veto(s), {len(_strat_reduces)} reduce(s)  "
+                f"(run: {_strat_data.get('run_at','?')})")
+            print(f"   🧠 Strategist: {len(_strat_vetoes)} VETO(s), {len(_strat_reduces)} REDUCE(s)  "
+                  f"[{_strat_data.get('run_at','?')}]")
+        except Exception as _se:
+            log(f"STRATEGIST file unreadable: {_se} — proceeding without veto")
+            print(f"   ⚠ Strategist file unreadable: {_se} — no vetoes applied")
+    else:
+        print("   ℹ Strategist file not found — no vetoes applied (Strategist may not have run yet)")
 
     # ── Place orders ───────────────────────────────────────────
     print("\n🚀 Placing orders...\n")
@@ -938,14 +1016,12 @@ def main():
                 continue
         # ── end SHORT REPAIR MODE ──────────────────────────────────────────────
 
-        # ── Gate 4 breach mode — LONG only, max 4 positions ───────────────────
+        # ── Gate 4 breach mode — BOTH directions, max 4 positions, 0.40x size ──
+        # NOTE: SHORTs are NO LONGER blocked in Gate 4 breach mode.
+        # SHORT WR is 95% last 20 trades — they are our strongest performers.
+        # In a bear market, blocking SHORTs means blocking the best money-makers.
+        # Strategy: trade BOTH directions but ultra-small (0.40x) with a 4-position cap.
         if _GATE4_BREACH:
-            if side == "Sell":
-                _g4_skip_msg = f"⛔ GATE 4 MODE — skipping SHORT {coin}"
-                print(f"   {_g4_skip_msg}")
-                log(_g4_skip_msg)
-                print()
-                continue
             if n_positions >= 4:
                 _g4_cap_msg = (f"⛔ GATE 4 MODE — position cap reached "
                                f"({n_positions}/4) — skipping {coin}")
@@ -954,6 +1030,41 @@ def main():
                 print()
                 continue
         # ── end Gate 4 breach mode ─────────────────────────────────────────────
+
+        # ── LONG_COIN_AVOID_LIST — skip LONG signals for poor-WR coins ────────
+        if side == "Buy" and coin.upper() in LONG_COIN_AVOID_LIST:
+            _avoid_msg = f"⏭ Skipping {coin} LONG — on LONG avoid list (poor historical WR)"
+            log(_avoid_msg)
+            print(f"   {_avoid_msg}")
+            print()
+            continue
+        # ── end LONG_COIN_AVOID_LIST ───────────────────────────────────────────
+
+        # ── Strategist VETO / REDUCE check ─────────────────────────────────────
+        _strat_key = (coin.upper(), "LONG" if side == "Buy" else "SHORT")
+        if _strat_key in _strat_vetoes:
+            # Find the reason from the decisions file for logging
+            _veto_reason = "Strategist veto"
+            try:
+                for _d in _strat_data.get("decisions", []):
+                    if _d.get("coin","").upper() == coin.upper():
+                        _veto_reason = _d.get("reason", "Strategist veto")
+                        break
+            except Exception:
+                pass
+            _veto_msg = f"⛔ STRATEGIST VETO: {coin} {_strat_key[1]} — {_veto_reason}"
+            log(_veto_msg)
+            print(f"   {_veto_msg}")
+            print()
+            continue
+        if _strat_key in _strat_reduces:
+            # Half-size trade — use local multiplier so other coins are unaffected
+            _coin_size_mult = round(_size_mult * 0.5, 3)
+            print(f"   ⚠️ STRATEGIST REDUCE: {coin} {_strat_key[1]} — trading at {_coin_size_mult:.2f}x size (was {_size_mult:.2f}x)")
+            log(f"STRATEGIST REDUCE: {coin} {_strat_key[1]} — size {_size_mult:.2f}x → {_coin_size_mult:.2f}x")
+        else:
+            _coin_size_mult = _size_mult
+        # ── end Strategist check ───────────────────────────────────────────────
 
         # Skip if already have a position OR an unfilled order
         if symbol in already_active:
@@ -1107,8 +1218,8 @@ def main():
             print(f"   ✗ Could not set {LEVERAGE}x leverage for {symbol}")
             continue
 
-        # Calculate qty — apply drawdown-based size multiplier
-        qty = calc_qty(entry, info, size_mult=_size_mult)
+        # Calculate qty — apply drawdown-based size multiplier (+ Strategist REDUCE if active)
+        qty = calc_qty(entry, info, size_mult=_coin_size_mult)
         if qty <= 0:
             print(f"   ✗ Position too small for {symbol} (min qty: {info['min_qty']}) — skipping")
             print(f"     Try increasing TRADE_MARGIN_USDT or reducing leverage")
@@ -1187,8 +1298,9 @@ def main():
             else:
                 _tier_tag = ""
             _scale_notice = (
-                f"\n  ⚠️ Size scaled to {int(_size_mult*100)}% (drawdown {_drawdown_pct:.1f}%)"
-                if _size_mult < 1.0 else ""
+                f"\n  ⚠️ Size scaled to {int(_coin_size_mult*100)}% (drawdown {_drawdown_pct:.1f}%"
+                + (" + Strategist REDUCE" if _strat_key in _strat_reduces else "") + ")"
+                if _coin_size_mult < 1.0 else ""
             )
             send_telegram_alert(
                 f"✅ <b>DEMO ORDER PLACED</b> — {coin} {dir_label}{_tier_tag}\n"

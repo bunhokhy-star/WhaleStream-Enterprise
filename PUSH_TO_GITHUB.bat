@@ -1,33 +1,28 @@
 @echo off
+echo ══════════════════════════════════════════════
+echo   WHALE-STREAM — Push to GitHub
+echo ══════════════════════════════════════════════
+echo.
+
 cd /d "C:\Users\MAX\WhaleStream"
-echo ============================================
-echo  WHALE-STREAM Push to GitHub
-echo ============================================
+
+echo [1] Git status...
+git status
 echo.
 
-REM Stage all changes
-git add .
-
-REM Commit with today's date
-for /f "tokens=2 delims==" %%I in ('wmic os get localdatetime /value') do set dt=%%I
-set TODAY=%dt:~0,4%-%dt:~4,2%-%dt:~6,2%
-git commit -m "v46.44 — %TODAY% Gate 4 breach mode + balance staleness fix + entry price rules"
-
+echo [2] Staging all changes...
+git add -A
 echo.
-echo Pushing to GitHub...
-git push origin main
 
+echo [3] Committing...
+git commit -m "v46.52 — Debrief confidence cast fix + Strategist Task Scheduler + bot schedule correction"
 echo.
-if %ERRORLEVEL% EQU 0 (
-    echo ============================================
-    echo  Pushed successfully!
-    echo ============================================
-) else (
-    echo ============================================
-    echo  Push failed. You may need to:
-    echo  1. Set remote: git remote add origin https://github.com/bunhokhy-star/WhaleStream-Enterprise.git
-    echo  2. Authenticate via GitHub Desktop or a Personal Access Token
-    echo ============================================
-)
+
+echo [4] Pushing to remote...
+git push
 echo.
+
+echo ══════════════════════════════════════════════
+echo   Done. Check output above for errors.
+echo ══════════════════════════════════════════════
 pause

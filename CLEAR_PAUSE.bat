@@ -29,7 +29,7 @@ if /i "%CONFIRM%"=="YES" (
     del "%FLAG_FILE%"
     echo.
     echo  ✅ Pause cleared. Trader will place orders on next scheduled run.
-    echo     Next run: check Task Scheduler or wait for the 2-hour cycle.
+    echo     Next run: check Task Scheduler or wait for the 4-hour cycle.
 ) else (
     echo.
     echo  ✗ Cancelled — pause remains active.

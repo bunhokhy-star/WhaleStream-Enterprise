@@ -22,6 +22,7 @@ import sys
 import os
 import json
 import re
+import subprocess
 import requests
 from datetime import datetime, timezone, timedelta
 
@@ -38,6 +39,14 @@ except ImportError:
     import os as _os
     TELEGRAM_BOT_TOKEN = _os.getenv("TELEGRAM_BOT_TOKEN", "")
     TELEGRAM_CHAT_ID   = _os.getenv("TELEGRAM_CHAT_ID", "")
+
+# ── Google Sheets ─────────────────────────────────────────────
+GOOGLE_SHEET_ID       = "1R21mkduSpbki2HmlNJMHM95-LkGS0q-AKHE1HVIfMmI"
+GOOGLE_CREDENTIALS_FILE = "google_credentials.json"
+# Column indices (0-based) — must match whale_stream_tracker.py
+_COL_STATUS      = 11
+_COL_PNL         = 15
+_COL_RESOLVED_AT = 16
 
 # ── Paths ─────────────────────────────────────────────────────
 BASE_DIR         = os.path.dirname(os.path.abspath(__file__))
@@ -332,10 +341,10 @@ def parse_trader_activity():
         if m2 and "✅ Order placed!" in "".join(lines[max(0, lines.index(line)-3):lines.index(line)+1]):
             placed_symbols.append(m2.group(1))
 
-    # Estimate next run (~2h interval is typical for the scheduler)
+    # Estimate next run (~4h interval is typical for the scheduler)
     next_run_str = "unknown"
     if last_run_dt:
-        next_dt = last_run_dt + timedelta(hours=2)
+        next_dt = last_run_dt + timedelta(hours=4)
         mins_until = int((next_dt - now_bkk).total_seconds() / 60)
         if mins_until > 0:
             if mins_until >= 60:
@@ -351,6 +360,85 @@ def parse_trader_activity():
         "skipped_repair":  skipped,
         "last_run_str":    last_run_str or "unknown",
         "next_run_str":    next_run_str,
+    }
+
+
+# ─────────────────────────────────────────────────────────────
+# 6. YESTERDAY'S P&L  (from Google Sheets resolved_at column)
+# ─────────────────────────────────────────────────────────────
+
+def parse_yesterday_pnl():
+    """
+    Read Google Sheets and return dict with yesterday's resolved trade stats.
+    'Yesterday' = BKK date (UTC+7) for rows where resolved_at starts with that date.
+
+    Returns:
+        {
+            "count": int,     # total resolved trades yesterday
+            "wins":  int,
+            "losses": int,
+            "net_pnl": float, # sum of pnl_pct values (% at 10x leverage)
+        }
+    or None if Sheets is unavailable.
+    """
+    try:
+        from google.oauth2.service_account import Credentials
+        import gspread
+    except ImportError:
+        return None
+
+    try:
+        creds_path = os.path.join(BASE_DIR, GOOGLE_CREDENTIALS_FILE)
+        if not os.path.exists(creds_path):
+            return None
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive",
+        ]
+        creds  = Credentials.from_service_account_file(creds_path, scopes=scopes)
+        client = gspread.authorize(creds)
+        sheet  = client.open_by_key(GOOGLE_SHEET_ID).sheet1
+        rows   = sheet.get_all_values()
+    except Exception:
+        return None
+
+    now_bkk   = datetime.now(BKK)
+    yesterday  = (now_bkk - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    wins = 0
+    losses = 0
+    net_pnl = 0.0
+
+    for row in rows[1:]:  # skip header row
+        while len(row) < 17:
+            row.append("")
+        status      = row[_COL_STATUS].strip().upper()
+        resolved_at = row[_COL_RESOLVED_AT].strip()
+        pnl_raw     = row[_COL_PNL].strip()
+
+        if status not in ("WIN", "LOSS"):
+            continue
+        if not resolved_at.startswith(yesterday):
+            continue
+
+        # Parse pnl_pct — stored as e.g. "+12.50%" or "-5.20%" or "12.50"
+        pnl_val = 0.0
+        try:
+            pnl_val = float(pnl_raw.replace("%", "").replace("+", "").strip())
+        except (ValueError, AttributeError):
+            pnl_val = 0.0
+
+        if status == "WIN":
+            wins += 1
+        else:
+            losses += 1
+        net_pnl += pnl_val
+
+    return {
+        "count":   wins + losses,
+        "wins":    wins,
+        "losses":  losses,
+        "net_pnl": net_pnl,
     }
 
 
@@ -378,6 +466,7 @@ def build_message():
     monitor_dt, monitor_ago = parse_monitor_heartbeat()
     fills_24h = parse_last_fills_24h()
     trader   = parse_trader_activity()
+    yesterday_pnl = parse_yesterday_pnl()
 
     # ── Balance block ──
     total_bal    = bal.get("balance", 0.0)
@@ -537,10 +626,31 @@ def build_message():
         f"🏦 OPEN POSITIONS ({pos_count})",
     ]
     lines.extend(pos_lines if pos_lines else ["  (none)"])
+
+    # ── Yesterday's P&L from Google Sheets ──
+    if yesterday_pnl is None:
+        pnl_section = ["📊 Yesterday's P&L: (Sheets unavailable)"]
+    elif yesterday_pnl["count"] == 0:
+        pnl_section = ["📊 No trades resolved yesterday."]
+    else:
+        _n   = yesterday_pnl["count"]
+        _w   = yesterday_pnl["wins"]
+        _l   = yesterday_pnl["losses"]
+        _wr  = _w / _n * 100 if _n > 0 else 0.0
+        _net = yesterday_pnl["net_pnl"]
+        pnl_section = [
+            "📊 YESTERDAY'S RESULTS",
+            f"  Resolved: {_n} trades | {_w}W / {_l}L | WR: {_wr:.0f}%",
+            f"  Net P&L: {_net:+.1f}% (demo)",
+        ]
+
     lines += [
         "",
         "⚡ YESTERDAY ACTIVITY",
         activity_summary,
+    ]
+    lines += [""] + pnl_section
+    lines += [
         "",
         f"🔄 Monitor: {monitor_status}",
         f"🤖 Trader:  {trader_status}",
@@ -586,4 +696,17 @@ if __name__ == "__main__":
     print("────────────────────────────────────────────────────────\n")
 
     send_telegram(msg)
+
+    # ── Auto-run analyze_shorts.py on Sunday (6) and Thursday (3) ──
+    _today_wd = now_bkk.weekday()  # 0=Mon … 3=Thu … 6=Sun
+    if _today_wd in (3, 6):
+        _day_name = "Thursday" if _today_wd == 3 else "Sunday"
+        try:
+            _shorts_script = os.path.join(BASE_DIR, "analyze_shorts.py")
+            print(f"📊 {_day_name}: Running analyze_shorts.py for SHORT recovery check...")
+            subprocess.run([sys.executable, _shorts_script], timeout=120)
+            print("   ✓ analyze_shorts.py completed")
+        except Exception as _e:
+            print(f"   ⚠ analyze_shorts.py auto-run failed: {_e}")
+
     print("Done.")

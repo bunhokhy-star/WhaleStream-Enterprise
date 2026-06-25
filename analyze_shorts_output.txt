@@ -1,0 +1,354 @@
+Connecting to Google Sheets...
+  Loaded 385 rows from Sheets.
+══════════════════════════════════════════════════════════
+  WHALE-STREAM — SYSTEM HEALTH SUMMARY
+══════════════════════════════════════════════════════════
+  Total resolved    :  141  (WIN+LOSS, excl EXPIRED)
+  LONG win rate     : 52.7%  (39W/35L)
+  SHORT win rate    : 68.7%  (46W/21L)
+  Expired (72h)     :   71  (not counted in WR)
+  Gate 1            : ❌ 141/150
+  Gate 3 (SHORT WR) : ✅ PASS
+  System status     : ✅ FULL MODE — all signals active
+══════════════════════════════════════════════════════════
+
+============================================================
+  WHALE-STREAM SHORT WIN RATE DEEP ANALYSIS
+  Run at: 2026-06-24 22:32
+============================================================
+
+── OVERALL SUMMARY ──────────────────────────────────────
+  Total resolved trades : 141
+  LONGs  : 74 total | 39 WIN | 35 LOSS | WR: 52.7%
+  SHORTs : 67 total | 46 WIN | 21 LOSS | WR: 68.7%
+  SHORT avg conf (WIN)  : 91.5%
+  SHORT avg conf (LOSS) : 89.8%
+  LONG  avg conf (WIN)  : 87.9%
+  LONG  avg conf (LOSS) : 87.7%
+
+── SHORT WIN RATE BY CONFIDENCE BAND ───────────────────
+  95%+      :  19 signals | 17 WIN | WR: 89.5%
+  92-95%    :   9 signals |  9 WIN | WR: 100.0%
+  90-92%    :  11 signals |  4 WIN | WR: 36.4%
+  88-90%    :  16 signals |  6 WIN | WR: 37.5%
+  85-88%    :  12 signals | 10 WIN | WR: 83.3%
+  0-85%     :   0 signals |  0 WIN | WR: N/A
+
+── LONG  WIN RATE BY CONFIDENCE BAND ───────────────────
+  95%+      :   0 signals |  0 WIN | WR: N/A
+  92-95%    :   0 signals |  0 WIN | WR: N/A
+  90-92%    :  15 signals |  7 WIN | WR: 46.7%
+  88-90%    :  23 signals | 15 WIN | WR: 65.2%
+  85-88%    :  36 signals | 17 WIN | WR: 47.2%
+  0-85%     :   0 signals |  0 WIN | WR: N/A
+
+── LONG WIN RATE BY CONFIDENCE TIER (v46.21) ───────────
+  Tiers defined in v46.21: TIER 1=Elite(92%+), TIER 2=Good(88-91%), TIER 3=Min(85-87%)
+  TIER 1 — ELITE  (92%+)      :   0 trades | WR: N/A    | avg P&L:   N/A    | avg WIN:   N/A    | avg LOSS:   N/A 
+  TIER 2 — GOOD   (88-91%)    :  38 trades | WR: 57.9%  | avg P&L: +33.7%   | avg WIN: +107.8%  | avg LOSS: -59.0%
+  TIER 3 — MIN    (85-87%)    :  36 trades | WR: 47.2%  | avg P&L: +5.0%    | avg WIN: +95.2%   | avg LOSS: -61.5%
+  ℹ️  TIER 1 has only 0 trade(s) — need 3+ to evaluate (v46.21 is recent)
+
+── LONG CONFIDENCE RECOMMENDATION ──────────────────────
+  → Current 85% floor is appropriate — WR is acceptable at this level
+  → Keep existing LONG min confidence at 85%
+
+── LONG WIN RATE BY PATTERN ─────────────────────────────
+  stage 2 breakout retest            :  12 trades |  6 WIN | WR: 50.0%
+  bull flag continuation —           :   6 trades |  4 WIN | WR: 66.7%
+  stage 2-3 expansion retest         :   5 trades |  3 WIN | WR: 60.0%
+  stage 2 expansion retest           :   4 trades |  3 WIN | WR: 75.0%
+  stage 2 expansion —                :   3 trades |  3 WIN | WR: 100.0%
+  stage 2 breakout —                 :   3 trades |  2 WIN | WR: 66.7%
+  bull flag retest —                 :   3 trades |  2 WIN | WR: 66.7%
+  stage 2-3 breakout retest          :   3 trades |  1 WIN | WR: 33.3%
+  bull flag compression —            :   2 trades |  1 WIN | WR: 50.0%
+  stage 3 expansion continuation     :   2 trades |  1 WIN | WR: 50.0%
+  momentum expansion retest —        :   1 trades |  1 WIN | WR: 100.0%
+  stage 2 expansion retest,          :   1 trades |  1 WIN | WR: 100.0%
+  hh/hl expansion — breakout         :   1 trades |  1 WIN | WR: 100.0%
+  breakout retest — stage            :   1 trades |  1 WIN | WR: 100.0%
+  momentum breakout retest —         :   1 trades |  1 WIN | WR: 100.0%
+  breakout retest — 30%              :   1 trades |  0 WIN | WR: 0.0%
+  breakout retest — momentum         :   1 trades |  0 WIN | WR: 0.0%
+  hh/hl expansion — momentum         :   1 trades |  0 WIN | WR: 0.0%
+  breakout retest — liquidity        :   1 trades |  0 WIN | WR: 0.0%
+  breakout retest — 7d               :   1 trades |  1 WIN | WR: 100.0%
+  hh/hl structure intact —           :   1 trades |  0 WIN | WR: 0.0%
+  stage 2-3 expansion —              :   1 trades |  1 WIN | WR: 100.0%
+  7d +10.49% breakout retest         :   1 trades |  1 WIN | WR: 100.0%
+  rwa/staking accumulation — 7d      :   1 trades |  1 WIN | WR: 100.0%
+  stage 2 expansion continuation     :   1 trades |  0 WIN | WR: 0.0%
+  rwa/staking breakout continuation —:   1 trades |  0 WIN | WR: 0.0%
+  stage 2-3 breakout expansion       :   1 trades |  0 WIN | WR: 0.0%
+  continuation breakout — 7d         :   1 trades |  0 WIN | WR: 0.0%
+  momentum continuation — 7d         :   1 trades |  0 WIN | WR: 0.0%
+  momentum continuation — +8.52%     :   1 trades |  0 WIN | WR: 0.0%
+  breakout continuation — +17.17%    :   1 trades |  0 WIN | WR: 0.0%
+  7d +10.32% meme momentum           :   1 trades |  0 WIN | WR: 0.0%
+  stage 2 retest —                   :   1 trades |  0 WIN | WR: 0.0%
+  meme sector retest —               :   1 trades |  0 WIN | WR: 0.0%
+  meme sector compression —          :   1 trades |  0 WIN | WR: 0.0%
+  defi range hold —                  :   1 trades |  0 WIN | WR: 0.0%
+  healthy vol/mcap ratio (0.044)     :   1 trades |  1 WIN | WR: 100.0%
+  7d +3.35% positive momentum,       :   1 trades |  0 WIN | WR: 0.0%
+  stage 2 — +7.31%                   :   1 trades |  1 WIN | WR: 100.0%
+  positive 24h momentum (+4.86%)     :   1 trades |  1 WIN | WR: 100.0%
+  stage 2 bounce —                   :   1 trades |  1 WIN | WR: 100.0%
+
+── GATE 2: LONG P&L DEEP DIVE ──────────────────────────
+  Total LONG trades  : 74 (39 WIN / 35 LOSS)
+  Net LONG P&L       : +1375.7%  (sum of all LONG P&L at 10x)
+  Avg WIN  P&L       : +102.6%
+  Avg LOSS P&L       : -60.4%
+  Profit Factor      : 1.65x  (need > 1.0 to be profitable)
+  Expected Value     : +18.59% per trade
+  Gate 1 progress    : 141/150 total resolved trades
+  ✅ GATE 2 STATUS: PASS — Net LONG P&L is positive, PF=1.65x
+
+── LONG WIN RATE BY MONTH (trajectory) ─────────────────
+  Month      Trades  Wins      WR   Avg P&L  Trend
+  ────────── ────── ───── ─────── ─────────  ────────
+  2026-06        74    39 ⚠️   53%     +19.9%  —
+
+── ACTUAL vs ESTIMATED P&L (Bybit write-back v46.27+) ──
+  Coverage : 5/74 LONG trades have Bybit actual P&L (7%)
+  Actual LOSS P&L : avg -66.7%  (5 trades)
+  Estimated avg   : +26.7%  (64 trades, no [B])
+  Actual avg      : -66.7%  (5 trades, [B])
+  ⚠️ Gap (actual−est): -93.4pp  (actual fills lagging estimates — slippage / fees eating into P&L ⚠️)
+
+── LONG WIN RATE BY COIN (ranked) ──────────────────────
+  COIN         TRADES  WINS      WR   AVG P&L  RATING
+  ──────────── ────── ───── ─────── ─────────  ────────
+  AERO              8     8    100%     +94.1%  ⭐ STRONG
+  TIA               4     4    100%     +98.1%  ⭐ STRONG
+  RENDER            2     2    100%    +111.1%  ⭐ STRONG
+  XPL               2     2    100%      +0.0%  ⭐ STRONG
+  JUP               4     3     75%     +35.9%  ⭐ STRONG
+  EIGEN             6     4     67%     +54.6%  ✅ GOOD
+  WLD               5     3     60%     +37.6%  ✅ GOOD
+  JTO               7     4     57%     +16.9%  ✅ GOOD
+  NEAR              4     2     50%     +24.8%  ⚠️ WEAK
+  XLM               6     2     33%      -6.5%  ❌ POOR
+  SOL               3     1     33%      -6.7%  ❌ POOR
+  PENDLE            3     1     33%     -15.4%  ❌ POOR
+  WIF               3     1     33%     -35.6%  ❌ POOR
+  ZRO               2     0      0%     -59.5%  ❌ POOR
+  HYPE              2     0      0%     -54.3%  ❌ POOR
+  COMP              2     0      0%     -58.6%  ❌ POOR
+
+
+══════════════════════════════════════════════════════════
+  LONG WIN RATE BY PATTERN (min 2 trades, ranked by WR)
+══════════════════════════════════════════════════════════
+  Pattern                                W   L  Tot     WR
+  --------------------------------------------------------
+  ⚠️  Bull flag continuation — negative f   1   1    2    50%
+  ⚠️  Stage 2-3 expansion retest — 7d +43   1   1    2    50%
+
+  Best pattern: Bull flag continuation — negative f — 50% WR (1W/1L)
+
+── LONG BLOCKLIST CANDIDATES ────────────────────────────
+  ✅ No LONG coins qualify for blocklist (need 0% WR over 3+ trades)
+
+── SHORT LOSSES BY COIN ─────────────────────────────────
+  ENA         : 5 LOSS / 5 total  WR: 0.0%  avg conf: 89.4%
+  VVV         : 3 LOSS / 3 total  WR: 0.0%  avg conf: 91.0%
+  WLD         : 2 LOSS / 3 total  WR: 33.3%  avg conf: 89.7%
+  INJ         : 2 LOSS / 4 total  WR: 50.0%  avg conf: 88.0%
+  XLM         : 2 LOSS / 3 total  WR: 33.3%  avg conf: 88.3%
+  BCH         : 2 LOSS / 2 total  WR: 0.0%  avg conf: 87.5%
+  H           : 2 LOSS / 17 total  WR: 88.2%  avg conf: 93.4%
+  ZRO         : 1 LOSS / 1 total  WR: 0.0%  avg conf: 89.0%
+  AVAX        : 1 LOSS / 2 total  WR: 50.0%  avg conf: 88.0%
+  TRUMP       : 1 LOSS / 1 total  WR: 0.0%  avg conf: 91.0%
+
+── SHORT WIN RATE BY PATTERN ────────────────────────────
+  stage 4-5 distribution —           :  10 trades |  9 WIN | WR: 90.0%
+  stage 5 catastrophic distribution  :   7 trades |  6 WIN | WR: 85.7%
+  stage 5 distribution collapse      :   5 trades |  5 WIN | WR: 100.0%
+  stage 5 distribution —             :   4 trades |  3 WIN | WR: 75.0%
+  rs failure — 7d                    :   2 trades |  0 WIN | WR: 0.0%
+  lh/ll breakdown — rs               :   1 trades |  0 WIN | WR: 0.0%
+  7d negative divergence —           :   1 trades |  0 WIN | WR: 0.0%
+  rs failure — -4.84%                :   1 trades |  0 WIN | WR: 0.0%
+  breakdown continuation — -1.41%    :   1 trades |  0 WIN | WR: 0.0%
+  rs failure — -13.16%               :   1 trades |  0 WIN | WR: 0.0%
+  dead cat bounce failure            :   1 trades |  0 WIN | WR: 0.0%
+  lh/ll breakdown — -3.90%           :   1 trades |  0 WIN | WR: 0.0%
+  laggard breakdown — -13.72%        :   1 trades |  1 WIN | WR: 100.0%
+  rs failure — dead                  :   1 trades |  1 WIN | WR: 100.0%
+  7d -7.76% relative weakness,       :   1 trades |  0 WIN | WR: 0.0%
+  7d -14.71% persistent downtrend,   :   1 trades |  1 WIN | WR: 100.0%
+  breakdown retest — 7d              :   1 trades |  0 WIN | WR: 0.0%
+  rs failure — stage                 :   1 trades |  0 WIN | WR: 0.0%
+  lh/ll structure — breakdown        :   1 trades |  0 WIN | WR: 0.0%
+  bearish continuation — stage       :   1 trades |  0 WIN | WR: 0.0%
+  breakdown — -3.42% 24h,            :   1 trades |  0 WIN | WR: 0.0%
+  rs failure — catastrophic          :   1 trades |  1 WIN | WR: 100.0%
+  breakdown continuation — -16.19%   :   1 trades |  1 WIN | WR: 100.0%
+  bear expansion — 24h               :   1 trades |  1 WIN | WR: 100.0%
+  rs failure — -10.16%               :   1 trades |  0 WIN | WR: 0.0%
+  lh/ll breakdown — 24h              :   1 trades |  0 WIN | WR: 0.0%
+  lh/ll structure — rs               :   1 trades |  1 WIN | WR: 100.0%
+  breakdown retest — -8.50%          :   1 trades |  1 WIN | WR: 100.0%
+  dead-cat retest after +49%         :   1 trades |  1 WIN | WR: 100.0%
+  relative weakness — -6.32%         :   1 trades |  1 WIN | WR: 100.0%
+  structural breakdown — 7d          :   1 trades |  1 WIN | WR: 100.0%
+  bear breakdown — 24h               :   1 trades |  1 WIN | WR: 100.0%
+  dead-cat exhaustion — 24h          :   1 trades |  1 WIN | WR: 100.0%
+  dead cat retest —                  :   1 trades |  1 WIN | WR: 100.0%
+  dead-cat retest — 7d               :   1 trades |  1 WIN | WR: 100.0%
+  lh/ll breakdown — -5.07%           :   1 trades |  1 WIN | WR: 100.0%
+  meme coin distribution —           :   1 trades |  0 WIN | WR: 0.0%
+  breakdown continuation — -3.10%    :   1 trades |  1 WIN | WR: 100.0%
+  dead-cat retest after 15%          :   1 trades |  1 WIN | WR: 100.0%
+  breakdown continuation — 24h       :   1 trades |  1 WIN | WR: 100.0%
+  stage 4-5 exhaustion —             :   1 trades |  1 WIN | WR: 100.0%
+  exhaustion reversal — -6.92%       :   1 trades |  1 WIN | WR: 100.0%
+  dead-cat bounce short —            :   1 trades |  1 WIN | WR: 100.0%
+  stage 4 exhaustion —               :   1 trades |  1 WIN | WR: 100.0%
+
+── SHORT WINS BY COIN ───────────────────────────────────
+  H           : 15 WIN  / 17 total  WR: 88.2%  avg conf: 93.4%
+  FF          : 4 WIN  / 4 total  WR: 100.0%  avg conf: 90.2%
+  CRV         : 4 WIN  / 4 total  WR: 100.0%  avg conf: 90.0%
+  JTO         : 4 WIN  / 4 total  WR: 100.0%  avg conf: 92.2%
+  CHZ         : 3 WIN  / 3 total  WR: 100.0%  avg conf: 87.0%
+  ONDO        : 3 WIN  / 3 total  WR: 100.0%  avg conf: 91.3%
+  INJ         : 2 WIN  / 4 total  WR: 50.0%  avg conf: 88.0%
+  NEAR        : 2 WIN  / 2 total  WR: 100.0%  avg conf: 91.0%
+  PENDLE      : 2 WIN  / 2 total  WR: 100.0%  avg conf: 95.0%
+  WLD         : 1 WIN  / 3 total  WR: 33.3%  avg conf: 89.7%
+  AVAX        : 1 WIN  / 2 total  WR: 50.0%  avg conf: 88.0%
+  XLM         : 1 WIN  / 3 total  WR: 33.3%  avg conf: 88.3%
+  MORPHO      : 1 WIN  / 1 total  WR: 100.0%  avg conf: 92.0%
+  ATOM        : 1 WIN  / 1 total  WR: 100.0%  avg conf: 93.0%
+  AXS         : 1 WIN  / 1 total  WR: 100.0%  avg conf: 93.0%
+  JUP         : 1 WIN  / 1 total  WR: 100.0%  avg conf: 95.0%
+
+── TP HIT DISTRIBUTION (ACTUAL) ─────────────────────────
+  LONG wins TP exit  (v46.25: TP1=50% partial lock, TP2/TP3=ride remainder):
+    TP1:  39 (100%)  avg P&L: +102.6%
+    TP2:   0 (0%)
+    TP3:   0 (0%)  ← TIER 1 target
+    TP4:   0 (0%)  ← TIER 1 target
+  Avg LONG win P&L : +102.6%
+  Max LONG win P&L : +140.7%
+
+  SHORT wins TP exit:
+    TP1:  44 (96%)  avg P&L: +106.0%
+    TP2:   1 (2%)  avg P&L: +218.8%
+    TP3:   1 (2%)  avg P&L: +215.7%
+    TP4:   0 (0%)
+  Avg SHORT win P&L: +113.6%
+
+── SIGNAL EXPIRY ANALYSIS ───────────────────────────────
+  Total LONG signals (incl. expired): 145
+  TP hit (WIN)        :  39  (26.9%)
+  SL hit (LOSS)       :  35  (24.1%)
+  Other LOSS          :   0  (0.0%)
+  Expired 72h         :  71  (49.0%)
+
+  ⚠️  HIGH EXPIRY RATE: 49% of LONGs expire unused.
+     Consider: close near-profit positions manually before 72h if dashboard shows gain.
+
+── ALL SHORT TRADES (chronological) ────────────────────
+  DATE             COIN       CONF   STATUS P&L     
+  ----------------------------------------------------
+  2026-06-12 22:31 WLD           91% LOSS   -50.8%
+  2026-06-12 22:31 ENA           89% LOSS   -53.9%
+  2026-06-12 22:47 WLD           91% LOSS   -48.6%
+  2026-06-12 22:47 ZRO           89% LOSS   -40.9%
+  2026-06-13 12:57 ENA           91% LOSS   -56.2%
+  2026-06-13 12:57 INJ           90% LOSS   -62.0%
+  2026-06-13 12:57 XLM           89% LOSS   -37.0%
+  2026-06-13 17:03 FF            88% WIN    +116.7%
+  2026-06-13 20:04 CHZ           88% WIN    +113.6%
+  2026-06-14 00:03 XLM           88% LOSS   -39.0%
+  2026-06-14 00:03 FF            87% WIN    +130.4%
+  2026-06-14 10:04 ENA           88% LOSS   -65.1%
+  2026-06-14 14:03 BCH           87% LOSS   -37.3%
+  2026-06-15 00:03 ENA           89% LOSS   -65.1%
+  2026-06-15 02:04 INJ           88% LOSS   -57.6%
+  2026-06-15 02:04 AVAX          86% LOSS   -49.1%
+  2026-06-15 04:04 BCH           88% LOSS   -50.6%
+  2026-06-15 18:04 H             86% WIN    +142.9%
+  2026-06-15 20:04 H             91% LOSS   -100.0%
+  2026-06-16 00:03 H             89% WIN    +167.6%
+  2026-06-16 02:04 H             91% WIN    +200.0%
+  2026-06-16 06:04 ENA           90% LOSS   -62.9%
+  2026-06-16 14:04 CHZ           86% WIN    +119.0%
+  2026-06-16 22:03 VVV           89% LOSS   -64.5%
+  2026-06-17 00:03 VVV           89% LOSS   -51.3%
+  2026-06-17 04:04 CHZ           87% WIN    +118.1%
+  2026-06-17 16:04 INJ           88% WIN    +110.1%
+  2026-06-17 16:04 NEAR          87% WIN    +119.5%
+  2026-06-18 2:04  WLD           87% WIN    +114.3%
+  2026-06-18 6:04  CRV           86% WIN    +130.4%
+  2026-06-19 12:07 AVAX          90% WIN    +90.9%
+  2026-06-19 8:08  CRV           86% WIN    +94.8%
+  2026-06-20 22:42 JTO           88% WIN    +112.6%
+  2026-06-20 22:57 ONDO          87% WIN       ?
+  2026-06-20 22:57 INJ           86% WIN       ?
+  2026-06-20 4:08  XLM           88% WIN    +92.9%
+  2026-06-21 0:08  TRUMP         91% LOSS   -54.4%
+  2026-06-21 12:07 VVV           95% LOSS   -60.0%
+  2026-06-21 20:09 H             95% WIN    +111.1%
+  2026-06-21 4:09  ONDO          92% WIN       ?
+  2026-06-21 4:09  JTO           91% WIN    +132.2%
+  2026-06-21 4:09  H             91% WIN    +142.2%
+  2026-06-21 6:08  MORPHO        92% WIN       ?
+  2026-06-22 0:10  H             93% WIN    +50.0%
+  2026-06-22 0:10  CRV           93% WIN       ?
+  2026-06-22 0:10  FF            93% WIN    +215.7%
+  2026-06-22 10:05 H             95% WIN    +100.0%
+  2026-06-22 22:08 JTO           95% WIN    +65.7%
+  2026-06-22 22:08 JUP           95% WIN    +54.0%
+  2026-06-22 2:04  H             95% WIN    +61.7%
+  2026-06-22 2:04  ATOM          93% WIN       ?
+  2026-06-22 2:04  FF            93% WIN    +39.8%
+  2026-06-22 2:04  AXS           93% WIN    +61.4%
+  2026-06-22 4:08  H             93% WIN    +68.6%
+  2026-06-23 0:08  JTO           95% WIN       ?
+  2026-06-23 10:04 NEAR          95% WIN       ?
+  2026-06-23 16:08 H             96% WIN       ?
+  2026-06-23 16:08 PENDLE        95% WIN       ?
+  2026-06-23 2:04  H             95% WIN    +218.8%
+  2026-06-23 6:08  PENDLE        95% WIN       ?
+  2026-06-23 8:09  H             96% LOSS   -70.0%
+  2026-06-23 8:09  CRV           95% WIN       ?
+  2026-06-24 0:09  ONDO          95% WIN       ?
+  2026-06-24 0:09  H             95% WIN       ?
+  2026-06-24 14:04 H             96% WIN       ?
+  2026-06-24 16:08 H             96% WIN       ?
+  2026-06-24 4:08  H             95% WIN       ?
+
+── RECOMMENDATION ───────────────────────────────────────
+  At conf >= 95%: 19 SHORTs, WR = 89.5% ✓
+  → Recommend raising SHORT min confidence to 95%
+
+============================================================
+
+── ✅ SHORT RECOVERY DETECTED ─────────────────────────────
+  Last 20 real SHORT trades: 19W / 1L = 95.0% WR
+  GATE 3 CONDITION MET: SHORT WR ≥ 50% over 20 trades!
+  SHORT REPAIR MODE was not active — SHORTs already running.
+
+══════════════════════════════════════════════════════════
+  SHORT RECOVERY PROGRESS — H / FF / CHZ Approved Coins
+══════════════════════════════════════════════════════════
+  Coin     W   L  Tot     WR  Status
+  ------------------------------------------
+  ⭐ H      15   2   17    88%
+  ⭐ FF      4   0    4   100%
+  ⭐ CHZ     3   0    3   100%
+
+  Combined H/FF/CHZ: 22W/2L = 92% WR
+
+  Last-20 SHORT WR: 19W/1L = 95.0% (target: ≥50.0%)
+  ✅ Last-20 WR ≥50% — Gate 3 recovery target MET!
+
+
+Analysis saved to: C:\Users\MAX\WhaleStream\analysis_shorts.txt

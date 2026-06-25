@@ -1422,8 +1422,9 @@ def main():
     print(f"   ✓ {len(data_rows)} trade rows found")
 
     # ── Process each row ──────────────────────────────────────
-    updates    = []   # list of (row_index_1based, col_index_1based, value)
-    all_parsed = []   # for stats
+    updates          = []   # list of (row_index_1based, col_index_1based, value)
+    all_parsed       = []   # for stats
+    _newly_resolved  = []   # trades resolved this run → feed to Debrief Agent
 
     for i, row in enumerate(data_rows):
         # Pad short rows (col 17 = COL_BYBIT_ID)
@@ -1670,6 +1671,18 @@ def main():
                     f"Running: {_alert_wins}W/{_alert_losses}L | WR: {_alert_wr:.1f}% | Gate 1: {_alert_total}/150"
                     f"{_gate1_note}"
                 )
+            # ── Queue for Post-Trade Debrief Agent ────────────────
+            _newly_resolved.append({
+                "coin":        coin,
+                "direction":   _direction,
+                "confidence":  row[COL_CONF].strip(),
+                "pattern":     row[COL_PATTERN].strip(),
+                "entry":       entry,
+                "exit_price":  exit_price,
+                "outcome":     res_status,
+                "tp_hit":      tp_hit or "",
+                "pnl":         pnl,
+            })
         else:
             pct_from_entry = (current - entry) / entry * 100 if entry else 0
             is_long = "LONG" in signal.upper() or "🟢" in signal
@@ -1690,6 +1703,25 @@ def main():
         print("   ✓ All updates written")
     else:
         print("\n   No updates needed this run.")
+
+    # ── Trigger Post-Trade Debrief Agent (non-blocking) ──────────
+    # Spawns whale_stream_debrief.py as a background subprocess for each
+    # newly-resolved WIN/LOSS trade. Tracker never waits for it — if the
+    # debrief fails, trading is completely unaffected.
+    if _newly_resolved:
+        try:
+            _debrief_script = os.path.join(SCRIPT_DIR, "whale_stream_debrief.py")
+            if os.path.exists(_debrief_script):
+                _flags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+                subprocess.Popen(
+                    [sys.executable, _debrief_script, json.dumps(_newly_resolved)],
+                    creationflags=_flags
+                )
+                print(f"\n🧠 Debrief Agent launched — {len(_newly_resolved)} trade(s) queued for analysis")
+            else:
+                print("\n   ℹ Debrief Agent script not found — skipping")
+        except Exception as _de:
+            print(f"\n   ⚠ Debrief Agent failed to start: {_de}")  # never block tracker
 
     # ── Bybit closed P&L write-back ───────────────────────────
     # Fetches actual realised P&L from Bybit Demo and overwrites the

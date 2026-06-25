@@ -1,5 +1,144 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.52 — 2026-06-25 — Debrief confidence cast fix + Strategist Task Scheduler
+
+### 2 Fixes — runtime crash prevention, Strategist now live in scheduler
+
+| # | Severity | Fix | File |
+|---|----------|-----|------|
+| 1 | HIGH | **`confidence` string→float cast in `whale_stream_debrief.py`.** The Debrief Agent receives `confidence` as a raw string from the tracker (e.g. `"78"`). The `build_debrief_prompt()` function formatted it with `:.0f` (float format), which raises `ValueError` on the first real debrief and silently kills the background process. Fixed by casting at read time: `confidence = float(trade.get("confidence", 0) or 0)`. Caught by post-ship audit agent before any live trade triggered it. | whale_stream_debrief.py |
+| 2 | MEDIUM | **`WhaleStreamStrategist` task registered in Windows Task Scheduler.** `ADD_STRATEGIST_TASK.bat` run as Administrator — task confirmed created, status Ready, next run 2026-06-26 00:10. Full 8-agent team now fully scheduled. | Task Scheduler |
+
+---
+
+## v46.51 — 2026-06-25 — Post-Trade Debrief Agent + Continuous Learning Loop
+
+### 3 Improvements — institutional memory, pattern learning, Strategist intelligence
+
+| # | Severity | Improvement | File |
+|---|----------|-------------|------|
+| 1 | HIGH | **New `whale_stream_debrief.py` — Post-Trade Debrief Agent.** Called automatically after every WIN or LOSS. Passes trade data to Claude Haiku which analyses WHY the trade won or lost, grades the entry quality (A+/A/B/C/D), extracts a 15-word actionable lesson, and flags it REINFORCE/AVOID/NEUTRAL. Results written to `pattern_memory.json` with coin-specific lessons and pattern-level aggregates. Max 200 debriefs retained. Telegram summary sent to ops channel after each debrief run. | whale_stream_debrief.py (new) |
+| 2 | HIGH | **Debrief Agent wired into `whale_stream_tracker.py`.** After the WIN/LOSS Telegram alert is sent for each resolved trade, the tracker adds the trade to `_newly_resolved`. After the batch Sheets update, a single `subprocess.Popen` fires the Debrief Agent in the background — non-blocking, so tracker performance is unaffected. If the debrief script doesn't exist, tracker continues normally. | whale_stream_tracker.py |
+| 3 | HIGH | **Strategist now reads `pattern_memory.json` before every decision.** New `load_pattern_memory()` function reads the debrief memory file. For each signal being evaluated, if coin-specific lessons exist (e.g. "TIA LONG: [REINFORCE] Reinforce Stage 2 + negative funding"), they are injected into the Claude prompt under `=== PATTERN MEMORY ===`. Avoid-pattern and prefer-pattern lists also injected. The learning loop is now closed: trade resolves → Debrief writes lesson → Strategist reads lesson → better decision next run. | whale_stream_strategist.py |
+| 4 | MEDIUM | **Telegram signal/ops channel split.** Signal posts (the per-run WHALE-STREAM signal tables) now go to `TELEGRAM_SIGNAL_CHAT_ID` — a clean, noise-free channel for signals only. Operational alerts (circuit breaker, balance, regime, debrief summaries, run stats) stay on `TELEGRAM_CHAT_ID` (ops). To enable: add `TELEGRAM_SIGNAL_CHAT_ID = "-100..."` to `local_config.py`. If not set, both channels receive the same content as before (backwards-compatible fallback). | whale_stream_bot.py |
+
+**Learning loop:**
+```
+Bot (Scout) → [signals] → Strategist (reads pattern_memory) → [decisions] → Trader (executes)
+                                                                                    ↓
+                                              pattern_memory ← Debrief Agent ← Tracker (resolves)
+```
+
+**New team roster as of v46.51:**
+| Role | Script | Schedule | Job |
+|------|--------|----------|-----|
+| 🔭 Scout | whale_stream_bot.py | :00 every 2h | Screen 200 coins, generate 3+3 signals |
+| 🧠 Strategist | whale_stream_strategist.py | :10 every 4h | Review signals + read pattern memory |
+| ⚡ Trader | whale_stream_trader.py | :20 every 4h | Execute only approved signals |
+| 👁 Monitor | whale_stream_monitor.py | continuous | Track open position fills |
+| 📊 Tracker | whale_stream_tracker.py | every 30 min | Resolve trades + trigger Debrief |
+| 📓 Debrief | whale_stream_debrief.py | after each trade | Analyse WHY, write lesson to pattern_memory |
+| 🩺 Analyzer | RUN_ANALYZE_SHORTS.bat | Thu + Sun | Weekly pattern intelligence update |
+| 📢 Briefing | morning_briefing.py | 7 AM daily | Capital health + yesterday P&L |
+
+---
+
+## v46.50 — 2026-06-25 — Strategist Agent Added (Signal Quality Council)
+
+### 3 Improvements — new team member, pre-trade review layer, entry quality assessment
+
+| # | Severity | Improvement | File |
+|---|----------|-------------|------|
+| 1 | HIGH | **New `whale_stream_strategist.py` — Signal Quality Council.** A new team member runs at :10 (between Bot :00 and Trader :20). The Bot (Scout) finds the best setups in the market. The Strategist asks: "Should WE take THIS trade, given OUR history on this coin?" It reads the latest OPEN signals from Sheets, pulls per-coin trade history (last 60 rows), reads current portfolio state, fetches BTC 7d% for regime check, then calls Claude Haiku to evaluate each signal. Output: `strategist_decisions.json` with APPROVE / VETO / REDUCE_SIZE per signal, plus Telegram summary. | whale_stream_strategist.py (new) |
+| 2 | HIGH | **Strategist veto integrated into `whale_stream_trader.py`.** Before placing any order, the Trader now reads `strategist_decisions.json`. VETO'd signals are skipped with reason logged. REDUCE_SIZE signals are traded at 50% of normal size (using per-coin `_coin_size_mult` to avoid contaminating other signals). Graceful degradation: if the file doesn't exist (Strategist didn't run), all signals proceed normally. | whale_stream_trader.py |
+| 3 | MEDIUM | **`ADD_STRATEGIST_TASK.bat` — schedules Strategist in Task Scheduler.** Run as Administrator to add `WhaleStreamStrategist` task at :10 past every 4-hour mark (00:10, 04:10, 08:10, 12:10, 16:10, 20:10 BKK). Team schedule is now: Bot :00 → Strategist :10 → Trader :20. | ADD_STRATEGIST_TASK.bat (new) |
+
+**Strategist auto-veto rules (encoded in its system prompt):**
+- Last trade on this coin+direction = LOSS → VETO (momentum broken)
+- Pattern = RS failure / dead cat bounce / meme → VETO (0% WR in live data)
+- SHORT at 90-92% confidence without Stage 4-5 distribution → VETO (confidence paradox)
+- LONG in bear market (BTC 7d < -8%) with confidence < 97% → VETO
+- SHORT in bull market (BTC 7d > +8%) with confidence < 97% → VETO
+
+**Full team roster as of v46.50:**
+| Role | Script | Schedule | Job |
+|------|--------|----------|-----|
+| 🔭 Scout | whale_stream_bot.py | :00 every 2h | Screen 200 coins, generate 3+3 signals |
+| 🧠 Strategist | whale_stream_strategist.py | :10 every 4h | Review signal quality, APPROVE/VETO/REDUCE |
+| ⚡ Trader | whale_stream_trader.py | :20 every 4h | Execute only approved signals |
+| 👁 Monitor | whale_stream_monitor.py | continuous | Track open position fills |
+| 📊 Tracker | whale_stream_tracker.py | every 30 min | Resolve completed trades |
+| 🩺 Analyzer | RUN_ANALYZE_SHORTS.bat | Thu + Sun | Pattern intelligence update |
+| 📢 Briefing | morning_briefing.py | 7 AM daily | Capital health + yesterday P&L |
+
+---
+
+## v46.49 — 2026-06-25 — Strategy Intelligence + Bear Market Bias Fix + CB Cleared
+
+### 5 Improvements — market regime bias, pattern intelligence from 141 live trades, circuit breaker cleared
+
+| # | Severity | Fix | File |
+|---|----------|-----|------|
+| 1 | CRITICAL | **Circuit breaker manually cleared.** `paused.flag` deleted. CB triggered June 24 22:20 after 3 consecutive losses during a bear market swing. All 3 current open positions (JTO SHORT, TIA LONG, AAVE LONG) are profitable; Gate 4 breach mode (0.40x size, max 4 positions) provides risk containment going forward. | paused.flag |
+| 2 | HIGH | **BEAR MARKET LONG VETO added to prompt.** Mirror rule of the existing BULL MARKET SHORT VETO. If BTC 7d% < -8% OR market regime = Bear Expansion, skip ALL LONGs unless confidence ≥ 97% with confirmed accumulation pattern. This directly addresses the directional bias problem: bot was entering LONGs into a falling bear market. Rule prevents "fighting the trend" losses. | whale_stream_bot.py |
+| 3 | HIGH | **SHORT coin history mirror rule added.** "Do not repeat a SHORT on a coin whose last trade was a LOSS at SL" — symmetric to the existing LONG rule at line 513. Previously LONGs had this protection but SHORTs did not. | whale_stream_bot.py |
+| 4 | HIGH | **Pattern intelligence block added to prompt.** Inserted PATTERN INTELLIGENCE section derived from 141 resolved live trades. Key learnings encoded: (a) Stage 5 distribution patterns = 85-100% SHORT WR, prefer these. (b) RS failure pattern = 0% SHORT WR, avoid. (c) SHORT 90-92% confidence band paradox: only 36.4% WR — avoid this band without strong distribution confirmation. (d) Stage 2 expansion = best LONG pattern (100% WR). (e) AERO (100%/8 trades) and TIA (100%/4 trades) are star LONG coins; ZRO/HYPE/COMP blocked. | whale_stream_bot.py |
+| 5 | HIGH | **Gate 4 SHORT block removed.** Previous Gate 4 breach mode was "LONG only, max 4 positions." Changed to "BOTH directions, max 4 positions, 0.40x size." Rationale: SHORT WR is 68.7% overall (vs LONG 52.7%), and in a bear market SHORTs are the primary profit driver. Blocking SHORTs in Gate 4 = blocking our best trades exactly when we need recovery. | whale_stream_trader.py |
+
+---
+
+## v46.48 — 2026-06-25 — Critical Filter + Stability Fixes
+
+### 5 Fixes — top-3 filter scope, Gate 4 alert sentinel, bat message, milestone state, tracker encoding
+
+| # | Severity | Fix | File |
+|---|----------|-----|------|
+| 1 | CRITICAL | **Top-3 filter now applied to Telegram + Sheets.** Previously the top-3 filter only ran inside `log_to_google_sheets()`, meaning Telegram showed ALL signals (8 LONG + 5 SHORT) while only 3+3 went to Sheets. Fixed by applying the filter to `signal_data` in `main()` BEFORE `build_telegram_message()` is called. Now Telegram, Sheets, and the trader all see only top 3 LONG + top 3 SHORT per run. | whale_stream_bot.py |
+| 2 | HIGH | **Gate 4 Telegram alert now fires once (not every run).** The 🔴 GATE 4 BREACH MODE alert was comparing `_prev_mult != 0.40` which was always True, so it sent a Telegram alert every 4h run while breach mode was active. Fixed with a `gate4_breach.flag` sentinel file — alert fires once on entry, cleared when balance recovers above $425. | whale_stream_trader.py |
+| 3 | LOW | **CLEAR_PAUSE.bat stale "2-hour cycle" message fixed.** Updated bat file to say "4-hour cycle" instead of "2-hour cycle". | CLEAR_PAUSE.bat |
+| 4 | MEDIUM | **milestone_state.json premature 150 milestone removed.** Removed 150 from the fired list. The 150-trade milestone fired when actual count was 141. Will re-fire correctly when genuinely reaching 150 resolved trades. | milestone_state.json |
+| 5 | CRITICAL | **Tracker UnicodeEncodeError cp1252 crash loop fixed.** Added UTF-8 reconfiguration at top of `whale_stream_tracker.py` `__main__` block. Tracker was crashing on every run with cp1252 codec failure when printing emoji characters, causing WIN/LOSS results not to be written to Sheets. | whale_stream_tracker.py |
+
+---
+
+## v46.47 — 2026-06-24 (Top-3 Signal Filter — Best-of-Best Only)
+
+### 2 Improvements — signal quality over quantity + LONG confidence floor raised to 90%
+
+| # | Severity | Improvement | File |
+|---|----------|-------------|------|
+| 1 | HIGH | **Top-3 LONG + Top-3 SHORT filter added.** After both Claude batches run and all raw signals are combined, a new filter sorts each direction by confidence (descending) and keeps only the top 3 per side. Lower-confidence signals are dropped before any order is placed or Sheets row is written. A `🎯 TOP-3 FILTER` log line shows how many were dropped each run. Goal: enter only highest-conviction trades to maximize win rate and P&L per trade — critical for capital preservation and go-live confidence. Header banner updated from "8 signals (5 LONG + 3 SHORT)" to "top 3 LONG + top 3 SHORT". | whale_stream_bot.py |
+| 2 | HIGH | **LONG minimum confidence raised from 88% to 90%.** Updated `CONFIDENCE FILTER` in prompt: `Reject < 88%` → `Reject < 90%`. TIER 2 floor now starts at 90% (was 88%). Combined with the Top-3 filter, this ensures only the highest-conviction LONG setups are entered. Previous step: v46.45 raised 85% → 88%; this step raises 88% → 90%. SHORT minimum unchanged at 95%. | whale_stream_bot.py |
+
+---
+
+## v46.46 — 2026-06-24 (2h Bot Frequency + Daily P&L Summary + Thursday Analysis)
+
+### 3 Improvements — scheduling tightened, daily accountability added
+
+| # | Severity | Improvement | File |
+|---|----------|-------------|------|
+| 1 | HIGH | **Bot frequency changed from 4h to 2h.** Created `CHANGE_TO_2H.bat` (deletes and re-creates both Task Scheduler tasks at /MO 2). Updated `ADD_BOT_TASK.bat` to default to 2h going forward (`/MO 2`, schedule comments updated: 06:00/08:00/10:00/... instead of 06:00/10:00/14:00/...). `ADD_TRADER_TASK.bat` was already on /MO 2; updated echo comment "valid for 4 hours" → "2 hours". | CHANGE_TO_2H.bat, ADD_BOT_TASK.bat, ADD_TRADER_TASK.bat |
+| 2 | MEDIUM | **Yesterday's P&L section in morning briefing.** Added `parse_yesterday_pnl()` that reads Google Sheets (same gspread/service account auth as tracker) and finds rows where `resolved_at` starts with yesterday's BKK date. Reports resolved count, W/L, WR%, and net P&L sum in Telegram message. Falls back gracefully if Sheets unavailable or no trades resolved. | morning_briefing.py |
+| 3 | LOW | **Thursday added as second analyze_shorts.py auto-run day.** Morning briefing now triggers analyze_shorts.py on Thursday (weekday 3) and Sunday (weekday 6) so SHORT recovery detection fires mid-week. Uses subprocess.run with 120s timeout, matching the tracker pattern. | morning_briefing.py |
+
+---
+
+## v46.45 — 2026-06-24 (LONG Avoid List + Gate 4 Recovery Alert + JSON Fix + WLD Ban + 88% LONG Min + Wider Zones)
+
+### 6 Fixes — LONG coin filtering, Gate 4 crossing notification, JSON parse robustness, signal quality improvements
+
+| # | Severity | Fix | File |
+|---|----------|-----|------|
+| 1 | HIGH | **LONG_COIN_AVOID_LIST hard block.** Added `LONG_COIN_AVOID_LIST = ["COMP", "HYPE", "ZRO"]` constant near `SHORT_RECOVERY_COINS`. Before placing any LONG order, the trader now checks this list and skips with log `⏭ Skipping {coin} LONG — on LONG avoid list (poor historical WR)`. These three coins have poor historical LONG win rates and were generating losing trades. | whale_stream_trader.py |
+| 2 | HIGH | **Gate 4 recovery Telegram alert.** `write_balance_file()` now reads the previous balance from `bybit_balance.json` before overwriting it. If the old balance was < $425 and the new balance is >= $425, fires a 🟢 GATE 4 CLEARED Telegram alert prompting a review of the July 1 go-live decision. Crossing detection is one-shot per crossing event (old < 425, new >= 425). | whale_stream_trader.py |
+| 3 | HIGH | **JSON parse "Extra data" error fixed.** Added `_extract_first_json_object()` brace-depth scanner. When Claude emits two concatenated JSON objects, the old `rfind('}')` captured the wrong endpoint causing `json.loads` to raise "Extra data: line 2 column 1 (char N)". New logic walks character-by-character tracking brace depth and string escapes, returning ONLY the first complete `{...}` object and ignoring everything after it. Applied in the delimiter path, the code-fence fallback, and the final brace-search fallback. | whale_stream_bot.py |
+| 4 | MEDIUM | **WLD hard ban confirmed in prompt SHORT blocklist.** WLD is in `SHORT_COIN_BLOCKLIST` (code-level enforcement) and explicitly in the prompt's `SHORT SIGNAL BLOCKLIST` section with entry: `• WLD — 0% SHORT WR across 2 trades (avg loss: −50%) BANNED from SHORTs`. Code-level blocklist rejects any WLD SHORT signal before it reaches Google Sheets. | whale_stream_bot.py |
+| 5 | MEDIUM | **Raised LONG minimum confidence to 88% (from 85%).** Updated `CONFIDENCE FILTER` in prompt: `Reject < 85%` → `Reject < 88%`. TIER 3 band `85–87%` removed; TIER 2 now starts at 88% as the minimum qualifying setup. SHORT minimum unchanged at 95%. | whale_stream_bot.py |
+| 6 | HIGH | **Wider LONG entry zones to reduce 54% expiry rate.** Updated `ENTRY ZONE WIDTH RULE`: entry zone TOP may now be set at current price (not just 1–3% below) when BTC 24h momentum is positive (>+1%) or funding rate is strongly negative (<−0.03%). Updated expiry rate stat from 67% → 54% (current measured rate). | whale_stream_bot.py |
+
+---
+
 ## v46.44 — 2026-06-24 (Gate 4 Breach Mode + Balance Staleness Fix + Entry Price Rules)
 
 ### 3 Improvements — parallel agent delivery, capital protection layer 2
