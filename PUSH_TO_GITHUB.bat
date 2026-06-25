@@ -18,8 +18,8 @@ echo [3] Committing...
 git commit -m "v46.52 — Debrief confidence cast fix + Strategist Task Scheduler + bot schedule correction"
 echo.
 
-echo [4] Pushing to remote...
-git push
+echo [4] Pushing to remote (setting upstream on first push)...
+git push --set-upstream origin main
 echo.
 
 echo ══════════════════════════════════════════════
