@@ -1,5 +1,15 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.54 — 2026-06-26 — CRITICAL: Fix Strategist Task Scheduler
+
+### 1 Critical Fix — Strategist has never run since deployment
+
+| # | Severity | Fix | Files |
+|---|----------|-----|-------|
+| 1 | CRITICAL | **Strategist Task Scheduler broken since day one — fixed.** `ADD_STRATEGIST_TASK.bat` used `where py` to detect Python at registration time. `py` (Python Launcher) was found interactively, so the task was registered with `py` as the executable. At Task Scheduler runtime `py` is not in PATH → every Strategist run silently failed with `'py' is not recognized`. No `strategist_decisions.json` was ever written → trader's graceful fallback approved ALL signals → 10+ open orders accumulating without veto. **Fix:** Created `run_strategist.bat` (mirrors `run_tracker.bat` — hardcoded full Python path `C:\Users\MAX\AppData\Local\Python\bin\python.exe`, `PYTHONIOENCODING=utf-8`, logs to `strategist_task_log.txt`). Updated `ADD_STRATEGIST_TASK.bat` to run `cmd.exe /c run_strategist.bat` (same pattern as working Tracker task). Re-run `ADD_STRATEGIST_TASK.bat` as Administrator to re-register. | run_strategist.bat (new), ADD_STRATEGIST_TASK.bat |
+
+---
+
 ## v46.53 — 2026-06-26 — SHORT confidence hard floor + 4h cadence + VVV blocklist update
 
 ### 3 Improvements — data-driven quality over quantity

@@ -17,28 +17,14 @@ echo Adding WHALE-STREAM STRATEGIST to Task Scheduler...
 echo Run times: 00:10, 04:10, 08:10, 12:10, 16:10, 20:10 BKK
 echo.
 
-REM Detect Python executable
-set PYTHON_EXE=
-where py >nul 2>&1 && set PYTHON_EXE=py
-if "%PYTHON_EXE%"=="" (
-    where python >nul 2>&1 && set PYTHON_EXE=python
-)
-if "%PYTHON_EXE%"=="" (
-    set PYTHON_EXE=C:\Users\MAX\AppData\Local\Python\bin\python.exe
-)
-echo Using Python: %PYTHON_EXE%
-
-REM Script and log paths
-set SCRIPT_PATH=C:\Users\MAX\WhaleStream\whale_stream_strategist.py
-set LOG_PATH=C:\Users\MAX\WhaleStream\strategist_task_log.txt
-
 REM Delete existing task if present (clean re-register)
 schtasks /delete /tn "WhaleStreamStrategist" /f >nul 2>&1
 
-REM Create task — runs every 4 hours starting at 00:10
+REM Create task — cmd.exe /c run_strategist.bat (same pattern as Tracker)
+REM This ensures: full Python path, UTF-8 encoding, proper log redirect
 schtasks /create ^
   /tn "WhaleStreamStrategist" ^
-  /tr "\"%PYTHON_EXE%\" \"%SCRIPT_PATH%\" >> \"%LOG_PATH%\" 2>&1" ^
+  /tr "cmd.exe /c \"C:\Users\MAX\WhaleStream\run_strategist.bat\"" ^
   /sc DAILY ^
   /st 00:10 ^
   /ri 240 ^

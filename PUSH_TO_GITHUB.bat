@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.53 — SHORT confidence hard floor 93% + 4h cadence + VVV blocklist comment update"
+git commit -m "v46.54 — Fix Strategist Task Scheduler (py→python) + run_strategist.bat"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...
