@@ -1384,19 +1384,17 @@ def main():
         _bot_last  = datetime.fromtimestamp(_bot_mtime, tz=timezone(timedelta(hours=7)))
         _bot_age_h = (bkk_time - _bot_last).total_seconds() / 3600
         # Bot runs every 4h. >5h = missed at least one run.
-        # Only alert during active hours 06:00–23:00 to avoid 3am noise.
-        _active_hour = 6 <= bkk_time.hour < 23
-        if _bot_age_h > 5.0 and _active_hour:
+        # Alert any time of day — new schedule starts at 00:00 so suppression
+        # would silence the 00:00 and 04:00 midnight/early-morning slots.
+        if _bot_age_h > 5.0:
             send_telegram_alert(
                 f"⚠️ BOT MISSED A RUN\n"
                 f"Last bot run: {_bot_last.strftime('%Y-%m-%d %H:%M')} BKK\n"
                 f"Age: {_bot_age_h:.1f}h (expected ≤4h)\n"
                 f"🔧 Check Task Scheduler → WhaleStream-Bot\n"
-                f"Schedule: 06:00, 10:00, 14:00, 18:00, 22:00, 02:00 BKK"
+                f"Schedule: 00:00, 04:00, 08:00, 12:00, 16:00, 20:00 BKK"
             )
             print(f"   ⚠️ BOT HEARTBEAT ALERT sent — last run {_bot_age_h:.1f}h ago")
-        elif _bot_age_h > 5.0:
-            print(f"   ℹ️ Bot last ran {_bot_age_h:.1f}h ago (outside alert window)")
         else:
             print(f"   ✅ Bot heartbeat OK — last run {_bot_age_h:.1f}h ago")
     except FileNotFoundError:

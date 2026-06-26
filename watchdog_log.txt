@@ -1,0 +1,29 @@
+
+┌─────────────────────────────────────────────────────┐
+│  🐋 WHALE-STREAM MISSION                            │
+│  Build trust through discipline. Earn live capital. │
+│  This system belongs to the whole team.             │
+└─────────────────────────────────────────────────────┘
+   Balance: $316.62  |  4d to Go-Live  |  Target: $425 (Gate 4)
+
+[2026-06-26 20:30 BKK] === Watchdog run started ===
+🚨 Bot        last: never  (never)
+✅ Strategist last: 20:10 BKK  (20m ago)
+🚨 Trader     last: 22:20 BKK  (94h 10m ago)
+
+🐋 WHALE-STREAM WATCHDOG ALERT
+2026-06-26 20:30 BKK
+
+─── ISSUES DETECTED ───
+  🚨 BOT missed its :00 slot! Last run: never (never)
+  🚨 TRADER missed its :20 slot! Last run: 22:20 BKK (94h 10m ago)
+  ⚠️ BALANCE STALE — last updated 22.2h ago (2026-06-25 22:20 BKK). Trader may be down.
+
+─── AGENT STATUS ───
+  🚨 Bot        last: never  (never)
+  ✅ Strategist last: 20:10 BKK  (20m ago)
+  🚨 Trader     last: 22:20 BKK  (94h 10m ago)
+
+Action: Check logs or re-run the affected agent manually.
+✅ Watchdog alert sent to Telegram.
+Done.

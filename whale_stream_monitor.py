@@ -341,6 +341,11 @@ def run_monitor():
 # ─────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     try:
+        from mission import print_mission_banner
+        print_mission_banner()
+    except ImportError:
+        pass
+    try:
         run_monitor()
     except Exception as e:
         log(f"❌ Monitor crashed: {e}")

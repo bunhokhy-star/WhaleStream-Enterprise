@@ -1,5 +1,50 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.59 — 2026-06-26 — System-wide Audit Fixes (8 bugs eliminated)
+
+### Parallel Agent Audit → All Findings Applied
+
+| # | Severity | File | Fix |
+|---|----------|------|-----|
+| 1 | CRITICAL | whale_stream_tracker.py | **Heartbeat alert suppression removed.** Old code `6 <= hour < 23` silently dropped missed-run alerts for the 00:00 and 04:00 bot slots. New 4h schedule starts at midnight — suppression was hiding the two most critical overnight runs. Now alerts 24/7. |
+| 2 | CRITICAL | whale_stream_tracker.py | **Stale schedule text fixed in Telegram alert.** Bot heartbeat alert said `"06:00, 10:00, 14:00, 18:00, 22:00, 02:00 BKK"`. Corrected to `"00:00, 04:00, 08:00, 12:00, 16:00, 20:00 BKK"`. |
+| 3 | WARNING | whale_stream_watchdog.py | **`BOT_DEADLINE_MIN` 28 → 32.** Bot runs at :00, Watchdog at :30 = 30 min elapsed. `30 <= 28` was always False → false alarm every clean cycle. 32 gives 2 min safety margin. |
+| 4 | WARNING | whale_stream_strategist.py | **Stale log message fixed.** "No signals found in last 5h" → "last 26h" (matches the SIGNAL_WINDOW_HOURS fix from v46.57). |
+| 5 | WARNING | whale_stream_monitor.py | **Mission banner added.** `print_mission_banner()` now called at startup so every monitor log opens with the shared team mission. |
+| 6 | WARNING | whale_stream_debrief.py | **Mission banner added.** Same fix — debrief logs now include mission header. |
+| 7 | WARNING | whale_stream_bot.py | **Version strings corrected.** Telegram header and startup banner both still said v46.49. Updated to v46.59 to match file header. |
+| 8 | LOW | SETUP_ALL_TASKS.bat | **Bot and Trader get `/RL HIGHEST`.** Strategist and Watchdog already had it; Bot and Trader were missing it. All 4 core agents now run at highest priority. |
+
+### Audit Findings NOT Bugs (confirmed correct)
+- Watchdog `STRATEGIST_LOG = "strategist_task_log.txt"` — CORRECT. `run_strategist.bat` redirects stdout to this file. Both contain identical timestamps.
+- Agent 3 (data pipeline) found zero issues — all column indices, file paths, and Google Sheet IDs match across all 8 agents.
+
+---
+
+## v46.58 — 2026-06-26 — Master Task Setup + Schedule Consolidation
+
+### Permanent Fix: Schedule Can Never Drift Again
+
+| # | Type | Description | Files |
+|---|------|-------------|-------|
+| 1 | NEW | **`SETUP_ALL_TASKS.bat` — single master file for ALL 7 scheduled tasks.** Deletes every possible WhaleStream task name variant, then re-creates all 7 tasks with the correct schedule in one shot. This is the ONLY file that should ever be run to set up or repair the Task Scheduler. | SETUP_ALL_TASKS.bat (new) |
+| 2 | DISABLED | **10 old schedule bat files disabled.** `ADD_BOT_TASK`, `ADD_TRADER_TASK`, `ADD_TRACKER_TASK`, `ADD_STRATEGIST_TASK`, `ADD_WATCHDOG_TASK`, `ADD_BRIEFING_TASK`, `ADD_MONITOR_TASK`, `CHANGE_TO_4H`, `APPLY_4H_SCHEDULE`, `NUCLEAR_4H_FIX`, `UPDATE_BOT_SCHEDULE_4H` — all now print "DISABLED — Use SETUP_ALL_TASKS.bat". Running any of them alone created partial/wrong schedules. | (all above) |
+| 3 | FIX | **Bot start time corrected: 06:00 → 00:00.** All agents now share the same 4h cycle: Bot :00, Strategist :10, Trader :20, Watchdog :30. The old 06:00 start misaligned the Bot with the Strategist (00:10) and Trader (00:20). | SETUP_ALL_TASKS.bat |
+
+**Correct 4-hour team cycle after running SETUP_ALL_TASKS.bat:**
+
+| Time | Agent | Action |
+|------|-------|--------|
+| :00 | Bot | Signal generation |
+| :10 | Strategist | APPROVE / VETO |
+| :20 | Trader | Order placement |
+| :30 | Watchdog | Health check |
+| Every 30 min | Tracker | TP/SL resolution |
+| Every 2 min | Monitor | Real-time fills |
+| 07:00 daily | Briefing | Morning Telegram |
+
+---
+
 ## v46.57 — 2026-06-26 — Critical Fix: Strategist 0-signals + Task #228 Diagnosis
 
 ### Root Cause Found & Fixed

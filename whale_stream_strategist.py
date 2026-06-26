@@ -632,7 +632,7 @@ def main():
     print(f"   ✓ Found {len(signals)} OPEN signal(s) from last bot run (within {SIGNAL_WINDOW_HOURS}h)")
 
     if not signals:
-        log("No signals to review — no OPEN signals found in last 5h")
+        log("No signals to review — no OPEN signals found in last 26h")
         print("\n   No signals to review. Bot may not have run yet or no signals generated.")
         # Write empty decisions so trader knows strategist ran
         empty = {

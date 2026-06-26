@@ -47,7 +47,7 @@ BKK = timezone(timedelta(hours=7))
 # Bot runs at :00 → we check at :30 → 30 min window
 # Strategist at :10 → 20 min window
 # Trader at :20 → 10 min window (generous: give it 15)
-BOT_DEADLINE_MIN        = 28   # flag if no bot run in last 28 min at check time
+BOT_DEADLINE_MIN        = 32   # flag if no bot run in last 32 min at check time (bot :00, watchdog :30 = 30 min elapsed)
 STRATEGIST_DEADLINE_MIN = 22   # flag if no strategist run in last 22 min
 TRADER_DEADLINE_MIN     = 16   # flag if no trader run in last 16 min
 

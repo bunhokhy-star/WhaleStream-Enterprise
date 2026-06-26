@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.57 — Fix Strategist 0-signals (SIGNAL_WINDOW_HOURS 5h->26h) + Task #228 diagnosis"
+git commit -m "v46.59 — 8 audit fixes: tracker heartbeat suppression, watchdog deadline, mission imports, bot version strings, SETUP_ALL_TASKS /RL HIGHEST"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...
