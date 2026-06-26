@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.55 — Watchdog agent + morning briefing scheduled + run_watchdog.bat"
+git commit -m "v46.56 — Shared mission embedded in all 8 agents + mission.py"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...

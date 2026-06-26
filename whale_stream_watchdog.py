@@ -193,6 +193,11 @@ def send_telegram(text):
 # ─────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    try:
+        from mission import print_mission_banner
+        print_mission_banner()
+    except ImportError:
+        pass
     now_bkk  = datetime.now(BKK)
     now_str  = now_bkk.strftime("%Y-%m-%d %H:%M BKK")
     print(f"[{now_str}] === Watchdog run started ===")

@@ -310,7 +310,13 @@ def get_btc_7d_pct():
 # SECTION 5 — STRATEGIST PROMPT
 # ═══════════════════════════════════════════════════════════════
 
-STRATEGIST_SYSTEM = """You are the WHALE-STREAM Trading Strategist — the second layer of review between signal generation and execution.
+try:
+    from mission import MISSION_PROMPT, print_mission_banner
+except ImportError:
+    MISSION_PROMPT = ""
+    def print_mission_banner(): pass
+
+STRATEGIST_SYSTEM = (MISSION_PROMPT + """You are the WHALE-STREAM Trading Strategist — the second layer of review between signal generation and execution.
 
 The Bot (Scout) already ran market analysis and selected the best technical setups.
 Your job is different: decide whether WE should take each trade, given OUR specific history on this coin.
@@ -374,7 +380,7 @@ OUTPUT FORMAT (JSON only — no prose, no explanation outside the JSON):
 
 Valid decision values: "APPROVE", "VETO", "REDUCE_SIZE"
 Valid grade values: "A+", "A", "B", "C", "D"
-"""
+""")
 
 
 def load_pattern_memory():
@@ -594,6 +600,7 @@ def main():
     print()
 
     bkk_str = bkk_now().strftime("%Y-%m-%d %H:%M BKK")
+    print_mission_banner()
     log(f"=== Strategist run started {bkk_str} ===")
 
     # ── Note if circuit breaker is active (don't block the run — just log it) ──

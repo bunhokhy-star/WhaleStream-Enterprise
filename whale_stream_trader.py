@@ -673,6 +673,11 @@ def connect_sheet():
 # ─────────────────────────────────────────────────────────────
 
 def main():
+    try:
+        from mission import print_mission_banner
+        print_mission_banner()
+    except ImportError:
+        pass
     print()
     print("╔══════════════════════════════════════════════════╗")
     print("║   🤖  WHALE-STREAM TRADER — BYBIT DEMO          ║")

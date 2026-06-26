@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v46.55  —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v46.56  —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 coins from CoinGecko (free, no key)     ║
@@ -192,6 +192,12 @@ CLAUDE_MODEL = "claude-sonnet-4-6"
 # ─────────────────────────────────────────────────────────────
 # SECTION 2: YOUR WHALE-STREAM PROMPT  ← Do not change this
 # ─────────────────────────────────────────────────────────────
+
+try:
+    from mission import MISSION_PROMPT, print_mission_banner
+except ImportError:
+    MISSION_PROMPT = ""
+    def print_mission_banner(): pass
 
 WHALE_STREAM_PROMPT = """WHALE-STREAM v46.49 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
 ROLE:
@@ -565,7 +571,7 @@ DATA TO ANALYZE:
 # ── Derived static system prompt (placeholders replaced with references) ──
 # This is sent as the cached "system" block — identical every run = cache hit.
 WHALE_STREAM_SYSTEM = (
-    WHALE_STREAM_PROMPT
+    (MISSION_PROMPT + WHALE_STREAM_PROMPT)
     .replace(
         "{BTC_DOMINANCE_GATE}",
         "→ LIVE BTC DOMINANCE READING: provided in the LIVE GATES section of the user message."

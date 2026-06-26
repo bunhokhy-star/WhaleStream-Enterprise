@@ -1,5 +1,16 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.56 — 2026-06-26 — Shared Mission embedded in all 8 agents
+
+### Team Alignment
+
+| # | Type | Description | Files |
+|---|------|-------------|-------|
+| 1 | NEW | **`mission.py` — single source of truth for team mission.** Defines `MISSION_PROMPT` (injected into Claude API calls), `MISSION_BANNER` (printed to every agent log), and `print_mission_banner()` (shows live balance + days to go-live). This business belongs to the whole team — every agent now knows why it exists. | mission.py (new) |
+| 2 | INJECT | **Mission embedded into all 8 agents.** `MISSION_PROMPT` prepended to Claude system prompts in Bot, Strategist, and Debrief. `print_mission_banner()` called at startup in Trader, Tracker, Watchdog, Morning Briefing. Every log file now opens with the shared mission. | whale_stream_bot.py, whale_stream_strategist.py, whale_stream_trader.py, whale_stream_tracker.py, whale_stream_watchdog.py, morning_briefing.py |
+
+---
+
 ## v46.55 — 2026-06-26 — Watchdog Agent + Morning Briefing
 
 ### New Agents & Tasks
