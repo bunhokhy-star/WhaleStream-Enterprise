@@ -1,5 +1,31 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.63 — 2026-06-26 — Fix paper WIN inflation: tracker now only resolves executed Bybit trades
+
+### Critical Integrity Fix: Real WR vs Paper WR
+
+**The bug:** tracker.py was resolving ALL OPEN signals as WIN/LOSS when price hit TP/SL levels,
+regardless of whether a Bybit order was ever placed. This inflated WR stats with "paper wins"
+while the real Bybit balance was losing money from unexecuted trades.
+
+**Root cause discovered by 3-agent audit:**
+- Only 13/62 fresh signals (21%) were actually placed on Bybit in the last 30 days
+- H SHORT "wins" (e.g. +384.6%) were paper — every H SHORT attempt failed (Price Invalid or REPAIR MODE)
+- Real Bybit trades = LONGs in a downtrend = all losses (confirmed by Bybit P&L tab)
+- `COL_BYBIT_ID` (col R) was read but NEVER used to gate WIN/LOSS resolution
+
+| # | File | Change |
+|---|------|--------|
+| 1 | whale_stream_tracker.py | **Paper signal guard added before WIN/LOSS resolution.** If `bybit_id` (col R) is empty → signal was never executed on Bybit → `continue` (skip to next row, signal expires naturally at 72h). Only signals with a real Bybit Order ID are resolved as WIN/LOSS. |
+| 2 | whale_stream_tracker.py | **Telegram WIN/LOSS alerts updated.** "TRADE WIN" → "REAL TRADE WIN" / "TRADE LOSS" → "REAL TRADE LOSS". Bybit Order ID prefix shown (first 12 chars). "Running:" → "Real:" to make clear these are executed-trade stats only. |
+
+### What changes going forward
+- Paper signals (skipped by trader due to REPAIR MODE, Price Invalid, risk cap, stale entry) will now EXPIRE at 72h instead of being counted as WIN/LOSS
+- All WIN/LOSS Telegram alerts from this point forward represent actual money on Bybit
+- WR stats in Telegram now reflect the real Bybit execution record, not the inflated signal record
+
+---
+
 ## v46.62 — 2026-06-26 — Trend Doctrine trained into all 4 active agents
 
 ### "Follow the market trend" embedded team-wide

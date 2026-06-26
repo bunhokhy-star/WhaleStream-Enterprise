@@ -1626,6 +1626,15 @@ def main():
             updates.append((sheet_row, COL_ENTRY_PRICE + 1, round(entry, 8)))
 
         if result is not None:
+            if not bybit_id:
+                # ── Paper signal — never placed on Bybit. DO NOT resolve as WIN/LOSS ──
+                # Without this guard, signals that were skipped by the trader (REPAIR MODE,
+                # Price Invalid, stale entry, risk cap, etc.) were being counted as real wins
+                # — inflating WR stats while the Bybit balance actually lost money.
+                # These signals will expire naturally at 72h via the timeout guard above.
+                _paper_dir = "LONG" if ("LONG" in signal.upper() or "🟢" in signal) else "SHORT"
+                print(f"   📄 {coin} {_paper_dir}: paper signal (no Bybit order ID) — would have {result[0]}, NOT resolving (expires at 72h)")
+                continue
             res_status, exit_price, tp_hit, pnl = result
             pnl_display = f"{pnl:+.2f}% [T]"
             updates.append((sheet_row, COL_STATUS      + 1, res_status))
@@ -1656,22 +1665,24 @@ def main():
                 _pnl_str  = f"+{pnl:.1f}%" if pnl > 0 else f"{pnl:.1f}%"
                 _tp_label = tp_hit if tp_hit else "TP"
                 send_telegram_alert(
-                    f"✅ <b>TRADE WIN — {coin} {_direction}</b>\n"
+                    f"✅ <b>REAL TRADE WIN — {coin} {_direction}</b>\n"
                     f"{'🟢 LONG' if _direction == 'LONG' else '🔴 SHORT'} | {_tp_label} hit\n"
                     f"Entry: {entry:.6g} → Exit: {exit_price:.6g}\n"
                     f"P&amp;L: <b>{_pnl_str}</b> (10× leverage)\n"
+                    f"💰 Bybit Order: {bybit_id[:12]}...\n"
                     f"━━━━━━━━━━━━━━━━\n"
-                    f"Running: {_alert_wins}W/{_alert_losses}L | WR: {_alert_wr:.1f}% | Gate 1: {_alert_total}/150"
+                    f"Real: {_alert_wins}W/{_alert_losses}L | WR: {_alert_wr:.1f}% | Gate 1: {_alert_total}/150"
                     f"{_gate1_note}"
                 )
             else:
                 send_telegram_alert(
-                    f"❌ <b>TRADE LOSS — {coin} {_direction}</b>\n"
+                    f"❌ <b>REAL TRADE LOSS — {coin} {_direction}</b>\n"
                     f"{'🟢 LONG' if _direction == 'LONG' else '🔴 SHORT'} | SL hit\n"
                     f"Entry: {entry:.6g} → Exit: {exit_price:.6g}\n"
                     f"P&amp;L: <b>{pnl:.1f}%</b> (10× leverage)\n"
+                    f"💰 Bybit Order: {bybit_id[:12]}...\n"
                     f"━━━━━━━━━━━━━━━━\n"
-                    f"Running: {_alert_wins}W/{_alert_losses}L | WR: {_alert_wr:.1f}% | Gate 1: {_alert_total}/150"
+                    f"Real: {_alert_wins}W/{_alert_losses}L | WR: {_alert_wr:.1f}% | Gate 1: {_alert_total}/150"
                     f"{_gate1_note}"
                 )
             # ── Queue for Post-Trade Debrief Agent ────────────────

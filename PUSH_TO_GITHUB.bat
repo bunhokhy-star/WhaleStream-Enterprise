@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.62 — Trend doctrine trained into Bot/Strategist/Briefing/Debrief, morning bias block, Strategist v1.3"
+git commit -m "v46.63 — Fix paper WIN inflation: tracker only resolves Bybit-executed trades (bybit_id guard)"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...
