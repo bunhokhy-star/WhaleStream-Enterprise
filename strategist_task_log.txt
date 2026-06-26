@@ -74,3 +74,11 @@
 
    No signals to review. Bot may not have run yet or no signals generated.
    ✓ Decisions written → strategist_decisions.json
+  File "C:\Users\MAX\WhaleStream\whale_stream_strategist.py", line 799
+    f"  ⛔ Vetoed: {', '.join(f\"{v['coin']} {v['direction']}\" for v in regime_vetoed)}"
+                               ^
+SyntaxError: unexpected character after line continuation character
+  File "C:\Users\MAX\WhaleStream\whale_stream_strategist.py", line 799
+    f"  ⛔ Vetoed: {', '.join(f\"{v['coin']} {v['direction']}\" for v in regime_vetoed)}"
+                               ^
+SyntaxError: unexpected character after line continuation character

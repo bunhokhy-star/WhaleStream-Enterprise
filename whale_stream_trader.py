@@ -314,7 +314,9 @@ def bybit_request(method, endpoint, params=None, body=None):
 def get_wallet_balance():
     """
     Check Bybit demo USDT balance.
-    Returns (available, total) tuple, or (None, None) on failure.
+    Returns (available, total, err_msg) tuple.
+    On success: (float, float, None)
+    On failure: (None, None, str_error)
     """
     result = bybit_request("GET", "/v5/account/wallet-balance",
                            {"accountType": "UNIFIED"})
@@ -327,10 +329,12 @@ def get_wallet_balance():
                               c.get("walletBalance") or 0)
                 total = float(c.get("walletBalance") or
                               c.get("equity") or avail)
-                return avail, total
+                return avail, total, None
         print("   ⚠ Connected to Bybit but no USDT coin found in wallet")
-        return 0.0, 0.0
-    return None, None
+        return 0.0, 0.0, None
+    code = result.get("retCode", -1)
+    msg  = result.get("retMsg", "unknown error")
+    return None, None, f"retCode={code} | {msg}"
 
 
 def get_current_price(symbol):
@@ -692,9 +696,18 @@ def main():
 
     # ── Check wallet balance (runs even when paused — keeps balance file fresh) ──
     print("💳 Checking Bybit demo wallet...")
-    balance, total_balance = get_wallet_balance()
+    balance, total_balance, _bal_err = get_wallet_balance()
     if balance is None:
-        print("   ✗ Could not connect to Bybit. Check your API keys.")
+        print(f"   ✗ Could not connect to Bybit. Error: {_bal_err}")
+        print("   → If retCode=10003/33004: re-generate API keys in Bybit Demo > API Management")
+        print("   → If 'Connection refused' or timeout: check network / Bybit status page")
+        print("   → Run DIAGNOSE_BYBIT.bat for a full step-by-step connection test")
+        send_telegram_alert(
+            f"🚨 <b>TRADER — Bybit API Connection FAILED</b>\n"
+            f"Error: <code>{_bal_err}</code>\n"
+            f"No orders can be placed until connection is restored.\n"
+            f"➡ Run DIAGNOSE_BYBIT.bat to identify the cause."
+        )
         return
     print(f"   ✓ Available USDT: ${balance:,.2f}  (total: ${total_balance:,.2f})")
 

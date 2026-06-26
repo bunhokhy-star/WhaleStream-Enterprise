@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.63 — Fix paper WIN inflation: tracker only resolves Bybit-executed trades (bybit_id guard)"
+git commit -m "v46.64 — Bybit error transparency + DIAGNOSE_BYBIT.bat + Watchdog bot-tracking fix"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...

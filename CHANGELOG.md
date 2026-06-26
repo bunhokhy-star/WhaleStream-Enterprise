@@ -1,5 +1,31 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.64 — 2026-06-27 — Bybit API error transparency + Watchdog bot-tracking fix
+
+### Bybit Connection Diagnostic & Error Transparency
+
+**Problem found:** Trader showing `✗ Could not connect to Bybit. Check your API keys.` on every run since
+June 25 22:20 BKK, but the ACTUAL error (retCode, exception type) was hidden. All the trader showed was the generic
+message, making it impossible to diagnose remotely whether the issue was expired keys, a network error, or a
+Bybit API change.
+
+| # | File | Change |
+|---|------|--------|
+| 1 | whale_stream_trader.py | `get_wallet_balance()` now returns `(avail, total, err_msg)` — the actual Bybit retCode and retMsg are captured and returned. |
+| 2 | whale_stream_trader.py | On connection failure, the log now prints `Error: retCode=XXXXX | <message>` plus recovery hints. A Telegram alert is also sent so the team knows trading is halted. |
+| 3 | diagnose_bybit.py + DIAGNOSE_BYBIT.bat | **New diagnostic tool.** Tests the connection in 4 steps: (1) key load, (2) public API reachable, (3) demo endpoint reachable, (4) authenticated wallet balance. Prints full HTTP status, raw response, and human-readable fix for each known retCode. Run this when the trader can't connect. |
+
+### Watchdog "Bot last: never" Fix
+
+**Problem found:** Watchdog was always showing "Bot last: never" and alerting on every cycle, because the bot
+log never contained the `[YYYY-MM-DD HH:MM BKK]` timestamp format the Watchdog searches for.
+
+| # | File | Change |
+|---|------|--------|
+| 4 | whale_stream_bot.py | Added `[YYYY-MM-DD HH:MM BKK] Bot run complete` log line at the end of `main()`. Watchdog now correctly detects bot's last successful run. |
+
+---
+
 ## v46.63 — 2026-06-26 — Fix paper WIN inflation: tracker now only resolves executed Bybit trades
 
 ### Critical Integrity Fix: Real WR vs Paper WR

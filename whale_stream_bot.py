@@ -2589,6 +2589,8 @@ def main():
     except Exception as e:
         print(f"⚠ End-of-run Telegram summary failed: {e}")
 
+    _now_bkk = datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d %H:%M")
+    print(f"[{_now_bkk} BKK] Bot run complete")
     print()
     print("✅  WHALE-STREAM run complete!")
     print()
