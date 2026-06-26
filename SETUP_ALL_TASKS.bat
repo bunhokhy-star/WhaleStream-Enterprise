@@ -138,6 +138,30 @@ if %ERRORLEVEL% NEQ 0 goto :error_briefing
 echo    OK: every day at 07:00 BKK
 echo.
 
+:: ── STEP 8b: ORPHAN CHECK — daily 06:00 ──────────────────────────────
+echo [8b] Registering WhaleStream-OrphanCheck (daily 06:00)...
+schtasks /Create ^
+  /TN "WhaleStream-OrphanCheck" ^
+  /TR "cmd.exe /c \"C:\Users\MAX\WhaleStream\run_orphan_check.bat\"" ^
+  /SC DAILY ^
+  /ST 06:00 ^
+  /F
+if %ERRORLEVEL% NEQ 0 echo    WARNING: OrphanCheck failed. Run as administrator!
+echo    OK: daily at 06:00 (orphaned Bybit position detection)
+echo.
+
+:: ── STEP 8c: LOG ANALYZER — daily 07:00 ──────────────────────────────
+echo [8c] Registering WhaleStream-LogAnalyzer (daily 07:00)...
+schtasks /Create ^
+  /TN "WhaleStream-LogAnalyzer" ^
+  /TR "cmd.exe /c \"C:\Users\MAX\WhaleStream\run_log_analyzer.bat\"" ^
+  /SC DAILY ^
+  /ST 07:00 ^
+  /F
+if %ERRORLEVEL% NEQ 0 echo    WARNING: LogAnalyzer failed. Run as administrator!
+echo    OK: daily at 07:00 (log health report)
+echo.
+
 :: ── STEP 9: Verify all tasks ─────────────────────────────────────────
 echo [9/9] Verifying registered tasks...
 echo.
@@ -158,14 +182,15 @@ schtasks /query /TN "WhaleStream-Briefing"  /fo LIST | findstr /i "Task Name\|Ne
 echo ─────────────────────────────────────────────────────────────────
 echo.
 echo ══════════════════════════════════════════════════════════════════
-echo    ALL DONE — 7 tasks registered correctly.
+echo    ALL DONE — 9 tasks registered correctly.
 echo.
 echo    4-hour cycle (BKK):
 echo      00:00  Bot        — signal generation
 echo      00:10  Strategist — signal review (APPROVE / VETO)
 echo      00:20  Trader     — order placement
 echo      00:30  Watchdog   — health check + alert if anyone missed
-echo    + Tracker every 30 min, Monitor every 2 min, Briefing 07:00
+echo    + Tracker every 30 min, Monitor every 2 min
+echo    + Briefing 07:00, OrphanCheck 06:00, LogAnalyzer 07:00
 echo ══════════════════════════════════════════════════════════════════
 echo.
 goto :end
