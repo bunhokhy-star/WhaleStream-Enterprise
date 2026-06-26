@@ -49,3 +49,28 @@
 
    No signals to review. Bot may not have run yet or no signals generated.
    ✓ Decisions written → strategist_decisions.json
+
+╔══════════════════════════════════════════════════════╗
+║   🧠  WHALE-STREAM STRATEGIST v1.0                  ║
+║   Signal Quality Council — APPROVE / VETO / REDUCE  ║
+╚══════════════════════════════════════════════════════╝
+
+
+┌─────────────────────────────────────────────────────┐
+│  🐋 WHALE-STREAM MISSION                            │
+│  Build trust through discipline. Earn live capital. │
+│  This system belongs to the whole team.             │
+└─────────────────────────────────────────────────────┘
+   Balance: $316.62  |  4d to Go-Live  |  Target: $425 (Gate 4)
+
+[2026-06-26 20:10 BKK] === Strategist run started 2026-06-26 20:10 BKK ===
+📊 Loading portfolio state...
+   Balance: $316.62  Drawdown: 36.7%
+   Open positions: 0
+
+📋 Loading signals from Google Sheets...
+   ✓ Found 0 OPEN signal(s) from last bot run (within 5h)
+[2026-06-26 20:10 BKK] No signals to review — no OPEN signals found in last 5h
+
+   No signals to review. Bot may not have run yet or no signals generated.
+   ✓ Decisions written → strategist_decisions.json

@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.56 — Shared mission embedded in all 8 agents + mission.py"
+git commit -m "v46.57 — Fix Strategist 0-signals (SIGNAL_WINDOW_HOURS 5h->26h) + Task #228 diagnosis"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...

@@ -1,5 +1,24 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.57 — 2026-06-26 — Critical Fix: Strategist 0-signals + Task #228 Diagnosis
+
+### Root Cause Found & Fixed
+
+| # | Type | Description | Files |
+|---|------|-------------|-------|
+| 1 | BUG FIX | **Strategist 0-signals: `SIGNAL_WINDOW_HOURS` 5 → 26.** Root cause: bot dedup prevents re-writing the same OPEN signal within a day (coin+direction already OPEN today → skip). Signals written at midnight were outside the 5h Strategist window on all daytime runs. Changed to 26h so any OPEN signal from the past 24h is always visible. Immediately fixes Strategist finding 0 signals on every run. | whale_stream_strategist.py |
+
+### Diagnosis Results (no code changes needed)
+
+| Finding | Status | Details |
+|---------|--------|---------|
+| Bot schedule misalignment | ✅ Not the cause | Bot confirmed running every 2h (Jun 26: 00:09, 02:05, 04:09, 06:05, 08:08, 10:05, 12:11, 14:07, 16:10, 18:05, 20:09). Schedule fine. |
+| bybit_balance.json stale | ⏳ Self-healing | write_balance_file() at line 705-708 is correct. File stale because Bybit API key was invalid. Will update on next successful trader run. |
+| pattern_memory.json missing | ⏳ Self-healing | Debrief wiring in tracker (lines 1716-1729) is correct with UTF-8 fix. File will be created when next WIN/LOSS trade resolves. |
+| Bot legacy crash task | ✅ Not active | Bot log confirms healthy runs since Jun 19 (UTF-8 fix). Last 5 errors in log are from pre-fix era (old line 53). Current UTF-8 fix at lines 29-32 pre-empts all print statements. |
+
+---
+
 ## v46.56 — 2026-06-26 — Shared Mission embedded in all 8 agents
 
 ### Team Alignment

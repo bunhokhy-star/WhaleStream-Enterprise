@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM STRATEGIST v1.0 — SIGNAL QUALITY COUNCIL     ║
+║   WHALE-STREAM STRATEGIST v1.1 — SIGNAL QUALITY COUNCIL     ║
 ║                                                              ║
 ║  Team role: runs at :10 (Bot fires :00, Trader fires :20)   ║
 ║                                                              ║
@@ -77,8 +77,10 @@ BALANCE_FILE       = os.path.join(SCRIPT_DIR, "bybit_balance.json")
 MONITOR_FILE       = os.path.join(SCRIPT_DIR, "monitor_state.json")
 MEMORY_FILE        = os.path.join(SCRIPT_DIR, "pattern_memory.json")   # written by Debrief Agent
 
-# How far back to look for "current" signals (should span one full bot cycle + buffer)
-SIGNAL_WINDOW_HOURS = 5
+# How far back to look for "current" signals.
+# Bot dedup prevents re-writing the same OPEN signal within a day, so signals
+# written at midnight must still be visible 20+ hours later. Use 26h (full day + buffer).
+SIGNAL_WINDOW_HOURS = 26
 
 # How many historical resolved trades to look back per coin for quality assessment
 MAX_HISTORY_ROWS = 60   # scan last 60 rows to find per-coin history
