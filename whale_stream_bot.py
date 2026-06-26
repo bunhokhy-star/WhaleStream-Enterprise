@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v46.61  —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v46.62  —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 coins from CoinGecko (free, no key)     ║
@@ -111,9 +111,9 @@ SHORT_COIN_BLOCKLIST = {
 LONG_COIN_BLOCKLIST = {
     "ZRO",   # 0W/2L — 0% WR, avg -59.5%  ← added v46.37 (2026-06-23)
     "HYPE",  # 0W/2L — 0% WR, avg -54.3%  ← added v46.37 (2026-06-23)
-    "COMP",  # 0W/3L — 0% WR, avg -59.8%  ← added v46.61 (2026-06-26)
-    "QNT",   # 0W/3L — 0% WR, avg -65.6%  ← added v46.61 (2026-06-26)
-    "WIF",   # 1W/4L — 25% WR, avg -48.7% ← added v46.61 (2026-06-26)
+    "COMP",  # 0W/3L — 0% WR, avg -59.8%  ← added v46.62 (2026-06-26)
+    "QNT",   # 0W/3L — 0% WR, avg -65.6%  ← added v46.62 (2026-06-26)
+    "WIF",   # 1W/4L — 25% WR, avg -48.7% ← added v46.62 (2026-06-26)
 }
 
 # ── Malformed coin blocklist (BOTH directions) ────────────────────────────────
@@ -212,6 +212,31 @@ DO NOT chase pumps.
 DO NOT generate random signals.
 DO NOT force trades.
 Only output institutional-grade opportunities.
+════════════════════════════════════════════════════════════
+GOLDEN RULE — FOLLOW THE MARKET TREND (NON-NEGOTIABLE)
+════════════════════════════════════════════════════════════
+The market tells you which direction to trade. Your job is to LISTEN.
+
+🐻 MARKET IS FALLING (BTC below 20-period 4h SMA / bear trend confirmed):
+  → SHORT is your weapon. Focus 100% on SHORT setups.
+  → LONGs are swimming against the tide — they drown. Minimize or skip entirely.
+  → Even a mediocre SHORT setup beats a great LONG in a falling market.
+
+🐂 MARKET IS RISING (BTC above 20-period 4h SMA / bull trend confirmed):
+  → LONG is your weapon. Focus 100% on LONG setups.
+  → SHORTs are swimming against the tide — they get squeezed. Minimize or skip entirely.
+  → Even a mediocre LONG setup beats a great SHORT in a rising market.
+
+😐 MARKET IS SIDEWAYS (BTC within ±2% of 20-period 4h SMA):
+  → Both directions allowed. Apply normal quality filters.
+  → Favor mean-reversion over trend continuation in range.
+
+THIS IS THE MOST IMPORTANT RULE IN THE ENTIRE SYSTEM.
+Our live data proves it: LONGs are -108% net P&L fighting a downtrend.
+SHORTs are 77.6% WR flowing with the downtrend.
+The trend is not your enemy — fighting it is.
+
+LIVE REGIME: injected in MARKET REGIME section of user message below.
 ════════════════════════════════════════════════════════════
 ANALYSIS ENGINE (v46.0)
 Each call provides ONE self-contained batch of market data (up to 100 coins).
@@ -565,7 +590,7 @@ RULES:
     - JUP: 75% WR (3/4 trades) — good track record
     - EIGEN: 67% WR — acceptable
   LONG POOR COINS (blocked or weak — avoid as LONG signals):
-    - ZRO, HYPE, COMP, QNT, WIF: 0-25% WR → already code-blocked (v46.61)
+    - ZRO, HYPE, COMP, QNT, WIF: 0-25% WR → already code-blocked (v46.62)
     - XLM, SOL: 33% WR → use only with very strong pattern confluence
 
 {SIGNAL_GRAVEYARD}
@@ -1732,7 +1757,7 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     shorts = data.get("shorts", [])
 
     lines = []
-    lines.append(f"🐳 WHALE-STREAM v46.61")
+    lines.append(f"🐳 WHALE-STREAM v46.62")
     lines.append(f"📅 {ts}")
 
     # ── Market regime summary ─────────────────────────────────
@@ -2271,7 +2296,7 @@ def log_to_google_sheets(data, bkk_time):
 def main():
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🐳  WHALE-STREAM v46.61 — AUTO BOT STARTING    ║")
+    print("║   🐳  WHALE-STREAM v46.62 — AUTO BOT STARTING    ║")
     print("╚══════════════════════════════════════════════════╝")
     # Check conservative flag early so we can show it in the startup banner
     _short_conservative_early = os.path.exists(os.path.join(SCRIPT_DIR, "short_conservative.flag"))
@@ -2456,7 +2481,7 @@ def main():
             print(f"   🛡  SHORT WR {short_wr_recent:.0f}% → AUTO-DROPPED {dropped} short(s) below {min_short_conf}% confidence")
 
     # ── Programmatic LONG confidence filter (code-level floor) ──────────────
-    # 85-87% LONG band: 39.1% WR, avg -12.5% P&L — confirmed loser tier (v46.61).
+    # 85-87% LONG band: 39.1% WR, avg -12.5% P&L — confirmed loser tier (v46.62).
     # This strips any LONG Claude emitted below 88% even if prompt was ignored.
     LONG_MIN_CONF = 88
     before_long = len(merged_longs)

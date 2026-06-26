@@ -1,5 +1,18 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.62 — 2026-06-26 — Trend Doctrine trained into all 4 active agents
+
+### "Follow the market trend" embedded team-wide
+
+| # | Agent | Change |
+|---|-------|--------|
+| 1 | Bot (whale_stream_bot.py) | **GOLDEN RULE block added as Rule #1** in system prompt — above all other rules. 🐻 Market falling → SHORT only. 🐂 Market rising → LONG only. 😐 Sideways → both. Includes live proof: LONGs -108% fighting downtrend, SHORTs 77.6% flowing with it. |
+| 2 | Strategist (whale_stream_strategist.py v1.3) | **GOLDEN RULE added to system prompt.** Reinforces that the code pre-vetoes counter-trend signals and Claude should treat any remaining counter-trend signal with extra skepticism. |
+| 3 | Briefing (morning_briefing.py) | **BTC market bias at top of every 7am message.** `get_btc_market_bias()` fetches Bybit 4h SMA each morning and displays "🐻 BEARISH — SHORT mode" / "🐂 BULLISH — LONG mode" / "😐 NEUTRAL — both allowed" as the first item in the daily briefing before all other data. |
+| 4 | Debrief (whale_stream_debrief.py) | **Trend-vs-counter-trend analysis added to DEBRIEF_SYSTEM.** Agent now explicitly taught: SHORT in downtrend = flows with water (wins). LONG in downtrend = swims upstream (drowns). Trades that fought the trend and won are flagged as lucky, not reinforced in pattern memory. |
+
+---
+
 ## v46.61 — 2026-06-26 — Market Regime Filter + LONG Quality Tightening
 
 ### Strategy: Trade WITH the Trend — Not Against It

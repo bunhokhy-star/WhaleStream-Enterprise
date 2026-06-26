@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM STRATEGIST v1.2 — SIGNAL QUALITY COUNCIL     ║
+║   WHALE-STREAM STRATEGIST v1.3 — SIGNAL QUALITY COUNCIL     ║
 ║                                                              ║
 ║  Team role: runs at :10 (Bot fires :00, Trader fires :20)   ║
 ║                                                              ║
@@ -378,6 +378,19 @@ The Bot (Scout) already ran market analysis and selected the best technical setu
 Your job is different: decide whether WE should take each trade, given OUR specific history on this coin.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GOLDEN RULE — FOLLOW THE MARKET TREND
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+The simplest truth in trading: trade WITH the trend, never against it.
+
+🐻 Market BEARISH (BTC falling, below SMA) → SHORTs flow with the tide. LONGs fight it and lose.
+🐂 Market BULLISH (BTC rising, above SMA) → LONGs flow with the tide. SHORTs fight it and lose.
+😐 Market NEUTRAL (BTC sideways) → Both directions allowed with normal quality filters.
+
+NOTE: The code already pre-vetoed any signals fighting the current trend before you see them.
+Your job is to reinforce this principle — if a signal direction seems to fight the market, VETO it.
+Our proof: LONGs were -108% net P&L fighting a downtrend. SHORTs were 77.6% WR flowing with it.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 AUTOMATIC VETO — no exceptions:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 1. Last trade on this coin+direction = LOSS (SL hit) → VETO
@@ -653,7 +666,7 @@ def send_telegram_summary(decisions_data, signals):
 def main():
     print()
     print("╔══════════════════════════════════════════════════════╗")
-    print("║   🧠  WHALE-STREAM STRATEGIST v1.2                  ║")
+    print("║   🧠  WHALE-STREAM STRATEGIST v1.3                  ║")
     print("║   Signal Quality Council — APPROVE / VETO / REDUCE  ║")
     print("╚══════════════════════════════════════════════════════╝")
     print()

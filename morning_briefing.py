@@ -63,6 +63,41 @@ BKK = timezone(timedelta(hours=7))
 
 
 # ─────────────────────────────────────────────────────────────
+# MARKET REGIME FETCH (BTC 4h SMA)
+# ─────────────────────────────────────────────────────────────
+
+def get_btc_market_bias():
+    """
+    Fetch BTC market bias from Bybit V5 kline API (no API key needed).
+    Returns (bias, current_price, sma20, pct_from_sma).
+    bias = "BEARISH" / "BULLISH" / "NEUTRAL"
+
+    GOLDEN RULE: trade WITH the trend.
+      BEARISH → SHORT only.  BULLISH → LONG only.  NEUTRAL → both.
+    """
+    try:
+        r = requests.get(
+            "https://api.bybit.com/v5/market/kline",
+            params={"category": "linear", "symbol": "BTCUSDT", "interval": "240", "limit": "21"},
+            timeout=10,
+        )
+        data = r.json()
+        if data.get("retCode") != 0:
+            return "NEUTRAL", None, None, None
+        candles = data["result"]["list"]
+        if len(candles) < 21:
+            return "NEUTRAL", None, None, None
+        closes  = [float(c[4]) for c in candles[1:21]]
+        sma20   = sum(closes) / 20
+        current = float(candles[0][4])
+        pct     = (current - sma20) / sma20 * 100
+        bias    = "BEARISH" if pct < -2.0 else ("BULLISH" if pct > 2.0 else "NEUTRAL")
+        return bias, current, sma20, pct
+    except Exception:
+        return "NEUTRAL", None, None, None
+
+
+# ─────────────────────────────────────────────────────────────
 # HELPERS
 # ─────────────────────────────────────────────────────────────
 
@@ -459,6 +494,22 @@ def build_message():
     else:
         days_line = f"{delta_days} days to Go-Live"
 
+    # ── Market Regime (BTC trend — the #1 filter) ──
+    bias, btc_price, btc_sma, btc_pct = get_btc_market_bias()
+    if bias == "BEARISH":
+        bias_emoji   = "🐻"
+        bias_action  = "SHORT mode — trade only SHORTs today"
+        bias_detail  = f"BTC ${btc_price:,.0f} is {abs(btc_pct):.1f}% BELOW 20-period 4h SMA (${btc_sma:,.0f})"
+    elif bias == "BULLISH":
+        bias_emoji   = "🐂"
+        bias_action  = "LONG mode — trade only LONGs today"
+        bias_detail  = f"BTC ${btc_price:,.0f} is {abs(btc_pct):.1f}% ABOVE 20-period 4h SMA (${btc_sma:,.0f})"
+    else:
+        bias_emoji   = "😐"
+        bias_action  = "NEUTRAL — both directions allowed"
+        bias_detail  = (f"BTC ${btc_price:,.0f} within ±2% of 4h SMA (${btc_sma:,.0f})"
+                        if btc_price else "BTC SMA unavailable (Bybit offline?)")
+
     # ── Data ──
     bal      = parse_balance()
     positions = parse_positions()
@@ -587,6 +638,11 @@ def build_message():
     lines = [
         f"🌅 WHALE-STREAM MORNING BRIEFING",
         f"{date_str} | {days_line}",
+        f"",
+        f"{'━'*40}",
+        f"{bias_emoji} MARKET TODAY: <b>{bias}</b> — {bias_action}",
+        f"  {bias_detail}",
+        f"{'━'*40}",
     ]
 
     # Critical alerts at top

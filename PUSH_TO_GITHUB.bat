@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.61 — Market regime filter (BTC 4h SMA), LONG floor 88%, block COMP/QNT/WIF, Strategist v1.2"
+git commit -m "v46.62 — Trend doctrine trained into Bot/Strategist/Briefing/Debrief, morning bias block, Strategist v1.3"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...
