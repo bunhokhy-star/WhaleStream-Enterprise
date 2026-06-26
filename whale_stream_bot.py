@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v46.59  —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v46.61  —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 coins from CoinGecko (free, no key)     ║
@@ -111,6 +111,9 @@ SHORT_COIN_BLOCKLIST = {
 LONG_COIN_BLOCKLIST = {
     "ZRO",   # 0W/2L — 0% WR, avg -59.5%  ← added v46.37 (2026-06-23)
     "HYPE",  # 0W/2L — 0% WR, avg -54.3%  ← added v46.37 (2026-06-23)
+    "COMP",  # 0W/3L — 0% WR, avg -59.8%  ← added v46.61 (2026-06-26)
+    "QNT",   # 0W/3L — 0% WR, avg -65.6%  ← added v46.61 (2026-06-26)
+    "WIF",   # 1W/4L — 25% WR, avg -48.7% ← added v46.61 (2026-06-26)
 }
 
 # ── Malformed coin blocklist (BOTH directions) ────────────────────────────────
@@ -541,6 +544,11 @@ RULES:
     - 88-92% confidence band has 36-37% WR — do NOT output SHORTs in this range
     - 93-95% band: 100% WR. 95%+ band: 91.7% WR. These are the ONLY acceptable SHORT zones.
     - If a setup feels like 90-92% confidence → either find the extra edge to push to 93%+ or SKIP it entirely
+  LONG CONFIDENCE RULE (hard floor enforced in code):
+    - MINIMUM LONG CONFIDENCE: 88% — any LONG below 88% will be AUTO-DROPPED by the system
+    - 85-87% LONG band has 39.1% WR and avg -12.5% P&L — do NOT output LONGs in this range
+    - 88-91% band: 52% WR, avg +13.1% P&L. These are the acceptable LONG zones.
+    - If a setup feels like 85-87% → either find the extra edge to push to 88%+ or SKIP it entirely
   LONG PATTERNS THAT WIN (prioritize these):
     - "Stage 2 expansion" → 100% WR (3/3 trades)
     - "Stage 2 expansion retest" → 75% WR (3/4 trades)
@@ -557,8 +565,8 @@ RULES:
     - JUP: 75% WR (3/4 trades) — good track record
     - EIGEN: 67% WR — acceptable
   LONG POOR COINS (blocked or weak — avoid as LONG signals):
-    - ZRO, HYPE, COMP: 0% WR → already code-blocked
-    - WIF, XLM, SOL: 33% WR → use only with very strong pattern confluence
+    - ZRO, HYPE, COMP, QNT, WIF: 0-25% WR → already code-blocked (v46.61)
+    - XLM, SOL: 33% WR → use only with very strong pattern confluence
 
 {SIGNAL_GRAVEYARD}
 ════════════════════════════════════════════════════════════
@@ -1724,7 +1732,7 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     shorts = data.get("shorts", [])
 
     lines = []
-    lines.append(f"🐳 WHALE-STREAM v46.59")
+    lines.append(f"🐳 WHALE-STREAM v46.61")
     lines.append(f"📅 {ts}")
 
     # ── Market regime summary ─────────────────────────────────
@@ -2263,7 +2271,7 @@ def log_to_google_sheets(data, bkk_time):
 def main():
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🐳  WHALE-STREAM v46.59 — AUTO BOT STARTING    ║")
+    print("║   🐳  WHALE-STREAM v46.61 — AUTO BOT STARTING    ║")
     print("╚══════════════════════════════════════════════════╝")
     # Check conservative flag early so we can show it in the startup banner
     _short_conservative_early = os.path.exists(os.path.join(SCRIPT_DIR, "short_conservative.flag"))
@@ -2446,6 +2454,21 @@ def main():
         dropped = before - len(merged_shorts)
         if dropped:
             print(f"   🛡  SHORT WR {short_wr_recent:.0f}% → AUTO-DROPPED {dropped} short(s) below {min_short_conf}% confidence")
+
+    # ── Programmatic LONG confidence filter (code-level floor) ──────────────
+    # 85-87% LONG band: 39.1% WR, avg -12.5% P&L — confirmed loser tier (v46.61).
+    # This strips any LONG Claude emitted below 88% even if prompt was ignored.
+    LONG_MIN_CONF = 88
+    before_long = len(merged_longs)
+    def _long_conf_int(sig):
+        try:
+            return int(str(sig.get("conf", "0")).replace("%", "").strip())
+        except (ValueError, TypeError):
+            return 0
+    merged_longs = [s for s in merged_longs if _long_conf_int(s) >= LONG_MIN_CONF]
+    dropped_long = before_long - len(merged_longs)
+    if dropped_long:
+        print(f"   🛡  LONG floor {LONG_MIN_CONF}% — AUTO-DROPPED {dropped_long} long(s) below threshold")
 
     signal_data = {
         "verdict":  data1.get("verdict",  "TRADE"),

@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM STRATEGIST v1.1 — SIGNAL QUALITY COUNCIL     ║
+║   WHALE-STREAM STRATEGIST v1.2 — SIGNAL QUALITY COUNCIL     ║
 ║                                                              ║
 ║  Team role: runs at :10 (Bot fires :00, Trader fires :20)   ║
 ║                                                              ║
@@ -308,6 +308,60 @@ def get_btc_7d_pct():
     return None
 
 
+def get_btc_market_bias():
+    """
+    BTC Market Regime Filter — determines which direction to trade.
+
+    Fetches last 20 completed × 4h BTC candles from Bybit V5 (no API key needed).
+    Compares current BTC price to 20-period SMA:
+      - Price > SMA by >2% → BULLISH  → only trade LONGs (veto SHORTs)
+      - Price < SMA by >2% → BEARISH  → only trade SHORTs (veto LONGs)
+      - Within ±2% of SMA  → NEUTRAL  → trade both directions
+
+    Returns: (bias, current_price, sma20, pct_from_sma)
+    bias = "BEARISH" / "BULLISH" / "NEUTRAL"
+    All other values are None on API failure (defaults to NEUTRAL).
+    """
+    try:
+        url = "https://api.bybit.com/v5/market/kline"
+        params = {
+            "category": "linear",
+            "symbol":   "BTCUSDT",
+            "interval": "240",   # 4-hour candles
+            "limit":    "21",    # 20 completed + 1 current (incomplete)
+        }
+        r = requests.get(url, params=params, timeout=10)
+        data = r.json()
+        if data.get("retCode") != 0:
+            return "NEUTRAL", None, None, None
+
+        candles = data["result"]["list"]
+        if len(candles) < 21:
+            return "NEUTRAL", None, None, None
+
+        # Bybit returns newest first.
+        # candles[0] = current (still open/incomplete), candles[1:21] = last 20 closed.
+        # Each candle: [timestamp, open, high, low, close, volume, turnover]
+        closes  = [float(c[4]) for c in candles[1:21]]  # 20 completed closes
+        sma20   = sum(closes) / len(closes)
+        current = float(candles[0][4])                   # current candle close (live)
+
+        pct_from_sma = (current - sma20) / sma20 * 100
+
+        if pct_from_sma < -2.0:
+            bias = "BEARISH"
+        elif pct_from_sma > 2.0:
+            bias = "BULLISH"
+        else:
+            bias = "NEUTRAL"
+
+        return bias, current, sma20, pct_from_sma
+
+    except Exception as e:
+        print(f"   ⚠ Market bias fetch failed: {e}")
+        return "NEUTRAL", None, None, None
+
+
 # ═══════════════════════════════════════════════════════════════
 # SECTION 5 — STRATEGIST PROMPT
 # ═══════════════════════════════════════════════════════════════
@@ -566,10 +620,13 @@ def send_telegram_summary(decisions_data, signals):
     vetoed        = decisions_data.get("vetoed_count", 0)
     reduced       = decisions_data.get("reduced_count", 0)
     regime_note   = decisions_data.get("regime_note", "")
+    market_bias   = decisions_data.get("market_bias", "NEUTRAL")
     decisions     = decisions_data.get("decisions", [])
 
+    bias_emoji = "🐻" if market_bias == "BEARISH" else ("🐂" if market_bias == "BULLISH" else "😐")
     lines = [
         f"🧠 <b>STRATEGIST REVIEW</b> — {run_at}",
+        f"  {bias_emoji} Market: <b>{market_bias}</b>",
         f"  ✅ Approved: {approved}  ⛔ Vetoed: {vetoed}  ⚠️ Reduced: {reduced}",
     ]
 
@@ -596,7 +653,7 @@ def send_telegram_summary(decisions_data, signals):
 def main():
     print()
     print("╔══════════════════════════════════════════════════════╗")
-    print("║   🧠  WHALE-STREAM STRATEGIST v1.0                  ║")
+    print("║   🧠  WHALE-STREAM STRATEGIST v1.2                  ║")
     print("║   Signal Quality Council — APPROVE / VETO / REDUCE  ║")
     print("╚══════════════════════════════════════════════════════╝")
     print()
@@ -663,6 +720,73 @@ def main():
     else:
         print("   BTC 7d: unavailable (CoinGecko offline?)")
 
+    # ── BTC Market Regime Filter (code-level pre-veto) ───────────────────
+    # Trade WITH the trend: BEARISH → SHORT only, BULLISH → LONG only, NEUTRAL → both.
+    print("\n📊 BTC Market Regime Filter...")
+    market_bias, btc_price, btc_sma, btc_pct_sma = get_btc_market_bias()
+
+    if btc_price is not None:
+        bias_emoji = "🐻" if market_bias == "BEARISH" else ("🐂" if market_bias == "BULLISH" else "😐")
+        print(f"   BTC price: ${btc_price:,.0f}  |  20-period 4h SMA: ${btc_sma:,.0f}  |  {btc_pct_sma:+.1f}% from SMA")
+        print(f"   {bias_emoji} MARKET BIAS: {market_bias}")
+        log(f"Market bias: {market_bias}  BTC ${btc_price:,.0f}  SMA ${btc_sma:,.0f}  ({btc_pct_sma:+.1f}%)")
+    else:
+        print("   ⚠ Could not determine BTC bias — NEUTRAL (no pre-filter applied)")
+        log("Market bias: NEUTRAL (Bybit kline unavailable)")
+
+    # Pre-veto signals fighting the trend
+    original_signal_count = len(signals)
+    regime_vetoed = []
+
+    if market_bias == "BEARISH":
+        fighting_trend = [s for s in signals if s["direction"] == "LONG"]
+        signals        = [s for s in signals if s["direction"] != "LONG"]
+        for s in fighting_trend:
+            reason = f"REGIME VETO — market BEARISH (BTC {btc_pct_sma:+.1f}% below 4h SMA) — no LONGs"
+            regime_vetoed.append({"coin": s["coin"], "direction": "LONG",
+                                   "decision": "VETO", "grade": "D", "reason": reason})
+            log(f"Regime pre-veto: {s['coin']} LONG ({reason})")
+            print(f"   🐻 VETO: {s['coin']} LONG — market BEARISH")
+
+    elif market_bias == "BULLISH":
+        fighting_trend = [s for s in signals if s["direction"] == "SHORT"]
+        signals        = [s for s in signals if s["direction"] != "SHORT"]
+        for s in fighting_trend:
+            reason = f"REGIME VETO — market BULLISH (BTC {btc_pct_sma:+.1f}% above 4h SMA) — no SHORTs"
+            regime_vetoed.append({"coin": s["coin"], "direction": "SHORT",
+                                   "decision": "VETO", "grade": "D", "reason": reason})
+            log(f"Regime pre-veto: {s['coin']} SHORT ({reason})")
+            print(f"   🐂 VETO: {s['coin']} SHORT — market BULLISH")
+
+    if regime_vetoed:
+        dropped_count = original_signal_count - len(signals)
+        print(f"   → Pre-filtered {dropped_count} signal(s) fighting the trend. {len(signals)} remain for Claude review.")
+
+    # If regime filter wiped everything, short-circuit without calling Claude
+    if not signals and original_signal_count > 0:
+        bias_lbl   = "BEARISH — all LONGs pre-vetoed" if market_bias == "BEARISH" else "BULLISH — all SHORTs pre-vetoed"
+        bias_emoji2 = "🐻" if market_bias == "BEARISH" else "🐂"
+        log(f"No signals remain after regime filter — {bias_lbl}")
+        print(f"\n   No signals remain after regime filter ({bias_lbl}).")
+        empty = {
+            "run_at":         bkk_str,
+            "decisions":      regime_vetoed,
+            "regime_note":    f"Market {bias_lbl}",
+            "approved_count": 0,
+            "vetoed_count":   len(regime_vetoed),
+            "reduced_count":  0,
+            "market_bias":    market_bias,
+        }
+        write_decisions(empty)
+        send_telegram(
+            f"🧠 <b>STRATEGIST</b> — {bkk_str}\n"
+            f"{bias_emoji2} <b>REGIME FILTER: {market_bias}</b>\n"
+            f"  BTC is {abs(btc_pct_sma):.1f}% {'below' if market_bias == 'BEARISH' else 'above'} 20-period 4h SMA\n"
+            f"  {len(regime_vetoed)} signal(s) vetoed — trading only WITH the trend.\n"
+            f"  ⛔ Vetoed: {', '.join(f\"{v['coin']} {v['direction']}\" for v in regime_vetoed)}"
+        )
+        return
+
     # ── Load Pattern Memory ──────────────────────────────────────
     print("\n📚 Loading pattern memory...")
     memory = load_pattern_memory()
@@ -708,6 +832,12 @@ def main():
             "regime_note": "Parse error — fallback approve",
         }
 
+    # ── Merge regime pre-vetoes into decisions ────────────────────
+    # regime_vetoed contains any signals dropped before Claude saw them.
+    # Append them so the full picture is visible in the decisions file + Telegram.
+    all_decisions = regime_vetoed + parsed.get("decisions", [])
+    parsed["decisions"] = all_decisions
+
     # ── Enrich and tally ─────────────────────────────────────────
     approved = sum(1 for d in parsed.get("decisions", []) if d.get("decision") == "APPROVE")
     vetoed   = sum(1 for d in parsed.get("decisions", []) if d.get("decision") == "VETO")
@@ -717,8 +847,9 @@ def main():
     parsed["approved_count"] = approved
     parsed["vetoed_count"]   = vetoed
     parsed["reduced_count"]  = reduced
-    parsed["signal_count"]   = len(signals)
+    parsed["signal_count"]   = original_signal_count
     parsed["btc_7d_pct"]     = btc_7d
+    parsed["market_bias"]    = market_bias
 
     # ── Print decisions ──────────────────────────────────────────
     print(f"\n   Results: {approved} APPROVED  {vetoed} VETOED  {reduced} REDUCE_SIZE")

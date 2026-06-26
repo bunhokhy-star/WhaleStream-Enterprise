@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.60 — BAT cleanup: FORCE_PUSH/CLEAN_PUSH disabled, UTF-8 in repair bats, SETUP_ALL_TASKS now creates all 9 tasks"
+git commit -m "v46.61 — Market regime filter (BTC 4h SMA), LONG floor 88%, block COMP/QNT/WIF, Strategist v1.2"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...

@@ -1,5 +1,28 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.61 — 2026-06-26 — Market Regime Filter + LONG Quality Tightening
+
+### Strategy: Trade WITH the Trend — Not Against It
+
+| # | Type | File | Change |
+|---|------|------|--------|
+| 1 | NEW | whale_stream_strategist.py | **BTC Market Regime Filter.** `get_btc_market_bias()` fetches last 20 × 4h BTC candles from Bybit V5, computes 20-period SMA. BEARISH (<−2% from SMA) → all LONG signals pre-vetoed before Claude. BULLISH (>+2% from SMA) → all SHORT signals pre-vetoed. NEUTRAL → both directions allowed. Regime bias shown in every Telegram message. |
+| 2 | NEW | whale_stream_strategist.py | **Regime-vetoed signals merged into decisions file** so the full picture (pre-veto + Claude review) is visible in logs, Telegram, and strategist_decisions.json. |
+| 3 | NEW | whale_stream_bot.py | **Code-level LONG confidence floor 88%.** `LONG_MIN_CONF = 88` — mirrors the existing SHORT floor logic. Auto-drops any LONG Claude emits below 88%. 85-87% LONG band had 39.1% WR and avg -12.5% P&L (confirmed loser tier). |
+| 4 | FIX | whale_stream_bot.py | **LONG_COIN_BLOCKLIST expanded.** Added COMP (0W/3L, -59.8%), QNT (0W/3L, -65.6%), WIF (1W/4L, -48.7%). All three confirmed losers from analyze_shorts.py output. |
+| 5 | FIX | whale_stream_bot.py | **LONG CONFIDENCE RULE added to prompt.** Claude now told explicitly: 85-87% floor has 39.1% WR — do not output LONGs in that range. Mirrors the SHORT CONFIDENCE RULE already in the prompt. |
+| 6 | FIX | whale_stream_bot.py | **Prompt poor-coin list updated.** COMP, QNT, WIF added to the LONG POOR COINS line in the prompt so Claude knows these are code-blocked. |
+| 7 | FIX | whale_stream_strategist.py | **Strategist v1.1 → v1.2.** Telegram now shows market bias emoji (🐻/🐂/😐) on every review message. |
+
+### Why This Matters
+- LONGs net P&L: -108.3% (Gate 2 FAIL) — root cause: fighting the market trend + low-quality tier signals
+- SHORTs WR: 77.6% (last 20 = 100%) — system excels when trading WITH the trend
+- Market regime filter ensures we only trade in the direction BTC is moving
+- With BEARISH bias: zero LONG exposure, pure SHORT mode — the system's proven strength
+- Target: $311 → $500 by July 1 (4 days)
+
+---
+
 ## v46.60 — 2026-06-26 — BAT file cleanup + SETUP_ALL_TASKS complete
 
 | # | Type | File | Fix |
