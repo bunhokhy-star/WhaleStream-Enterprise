@@ -116,6 +116,11 @@ try:
             elif code == 33004:
                 print("  → retCode 33004 = API key expired")
                 print("  → FIX: Re-generate API keys in Bybit Demo → Account → API Management")
+            elif code == 10002:
+                print("  → retCode 10002 = Your PC clock is out of sync with Bybit's server")
+                print("  → FIX: Right-click clock (bottom-right) → Adjust date/time → Sync now")
+                print("  → The v46.65 code fix will compensate automatically, but syncing the")
+                print("     clock is still recommended to keep the offset small.")
             elif code == 10004:
                 print("  → retCode 10004 = Invalid sign (timestamp issue or wrong secret)")
             elif code == 131001:

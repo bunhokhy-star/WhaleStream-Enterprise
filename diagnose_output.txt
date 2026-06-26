@@ -1,0 +1,28 @@
+============================================================
+  WHALE-STREAM — Bybit API Diagnostic
+============================================================
+
+Step 1: Loading API keys from local_config.py...
+  ✓ API Key loaded: t8mRCTeC...9Yyb  (len=18)
+  ✓ Secret loaded:  ********...7Le3  (len=36)
+
+Step 2: Testing Bybit public API (no auth)...
+  ✓ Public API reachable — HTTP 200
+  ✓ Server time: 1782516706933392392
+
+Step 3: Testing Bybit DEMO endpoint (no auth)...
+  ✓ Demo API reachable — HTTP 200
+  ✓ Demo server time: 1782516707324797796
+
+Step 4: Testing authenticated Demo API (wallet balance)...
+  HTTP Status: 200
+  Raw response (first 500 chars):
+  {"retCode":10002,"retMsg":"invalid request, please check your server timestamp or recv_window param: req_timestamp[1782516710175],server_timestamp[1782516707688],recv_window[20000]","result":{},"retExtInfo":{},"time":1782516707688}
+
+  ✗ BYBIT ERROR — retCode: 10002  retMsg: 'invalid request, please check your server timestamp or recv_window param: req_timestamp[1782516710175],server_timestamp[1782516707688],recv_window[20000]'
+  → Unknown error code. See Bybit docs for retCode 10002
+
+============================================================
+  Diagnostic complete.
+  Screenshot this output and share with your dev team.
+============================================================

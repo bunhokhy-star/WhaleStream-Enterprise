@@ -1,5 +1,25 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.65 — 2026-06-27 — Fix retCode 10002 (PC clock drift causing all Bybit auth failures)
+
+### Root Cause of 40+ Hour Trading Blackout
+
+**Problem diagnosed:** Trader could not connect to Bybit for 40+ hours (June 25 22:20 → June 27 ~09:00 BKK).
+`DIAGNOSE_BYBIT.bat` revealed the actual error: `retCode=10002` — PC clock was **2,487 ms ahead**
+of Bybit's server. Bybit rejects any request where `req_timestamp > server_timestamp`, even by milliseconds.
+The API keys (regenerated June 26) were completely valid — the clock was the sole blocker.
+
+| # | File | Change |
+|---|------|--------|
+| 1 | whale_stream_trader.py | Added `_BYBIT_CLOCK_OFFSET_MS` module-level constant (default 3000 ms). |
+| 2 | whale_stream_trader.py | Added `_calibrate_clock()` function: queries Bybit `/v5/market/time` at startup, measures local vs server offset, caches it. Any future PC clock drift is automatically corrected. |
+| 3 | whale_stream_trader.py | `bybit_request()` now uses `time.time() * 1000 - _BYBIT_CLOCK_OFFSET_MS` instead of the old fixed `-1000 ms`. |
+| 4 | whale_stream_trader.py | Connection failure hint now includes: `→ If retCode=10002: PC clock is out of sync — right-click clock → Sync now` |
+| 5 | diagnose_bybit.py | Added retCode 10002 handler with exact fix instructions. |
+| 6 | DIAGNOSE_BYBIT.bat | Now saves output to `diagnose_output.txt` so results can be read after CMD closes. |
+
+---
+
 ## v46.64 — 2026-06-27 — Bybit API error transparency + Watchdog bot-tracking fix
 
 ### Bybit Connection Diagnostic & Error Transparency

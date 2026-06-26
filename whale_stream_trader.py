@@ -266,12 +266,41 @@ COL_BYBIT_ID    = 17   # Bybit Demo order ID — written here when order is plac
 # BYBIT AUTHENTICATION
 # ─────────────────────────────────────────────────────────────
 
+# Clock offset vs Bybit server (ms). Positive = our clock is ahead.
+# Calibrated in main() via _calibrate_clock(). Default 3000ms keeps us safe
+# even without calibration (handles up to 2.5s PC clock drift).
+_BYBIT_CLOCK_OFFSET_MS = 3000
+
+
+def _calibrate_clock():
+    """
+    Fetch Bybit server time and cache the clock offset.
+    Prevents retCode 10002 (timestamp rejected) when PC clock drifts.
+    """
+    global _BYBIT_CLOCK_OFFSET_MS
+    try:
+        r = requests.get(f"{BYBIT_BASE_URL}/v5/market/time", timeout=5)
+        d = r.json()
+        if d.get("retCode") == 0:
+            server_ms = int(d["result"]["timeNano"]) // 1_000_000
+            local_ms  = int(time.time() * 1000)
+            offset    = local_ms - server_ms
+            # Use offset + 500ms safety buffer (always send timestamp slightly behind server)
+            _BYBIT_CLOCK_OFFSET_MS = offset + 500
+            direction = "ahead" if offset >= 0 else "behind"
+            print(f"   ⏱ PC clock is {abs(offset)} ms {direction} of Bybit — offset applied")
+            return True
+    except Exception as e:
+        print(f"   ⚠ Clock calibration skipped ({e}) — using {_BYBIT_CLOCK_OFFSET_MS} ms default offset")
+    return False
+
+
 def bybit_request(method, endpoint, params=None, body=None):
     """
     Authenticated Bybit V5 API request.
     Adds X-BAPI-DEMO-TRADING: 1 header for demo account.
     """
-    timestamp   = str(int(time.time() * 1000) - 1000)  # -1s to sync with Bybit server
+    timestamp   = str(int(time.time() * 1000) - _BYBIT_CLOCK_OFFSET_MS)
     recv_window = "20000"
 
     if method == "GET":
@@ -694,11 +723,15 @@ def main():
         print("✗ ERROR: Please fill in BYBIT_API_KEY and BYBIT_API_SECRET in the CONFIG section.")
         return
 
+    # ── Calibrate clock against Bybit server time ─────────────
+    _calibrate_clock()
+
     # ── Check wallet balance (runs even when paused — keeps balance file fresh) ──
     print("💳 Checking Bybit demo wallet...")
     balance, total_balance, _bal_err = get_wallet_balance()
     if balance is None:
         print(f"   ✗ Could not connect to Bybit. Error: {_bal_err}")
+        print("   → If retCode=10002: PC clock is out of sync — right-click clock → Adjust date/time → Sync now")
         print("   → If retCode=10003/33004: re-generate API keys in Bybit Demo > API Management")
         print("   → If 'Connection refused' or timeout: check network / Bybit status page")
         print("   → Run DIAGNOSE_BYBIT.bat for a full step-by-step connection test")

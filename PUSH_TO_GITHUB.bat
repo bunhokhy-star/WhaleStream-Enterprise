@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.64 — Bybit error transparency + DIAGNOSE_BYBIT.bat + Watchdog bot-tracking fix"
+git commit -m "v46.65 — Fix retCode 10002: dynamic clock calibration against Bybit server time"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...
