@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.54 — Fix Strategist Task Scheduler (py→python) + run_strategist.bat"
+git commit -m "v46.55 — Watchdog agent + morning briefing scheduled + run_watchdog.bat"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...

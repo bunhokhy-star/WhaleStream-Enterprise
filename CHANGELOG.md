@@ -1,5 +1,16 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.55 — 2026-06-26 — Watchdog Agent + Morning Briefing
+
+### New Agents & Tasks
+
+| # | Type | Description | Files |
+|---|------|-------------|-------|
+| 1 | NEW | **Watchdog agent.** `whale_stream_watchdog.py` runs at :30 of each 4h cycle. Checks if Bot (:00), Strategist (:10), and Trader (:20) all ran in the current cycle. Sends Telegram alert immediately if any agent missed its slot. Also alerts on stale balance (6h+ without trader update) and active circuit breaker. Fills the "no one notices failures" gap. | whale_stream_watchdog.py (new), run_watchdog.bat (new), ADD_WATCHDOG_TASK.bat (new) |
+| 2 | REGISTER | **Morning briefing task registered.** `morning_briefing.py` (built in v46.37) now scheduled via Task Scheduler at 07:00 BKK daily — sends full Telegram briefing: balance, drawdown, gate progress, win rates, open positions, yesterday P&L, flag status. | ADD_BRIEFING_TASK.bat |
+
+---
+
 ## v46.54 — 2026-06-26 — CRITICAL: Fix Strategist Task Scheduler
 
 ### 1 Critical Fix — Strategist has never run since deployment

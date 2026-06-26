@@ -1,0 +1,6 @@
+[2026-06-26 08:10 BKK] === Strategist run started 2026-06-26 08:10 BKK ===
+[2026-06-26 08:10 BKK] No signals to review — no OPEN signals found in last 5h
+[2026-06-26 12:10 BKK] === Strategist run started 2026-06-26 12:10 BKK ===
+[2026-06-26 12:10 BKK] No signals to review — no OPEN signals found in last 5h
+[2026-06-26 16:10 BKK] === Strategist run started 2026-06-26 16:10 BKK ===
+[2026-06-26 16:10 BKK] No signals to review — no OPEN signals found in last 5h
