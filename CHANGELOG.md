@@ -1,5 +1,17 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.60 — 2026-06-26 — BAT file cleanup + SETUP_ALL_TASKS complete
+
+| # | Type | File | Fix |
+|---|------|------|-----|
+| 1 | DISABLED | FORCE_PUSH.bat | Stale v46.38 commit message + `--force` push. If run accidentally would clobber GitHub with wrong version. Now shows warning and exits. |
+| 2 | DISABLED | CLEAN_PUSH.bat | Even more dangerous: creates orphan branch (wipes all history) + force push. One-time migration tool that must never run again. Now shows warning and exits. |
+| 3 | FIX | RUN_REPAIR_PNL.bat | Added `set PYTHONIOENCODING=utf-8` + `set PYTHONUTF8=1` — prevents emoji crash in Task Scheduler. |
+| 4 | FIX | AUTO_REPAIR_PNL.bat | Same UTF-8 fix. |
+| 5 | FIX | SETUP_ALL_TASKS.bat | Added OrphanCheck (daily 06:00) and LogAnalyzer (daily 07:00) tasks. Now creates all 9 tasks on a fresh machine. Also updated summary from "7 tasks" → "9 tasks". |
+
+---
+
 ## v46.59 — 2026-06-26 — System-wide Audit Fixes (8 bugs eliminated)
 
 ### Parallel Agent Audit → All Findings Applied
