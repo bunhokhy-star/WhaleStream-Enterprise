@@ -52,6 +52,28 @@ PAUSED_FLAG     = os.path.join(BASE_DIR, "paused.flag")
 
 BKK = timezone(timedelta(hours=7))
 
+
+# ── Self-tick helper (writes completion to daily_status.json) ────
+def _mark_done(agent_name):
+    """Mark this agent done for the current cycle in daily_status.json."""
+    _path  = os.path.join(BASE_DIR, "daily_status.json")
+    _today = __import__("datetime").date.today().isoformat()
+    _h     = __import__("datetime").datetime.now().hour
+    _cycle = str((_h // 4) * 4).zfill(2)
+    _key   = f"{agent_name}_{_cycle}" if agent_name not in ("tracker", "monitor", "briefing") else agent_name
+    try:
+        with open(_path, encoding="utf-8") as _f:
+            _data = json.load(_f)
+        if _data.get("date") != _today:
+            _data = {"date": _today}
+    except Exception:
+        _data = {"date": _today}
+    _data[_key] = True
+    with open(_path, "w", encoding="utf-8") as _f:
+        json.dump(_data, _f, indent=2)
+    print(f"   ✓ Status logged → {_key}")
+
+
 # Deadline windows (minutes after cycle start before we flag as missed)
 BOT_DEADLINE_MIN        = 32   # Bot at :00, Watchdog at :30 = 30 min
 STRATEGIST_DEADLINE_MIN = 22   # Strategist at :10
@@ -361,4 +383,5 @@ if __name__ == "__main__":
         print(msg)
         send_telegram(msg)
 
+    _mark_done("watchdog")
     print(f"\n[{now_str}] Watchdog complete.")

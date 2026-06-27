@@ -45,6 +45,31 @@ if hasattr(sys.stdout, "buffer"):
 if hasattr(sys.stderr, "buffer"):
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True)
 
+
+# ── Self-tick helper (writes completion to daily_status.json) ────
+def _mark_done(agent_name):
+    """Mark this agent done for the current cycle in daily_status.json."""
+    import json, datetime
+    _path  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "daily_status.json")
+    _today = datetime.date.today().isoformat()
+    _h     = datetime.datetime.now().hour
+    _cycle = str((_h // 4) * 4).zfill(2)
+    _key   = f"{agent_name}_{_cycle}" if agent_name not in ("tracker", "monitor", "briefing") else agent_name
+    try:
+        with open(_path, encoding="utf-8") as _f:
+            _data = json.load(_f)
+        if _data.get("date") != _today:
+            _data = {"date": _today}
+    except Exception:
+        _data = {"date": _today}
+    _data[_key] = True
+    try:
+        with open(_path, "w", encoding="utf-8") as _f:
+            json.dump(_data, _f, indent=2)
+    except Exception:
+        pass
+
+
 # ── Credentials ───────────────────────────────────────────────
 try:
     from local_config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
@@ -770,6 +795,7 @@ if __name__ == "__main__":
     print("────────────────────────────────────────────────────────\n")
 
     send_telegram(msg)
+    _mark_done("briefing")
 
     # ── Auto-run analyze_shorts.py on Sunday (6) and Thursday (3) ──
     _today_wd = now_bkk.weekday()  # 0=Mon … 3=Thu … 6=Sun

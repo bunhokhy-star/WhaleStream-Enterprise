@@ -1,5 +1,37 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.67 — 2026-06-27 — Autonomous self-tick: agents mark themselves done in Daily Checklist
+
+### Agent Self-Tick System (24/7 autonomous operation)
+
+Every agent now writes its own completion status to `daily_status.json` when it finishes,
+so the Daily Checklist auto-ticks without any human input — true 24/7 per the 7 Principles.
+
+**New files**
+- `status_server.py` — minimal CORS HTTP server on `localhost:8765`, serves `daily_status.json`
+  to the Daily Checklist HTML. Runs silently at startup via Task Scheduler.
+- `ADD_STATUS_SERVER_TASK.bat` — registers status_server.py in Task Scheduler (ONLOGON trigger,
+  30-second delay).
+
+**Agent changes — `_mark_done()` helper added to all 7 agents**
+- `whale_stream_bot.py` — calls `_mark_done("sigbot")` at end of `main()`
+- `whale_stream_strategist.py` — calls `_mark_done("strategist")` at end of `main()`
+- `whale_stream_trader.py` — calls `_mark_done("trader")` at end of `main()`
+- `whale_stream_watchdog.py` — calls `_mark_done("watchdog")` at end of cycle
+- `whale_stream_tracker.py` — calls `_mark_done("tracker")` at end of `main()`
+- `whale_stream_monitor.py` — calls `_mark_done("monitor")` at end of each run
+- `morning_briefing.py` — calls `_mark_done("briefing")` after sending Telegram
+
+Keys written: `sigbot_HH`, `strategist_HH`, `trader_HH`, `watchdog_HH` (HH = 00/04/08/12/16/20),
+`tracker`, `monitor`, `briefing` (always-running — no cycle suffix).
+
+**Daily Checklist.html changes**
+- Added `● LIVE / ○ OFFLINE` badge in topbar showing status server connectivity
+- Polls `http://localhost:8765/daily_status.json` every 30s
+- Auto-ticks matching circles + updates counters + saves to localStorage on receipt
+
+---
+
 ## v46.66 — 2026-06-27 — 7 Principles: Watchdog v2.0 + multi-agent consensus + system constitution
 
 ### WHALE-STREAM Constitution — 7 Principles Embedded System-Wide

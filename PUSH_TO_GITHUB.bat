@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.66 — 7 Principles: Watchdog v2.0 + multi-agent consensus + system constitution"
+git commit -m "v46.67 — Autonomous self-tick: agents mark done in Daily Checklist (status_server + _mark_done)"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...

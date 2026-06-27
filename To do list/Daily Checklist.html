@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily Checklist</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #fff;
+    color: #1a1a1a;
+    font-size: 14px;
+    padding-bottom: 32px;
+  }
+
+  /* ── Top bar ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px 12px;
+    border-bottom: 1px solid #efefef;
+    position: sticky; top: 0; background: #fff; z-index: 10;
+  }
+  .topbar-left { font-size: 15px; font-weight: 600; }
+  .date-chip { font-size: 11px; color: #aaa; }
+
+  /* ── Section header ── */
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px 6px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .section-header:hover { background: #fafafa; }
+  .section-title { font-size: 13px; font-weight: 600; }
+  .section-meta {
+    font-size: 11px; color: #bbb;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .chevron {
+    width: 13px; height: 13px; color: #ccc;
+    transition: transform 0.15s;
+  }
+  .chevron.open { transform: rotate(180deg); }
+
+  /* ── Item list ── */
+  .item-list { padding: 2px 0 8px; }
+  .item-list.hidden { display: none; }
+
+  /* ── Single item ── */
+  .item {
+    display: flex;
+    align-items: flex-start;
+    gap: 11px;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .item:hover { background: #f9f9f9; }
+
+  /* Circle — unchecked */
+  .circle {
+    width: 22px; height: 22px;
+    min-width: 22px;
+    border-radius: 50%;
+    border: 2px solid #d1d5db;
+    background: #fff;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 1px;
+    transition: all 0.15s;
+  }
+  /* Circle — checked */
+  .circle.checked {
+    background: #2563eb;
+    border-color: #2563eb;
+  }
+  .circle.checked::after {
+    content: '';
+    display: block;
+    width: 5px; height: 9px;
+    border: 2.5px solid #fff;
+    border-top: none; border-left: none;
+    transform: rotate(45deg) translate(-1px, -1px);
+  }
+
+  /* Item text block */
+  .item-text { flex: 1; min-width: 0; }
+
+  .item-label {
+    font-size: 13px; font-weight: 500;
+    color: #1a1a1a;
+    line-height: 1.4;
+    transition: all 0.15s;
+  }
+  .item-desc {
+    font-size: 11.5px; color: #6b7280;
+    margin-top: 2px; line-height: 1.5;
+    transition: all 0.15s;
+  }
+  .item-hint {
+    font-size: 11px; color: #2563eb;
+    margin-top: 3px; line-height: 1.5;
+    transition: all 0.15s;
+  }
+
+  /* When done → strikethrough + fade */
+  .item.done .item-label {
+    text-decoration: line-through;
+    color: #9ca3af;
+    font-weight: 400;
+  }
+  .item.done .item-desc { color: #d1d5db; text-decoration: line-through; }
+  .item.done .item-hint { color: #d1d5db; text-decoration: line-through; }
+
+  /* ── Divider ── */
+  .divider { height: 1px; background: #f0f0f0; margin: 4px 0; }
+
+  /* ── Reset row ── */
+  .reset-row {
+    padding: 14px 16px 0;
+    display: flex; justify-content: flex-end;
+  }
+  .reset-btn {
+    font-size: 12px; font-weight: 500;
+    color: #6b7280; background: none;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px; padding: 4px 12px;
+    cursor: pointer;
+  }
+  .reset-btn:hover { background: #f9fafb; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">Progress</div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <span id="status-badge" title="Status server (localhost:8765)" style="font-size:11px;font-weight:500;color:#d1d5db;cursor:default;">○ OFFLINE</span>
+    <div class="date-chip" id="date-chip"></div>
+  </div>
+</div>
+
+<div id="main"></div>
+
+<div class="reset-row">
+  <button class="reset-btn" onclick="resetAll()">↺ Reset all</button>
+</div>
+
+<script>
+// ── Shared 4h cycle tasks ─────────────────────────────────────────
+var cycleItems = [
+  {
+    label: 'SigBot — scan 200 coins',
+    desc:  'Picks best 3 LONG + 2 SHORT setups → posts coin names to Sheet & Telegram at :00',
+    hint:  '📱 Telegram shows exact coins, e.g. BTCUSDT ↑ ETHUSDT ↑ SOLUSDT ↑ | XRPUSDT ↓ ADAUSDT ↓'
+  },
+  {
+    label: 'Strategist — APPROVE / VETO signals',
+    desc:  'Reviews each SigBot pick at :10 → approves strong setups, vetoes weak ones',
+    hint:  '📱 Telegram: "3 of 5 approved at 00:10" — check which coins were accepted'
+  },
+  {
+    label: 'Trader — place approved orders',
+    desc:  'Executes only Strategist-approved signals on Bybit Demo at :20',
+    hint:  '✅ Tick = trade placed  |  Leave empty = all vetoed, nothing traded this cycle'
+  },
+  {
+    label: 'Watchdog — health check & report',
+    desc:  'Audits all agents + Bybit connection + open positions at :30 → 3-tier status',
+    hint:  '🟢 GREEN = all good  |  🟡 AMBER = restart flagged agent in Task Scheduler  |  🔴 CRITICAL = stop & fix now'
+  }
+];
+
+// ── All sections ──────────────────────────────────────────────────
+var SECTIONS = [
+  { id: 's0', title: '00:00 BKK — 4h Cycle', items: cycleItems },
+  { id: 's1', title: '04:00 BKK — 4h Cycle', items: cycleItems },
+  { id: 's2', title: '08:00 BKK — 4h Cycle', items: cycleItems },
+  { id: 's3', title: '12:00 BKK — 4h Cycle', items: cycleItems },
+  { id: 's4', title: '16:00 BKK — 4h Cycle', items: cycleItems },
+  { id: 's5', title: '20:00 BKK — 4h Cycle', items: cycleItems },
+  {
+    id: 's6',
+    title: 'Always running (auto)',
+    items: [
+      {
+        label: 'Tracker — resolves WIN / LOSS',
+        desc:  'Checks all open positions every 30 min → marks trades closed when TP or SL is hit',
+        hint:  '📱 Telegram alert when a trade closes — shows result (WIN/LOSS) + PnL'
+      },
+      {
+        label: 'Monitor — watches Bybit positions',
+        desc:  'Scans Bybit every 2 min for fills, partial fills, or unexpected position changes',
+        hint:  '📱 Telegram alert if a position is filled or changes — no news = running fine'
+      },
+      {
+        label: 'Briefing — 07:00 BKK daily',
+        desc:  'Morning report: P&L recap, win rate, open positions, capital vs Gate target',
+        hint:  '📱 Check Telegram at 07:00 each morning for full overnight summary'
+      }
+    ]
+  }
+];
+
+// ── Build DOM ─────────────────────────────────────────────────────
+var main = document.getElementById('main');
+
+SECTIONS.forEach(function(sec) {
+  var wrap = document.createElement('div');
+  wrap.className = 'section-wrap';
+
+  // Header
+  var hdr = document.createElement('div');
+  hdr.className = 'section-header';
+  hdr.innerHTML =
+    '<span class="section-title">' + sec.title + '</span>' +
+    '<div class="section-meta">' +
+      '<span id="meta-' + sec.id + '">0/' + sec.items.length + '</span>' +
+      '<svg class="chevron" id="chev-' + sec.id + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>' +
+    '</div>';
+  hdr.onclick = function() { toggleSection(sec.id); };
+  wrap.appendChild(hdr);
+
+  // Items
+  var list = document.createElement('div');
+  list.className = 'item-list hidden';
+  list.id = 'list-' + sec.id;
+
+  sec.items.forEach(function(it, ii) {
+    var itemId = sec.id + '-' + ii;
+    var item = document.createElement('div');
+    item.className = 'item';
+    item.id = 'item-' + itemId;
+    item.innerHTML =
+      '<div class="circle" id="circ-' + itemId + '"></div>' +
+      '<div class="item-text">' +
+        '<div class="item-label">' + it.label + '</div>' +
+        '<div class="item-desc">' + it.desc + '</div>' +
+        '<div class="item-hint">' + it.hint + '</div>' +
+      '</div>';
+    item.onclick = function() { tickItem(itemId, sec.id, sec.items.length); };
+    list.appendChild(item);
+  });
+
+  wrap.appendChild(list);
+  wrap.appendChild(Object.assign(document.createElement('div'), { className: 'divider' }));
+  main.appendChild(wrap);
+});
+
+// ── Toggle section ────────────────────────────────────────────────
+function toggleSection(id) {
+  document.getElementById('list-' + id).classList.toggle('hidden');
+  document.getElementById('chev-' + id).classList.toggle('open');
+}
+
+// ── Tick item ─────────────────────────────────────────────────────
+function tickItem(itemId, secId, total) {
+  document.getElementById('item-' + itemId).classList.toggle('done');
+  document.getElementById('circ-' + itemId).classList.toggle('checked');
+  updateMeta(secId, total);
+  save();
+}
+
+// ── Section counter ───────────────────────────────────────────────
+function updateMeta(secId, total) {
+  var done = document.querySelectorAll('#list-' + secId + ' .item.done').length;
+  var el = document.getElementById('meta-' + secId);
+  el.textContent = done + '/' + total;
+  el.style.color = (done === total) ? '#22c55e' : '#bbb';
+}
+
+// ── Reset ─────────────────────────────────────────────────────────
+function resetAll() {
+  document.querySelectorAll('.item').forEach(function(el) { el.classList.remove('done'); });
+  document.querySelectorAll('.circle').forEach(function(el) { el.classList.remove('checked'); });
+  SECTIONS.forEach(function(sec) { updateMeta(sec.id, sec.items.length); });
+  try { localStorage.removeItem(todayKey()); } catch(e) {}
+}
+
+// ── Auto-open current cycle ───────────────────────────────────────
+function openCurrentCycle() {
+  var bkk = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+  var h = bkk.getHours();
+  var slots = [0, 4, 8, 12, 16, 20];
+  var idx = 0;
+  for (var i = slots.length - 1; i >= 0; i--) { if (h >= slots[i]) { idx = i; break; } }
+  ['s' + idx, 's6'].forEach(function(id) {
+    var l = document.getElementById('list-' + id);
+    var c = document.getElementById('chev-' + id);
+    if (l) l.classList.remove('hidden');
+    if (c) c.classList.add('open');
+  });
+}
+
+// ── Date chip ─────────────────────────────────────────────────────
+function todayKey() { return 'ws-daily-' + new Date().toISOString().slice(0, 10); }
+
+document.getElementById('date-chip').textContent = new Date().toLocaleDateString('en-GB', {
+  timeZone: 'Asia/Bangkok', weekday: 'short', day: 'numeric', month: 'short'
+});
+
+// ── Save / load ───────────────────────────────────────────────────
+function save() {
+  var state = {};
+  document.querySelectorAll('.item').forEach(function(el) {
+    state[el.id] = el.classList.contains('done');
+  });
+  try { localStorage.setItem(todayKey(), JSON.stringify(state)); } catch(e) {}
+}
+
+function load() {
+  try {
+    var raw = localStorage.getItem(todayKey());
+    if (!raw) return;
+    var state = JSON.parse(raw);
+    Object.keys(state).forEach(function(id) {
+      if (!state[id]) return;
+      var el = document.getElementById(id);
+      if (el) { el.classList.add('done'); el.querySelector('.circle').classList.add('checked'); }
+    });
+    SECTIONS.forEach(function(sec) { updateMeta(sec.id, sec.items.length); });
+  } catch(e) {}
+}
+
+// ── Status server auto-polling ────────────────────────────────────
+var STATUS_URL = 'http://localhost:8765/daily_status.json';
+var POLL_MS    = 30000; // 30 seconds
+
+// Cycle-agent position within each 4h section (item index)
+var CYCLE_AGENT_IDX = { sigbot: 0, strategist: 1, trader: 2, watchdog: 3 };
+
+// Cycle hour (HH) → section id
+var HH_TO_SEC = { '00': 's0', '04': 's1', '08': 's2', '12': 's3', '16': 's4', '20': 's5' };
+
+// Always-running agents → full item id
+var STATIC_ITEM = { tracker: 'item-s6-0', monitor: 'item-s6-1', briefing: 'item-s6-2' };
+
+function autoTick(itemId, secId, total) {
+  var el = document.getElementById(itemId);
+  if (!el || el.classList.contains('done')) return; // already ticked
+  el.classList.add('done');
+  var c = el.querySelector('.circle');
+  if (c) c.classList.add('checked');
+  updateMeta(secId, total);
+  save();
+}
+
+function applyStatus(data) {
+  if (!data || typeof data !== 'object') return;
+  Object.keys(data).forEach(function(key) {
+    if (key === 'date' || !data[key]) return;
+    // Static agents
+    if (STATIC_ITEM[key]) {
+      autoTick(STATIC_ITEM[key], 's6', SECTIONS[6].items.length);
+      return;
+    }
+    // Cycle agents: agent_HH
+    var parts = key.split('_');
+    if (parts.length === 2) {
+      var agent = parts[0];
+      var hh    = parts[1];
+      var secId = HH_TO_SEC[hh];
+      var idx   = CYCLE_AGENT_IDX[agent];
+      if (secId !== undefined && idx !== undefined) {
+        var secNum = parseInt(secId.slice(1), 10);
+        autoTick('item-' + secId + '-' + idx, secId, SECTIONS[secNum].items.length);
+      }
+    }
+  });
+}
+
+function setBadge(live) {
+  var b = document.getElementById('status-badge');
+  if (!b) return;
+  b.textContent = live ? '● LIVE' : '○ OFFLINE';
+  b.style.color  = live ? '#22c55e' : '#d1d5db';
+}
+
+function pollStatus() {
+  fetch(STATUS_URL + '?t=' + Date.now())
+    .then(function(r) { return r.json(); })
+    .then(function(data) { setBadge(true); applyStatus(data); })
+    .catch(function()   { setBadge(false); });
+  setTimeout(pollStatus, POLL_MS);
+}
+
+// ── Init ─────────────────────────────────────────────────────────
+openCurrentCycle();
+load();
+pollStatus(); // first poll immediately, then every 30s
+</script>
+</body>
+</html>

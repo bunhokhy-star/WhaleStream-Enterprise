@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WHALE-STREAM Reference</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #ffffff;
+    color: #1a1a1a;
+    font-size: 13px;
+    padding: 0;
+  }
+
+  .panel { border-bottom: 1px solid #efefef; }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px 10px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .panel-header:hover { background: #fafafa; }
+
+  .panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1a1a1a;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .chevron {
+    width: 14px; height: 14px;
+    color: #bbb;
+    transition: transform 0.18s ease;
+    flex-shrink: 0;
+  }
+  .chevron.open { transform: rotate(180deg); }
+
+  .panel-body { padding: 4px 16px 14px; }
+  .panel-body.hidden { display: none; }
+
+  /* ── Countdown ── */
+  .countdown {
+    background: #f5f5f5;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .cd-label { font-size: 10px; color: #999; font-weight: 500; }
+  .cd-val { font-size: 17px; font-weight: 700; color: #1a1a1a; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .gate-pill { background: #ede9fe; color: #6d28d9; font-size: 10px; font-weight: 600; padding: 3px 9px; border-radius: 12px; }
+
+  /* ── Balance ── */
+  .bal-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 2px; }
+  .bal-card { background: #f7f7f7; border-radius: 7px; padding: 8px 10px; text-align: center; }
+  .bal-label { font-size: 9px; color: #bbb; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .bal-val { font-size: 15px; font-weight: 700; margin-top: 2px; }
+  .bal-sub { font-size: 9px; color: #ccc; margin-top: 1px; }
+  .amber { color: #d97706; }
+  .red { color: #dc2626; }
+  .neutral { color: #1a1a1a; }
+
+  /* ── Schedule rows ── */
+  .sched-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid #f5f5f5;
+  }
+  .sched-row:last-child { border-bottom: none; }
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    flex-shrink: 0; margin-top: 4px;
+  }
+  .sched-time { font-size: 11px; font-weight: 700; color: #1a1a1a; min-width: 44px; font-variant-numeric: tabular-nums; padding-top: 1px; }
+  .sched-agent { font-size: 12px; font-weight: 600; color: #333; min-width: 70px; }
+  .sched-desc { font-size: 11px; color: #888; line-height: 1.45; flex: 1; }
+
+  /* ── Principles ── */
+  .p-row {
+    display: flex;
+    gap: 9px;
+    align-items: flex-start;
+    padding: 7px 0;
+    border-bottom: 1px solid #f5f5f5;
+  }
+  .p-row:last-child { border-bottom: none; }
+  .p-num {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: #1a1a1a; color: #fff;
+    font-size: 9px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; margin-top: 1px;
+  }
+  .p-title { font-size: 12px; font-weight: 600; color: #1a1a1a; }
+  .p-desc { font-size: 11px; color: #888; margin-top: 1px; line-height: 1.4; }
+
+  /* ── Fix rows ── */
+  .fix-row {
+    display: flex;
+    gap: 9px;
+    align-items: flex-start;
+    padding: 7px 0;
+    border-bottom: 1px solid #f5f5f5;
+  }
+  .fix-row:last-child { border-bottom: none; }
+  .fix-icon { font-size: 13px; flex-shrink: 0; width: 18px; text-align: center; }
+  .fix-title { font-size: 12px; font-weight: 600; color: #1a1a1a; }
+  .fix-desc { font-size: 11px; color: #888; margin-top: 2px; line-height: 1.4; }
+
+  /* ── Security ── */
+  .sec-box {
+    background: #fff8f8; border: 1px solid #fecaca;
+    border-radius: 7px; padding: 9px 11px;
+    font-size: 11px; color: #b91c1c; line-height: 1.6;
+  }
+
+  /* ── Mission ── */
+  .mission-box {
+    background: #f7f7f7; border-radius: 7px;
+    padding: 10px 12px; font-size: 11px;
+    color: #555; line-height: 1.6;
+    font-style: italic; text-align: center;
+  }
+
+  /* ── Version chip ── */
+  .chip {
+    background: #f0f0f0; color: #666;
+    font-size: 10px; font-weight: 600;
+    padding: 2px 7px; border-radius: 10px;
+  }
+
+  svg.icon {
+    width: 14px; height: 14px;
+    stroke: #999; fill: none;
+    stroke-width: 2; flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<div class="panel">
+  <div class="panel-header" style="cursor:default;">
+    <div class="panel-title">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+      WHALE-STREAM
+      <span class="chip">v46.66</span>
+    </div>
+  </div>
+  <div class="panel-body" style="padding-top:0;">
+    <div class="countdown">
+      <div>
+        <div class="cd-label">Jul 1 go-live countdown</div>
+        <div class="cd-val" id="cd">—</div>
+      </div>
+      <div class="gate-pill">Gate 4</div>
+    </div>
+    <div class="bal-row">
+      <div class="bal-card">
+        <div class="bal-label">Balance</div>
+        <div class="bal-val amber">$316</div>
+        <div class="bal-sub">Demo USDT</div>
+      </div>
+      <div class="bal-card">
+        <div class="bal-label">Target</div>
+        <div class="bal-val neutral">$425</div>
+        <div class="bal-sub">Gate 4</div>
+      </div>
+      <div class="bal-card">
+        <div class="bal-label">Gap</div>
+        <div class="bal-val red">−$109</div>
+        <div class="bal-sub">3 days</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Schedule ── -->
+<div class="panel">
+  <div class="panel-header" onclick="toggle('sched')">
+    <div class="panel-title">
+      <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      4h Cycle — Who Does What
+    </div>
+    <svg class="chevron open" id="chev-sched" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+  </div>
+  <div class="panel-body" id="body-sched">
+
+    <div class="sched-row">
+      <div class="dot" style="background:#3b82f6;"></div>
+      <div class="sched-time">:00</div>
+      <div class="sched-agent">SigBot</div>
+      <div class="sched-desc">Scans 200 coins → picks top 3 LONG + 2 SHORT → posts to Sheet + Telegram</div>
+    </div>
+    <div class="sched-row">
+      <div class="dot" style="background:#8b5cf6;"></div>
+      <div class="sched-time">:10</div>
+      <div class="sched-agent">Strategist</div>
+      <div class="sched-desc">Reviews signals vs pattern memory → APPROVE / VETO / REDUCE</div>
+    </div>
+    <div class="sched-row">
+      <div class="dot" style="background:#22c55e;"></div>
+      <div class="sched-time">:20</div>
+      <div class="sched-agent">Trader</div>
+      <div class="sched-desc">Places approved orders on Bybit Demo ($20 × 10x = $200 position)</div>
+    </div>
+    <div class="sched-row">
+      <div class="dot" style="background:#f59e0b;"></div>
+      <div class="sched-time">:30</div>
+      <div class="sched-agent">Watchdog</div>
+      <div class="sched-desc">Checks all 8 agents → 🟢 GREEN / 🟡 AMBER / 🔴 CRITICAL to Telegram</div>
+    </div>
+    <div class="sched-row">
+      <div class="dot" style="background:#f97316;"></div>
+      <div class="sched-time">30m</div>
+      <div class="sched-agent">Tracker</div>
+      <div class="sched-desc">Checks prices → resolves WIN/LOSS → fires Debrief for learning</div>
+    </div>
+    <div class="sched-row">
+      <div class="dot" style="background:#ec4899;"></div>
+      <div class="sched-time">2m</div>
+      <div class="sched-agent">Monitor</div>
+      <div class="sched-desc">Watches Bybit positions → instant TP/SL fill alert (the CMD flash)</div>
+    </div>
+    <div class="sched-row">
+      <div class="dot" style="background:#10b981;"></div>
+      <div class="sched-time">07:00</div>
+      <div class="sched-agent">Briefing</div>
+      <div class="sched-desc">Daily 7 AM BKK Telegram — balance, gate status, open trades</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── 7 Principles ── -->
+<div class="panel">
+  <div class="panel-header" onclick="toggle('principles')">
+    <div class="panel-title">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+      7 Principles — Constitution
+    </div>
+    <svg class="chevron open" id="chev-principles" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+  </div>
+  <div class="panel-body" id="body-principles">
+
+    <div class="p-row"><div class="p-num">P1</div><div><div class="p-title">Clear isolated roles</div><div class="p-desc">Each agent owns one job. Never overlap, never skip.</div></div></div>
+    <div class="p-row"><div class="p-num">P2</div><div><div class="p-title">Continuous 4h schedule</div><div class="p-desc">Bot:00 → Strategist:10 → Trader:20 → Watchdog:30 | Tracker 30m | Monitor 2m | Briefing 07:00</div></div></div>
+    <div class="p-row"><div class="p-num">P3</div><div><div class="p-title">Report after every cycle</div><div class="p-desc">Explicitly state what worked and what didn't. No silent runs.</div></div></div>
+    <div class="p-row"><div class="p-num">P4</div><div><div class="p-title">24/7 proactive Telegram</div><div class="p-desc">Team reports to you. You never need to ask "what's happening?"</div></div></div>
+    <div class="p-row"><div class="p-num">P5</div><div><div class="p-title">Multi-agent consensus</div><div class="p-desc">Debrief cross-checks Strategist decision vs actual trade outcome.</div></div></div>
+    <div class="p-row"><div class="p-num">P6</div><div><div class="p-title">High-risk discipline</div><div class="p-desc">No vague signals. No untested entries. Plan every trade precisely.</div></div></div>
+    <div class="p-row"><div class="p-num">P7</div><div><div class="p-title">Mission — help people</div><div class="p-desc">Every trade generates capital for poor and disadvantaged people.</div></div></div>
+
+  </div>
+</div>
+
+<!-- ── Quick Fixes ── -->
+<div class="panel">
+  <div class="panel-header" onclick="toggle('fixes')">
+    <div class="panel-title">
+      <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      Quick Fix Reference
+    </div>
+    <svg class="chevron open" id="chev-fixes" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+  </div>
+  <div class="panel-body" id="body-fixes">
+
+    <div class="fix-row"><div class="fix-icon">🔴</div><div><div class="fix-title">Trader offline / no orders</div><div class="fix-desc">Run DIAGNOSE_BYBIT.bat → sync clock (right-click clock → Sync now)</div></div></div>
+    <div class="fix-row"><div class="fix-icon">🟡</div><div><div class="fix-title">Trading paused</div><div class="fix-desc">Double-click CLEAR_PAUSE.bat — 5 losses triggered circuit breaker</div></div></div>
+    <div class="fix-row"><div class="fix-icon">⏱</div><div><div class="fix-title">retCode 10002 (clock drift)</div><div class="fix-desc">Right-click clock → Adjust date/time → Sync now</div></div></div>
+    <div class="fix-row"><div class="fix-icon">📊</div><div><div class="fix-title">Sheet prices ≠ real fills</div><div class="fix-desc">Col M = paper price. Col R = Bybit Order ID (real fill only)</div></div></div>
+    <div class="fix-row"><div class="fix-icon">📤</div><div><div class="fix-title">Push code to GitHub</div><div class="fix-desc">Double-click PUSH_TO_GITHUB.bat — current version: v46.66</div></div></div>
+    <div class="fix-row"><div class="fix-icon">🟢</div><div><div class="fix-title">CMD flash every 2 min = normal</div><div class="fix-desc">Monitor script watching for TP/SL fills in real-time</div></div></div>
+
+  </div>
+</div>
+
+<!-- ── Security ── -->
+<div class="panel">
+  <div class="panel-header" onclick="toggle('security')">
+    <div class="panel-title">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+      Security — Never Commit
+    </div>
+    <svg class="chevron" id="chev-security" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+  </div>
+  <div class="panel-body hidden" id="body-security">
+    <div class="sec-box">
+      <strong>local_config.py</strong> — Anthropic key + Telegram + Bybit keys (gitignored)<br>
+      <strong>google_credentials.json</strong> — Sheets access (gitignored)<br>
+      Switch Demo → Live keys inside local_config.py on July 1 only.
+    </div>
+  </div>
+</div>
+
+<!-- ── Mission ── -->
+<div class="panel" style="border-bottom:none;">
+  <div class="panel-body" style="padding-top:12px;">
+    <div class="mission-box">
+      "Every action, every decision, and all work matter immensely —<br>
+      we must succeed to help poor and disadvantaged people."
+    </div>
+  </div>
+</div>
+
+<script>
+  function toggle(id) {
+    var b = document.getElementById('body-' + id);
+    var c = document.getElementById('chev-' + id);
+    b.classList.toggle('hidden');
+    c.classList.toggle('open');
+  }
+
+  function tick() {
+    var diff = new Date('2026-07-01T00:00:00+07:00') - new Date();
+    if (diff <= 0) { document.getElementById('cd').textContent = 'GO LIVE!'; return; }
+    var d = Math.floor(diff/86400000),
+        h = Math.floor(diff%86400000/3600000),
+        m = Math.floor(diff%3600000/60000),
+        s = Math.floor(diff%60000/1000);
+    document.getElementById('cd').textContent =
+      d + 'd ' + String(h).padStart(2,'0') + 'h ' + String(m).padStart(2,'0') + 'm ' + String(s).padStart(2,'0') + 's';
+  }
+  tick();
+  setInterval(tick, 1000);
+</script>
+</body>
+</html>
