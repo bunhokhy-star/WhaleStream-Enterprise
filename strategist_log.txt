@@ -6,3 +6,28 @@
 [2026-06-26 16:10 BKK] No signals to review — no OPEN signals found in last 5h
 [2026-06-26 20:10 BKK] === Strategist run started 2026-06-26 20:10 BKK ===
 [2026-06-26 20:10 BKK] No signals to review — no OPEN signals found in last 5h
+[2026-06-27 09:39 BKK] === Strategist run started 2026-06-27 09:39 BKK ===
+[2026-06-27 09:39 BKK] ⚠ Circuit breaker ACTIVE — decisions will still be written but Trader is paused
+[2026-06-27 09:39 BKK] No signals to review — no OPEN signals found in last 26h
+[2026-06-27 09:58 BKK] === Strategist run started 2026-06-27 09:58 BKK ===
+[2026-06-27 09:58 BKK] No signals to review — no OPEN signals found in last 26h
+[2026-06-27 10:07 BKK] === Strategist run started 2026-06-27 10:07 BKK ===
+[2026-06-27 10:07 BKK] No signals to review — no OPEN signals found in last 26h
+[2026-06-27 12:10 BKK] === Strategist run started 2026-06-27 12:10 BKK ===
+[2026-06-27 12:10 BKK] ⚠ Circuit breaker ACTIVE — decisions will still be written but Trader is paused
+[2026-06-27 12:10 BKK] No signals to review — no OPEN signals found in last 26h
+[2026-06-27 16:10 BKK] === Strategist run started 2026-06-27 16:10 BKK ===
+[2026-06-27 16:10 BKK] ⚠ Circuit breaker ACTIVE — decisions will still be written but Trader is paused
+[2026-06-27 16:10 BKK] No signals to review — no OPEN signals found in last 26h
+[2026-06-27 19:36 BKK] === Strategist run started 2026-06-27 19:36 BKK ===
+[2026-06-27 19:36 BKK] ✗ Google Sheets connection failed: module 'gspread' has no attribute 'authorize'
+[2026-06-27 19:43 BKK] === Strategist run started 2026-06-27 19:43 BKK ===
+[2026-06-27 19:43 BKK] ✗ Google Sheets connection failed: module 'gspread' has no attribute 'Client'
+[2026-06-27 19:56 BKK] === Strategist run started 2026-06-27 19:56 BKK ===
+[2026-06-27 19:56 BKK] ✗ Google Sheets connection failed: module 'gspread' has no attribute 'service_account'
+[2026-06-27 20:10 BKK] === Strategist run started 2026-06-27 20:10 BKK ===
+[2026-06-27 20:10 BKK] No signals to review — no OPEN signals found in last 26h
+[2026-06-27 20:11 BKK] === Strategist run started 2026-06-27 20:11 BKK ===
+[2026-06-27 20:11 BKK] ✗ Google Sheets connection failed: No module named 'gspread.auth'
+[2026-06-27 20:23 BKK] === Strategist run started 2026-06-27 20:23 BKK ===
+[2026-06-27 20:23 BKK] ✗ Google Sheets connection failed: No module named 'gspread.auth'

@@ -1,5 +1,13 @@
 {
   "date": "2026-06-27",
   "monitor": true,
-  "tracker": true
+  "tracker": true,
+  "sigbot_08": true,
+  "sigbot_12": true,
+  "watchdog_12": true,
+  "sigbot_16": true,
+  "watchdog_16": true,
+  "sigbot_20": true,
+  "trader_20": true,
+  "watchdog_20": true
 }

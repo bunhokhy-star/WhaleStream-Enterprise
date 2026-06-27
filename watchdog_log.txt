@@ -125,3 +125,102 @@ AMBER ALERT:
 ✅ Watchdog alert sent to Telegram.
 
 [2026-06-27 08:30 BKK] Watchdog complete.
+
+┌─────────────────────────────────────────────────────┐
+│  🐋 WHALE-STREAM MISSION                            │
+│  Build trust through discipline. Earn live capital. │
+│  This system belongs to the whole team.             │
+└─────────────────────────────────────────────────────┘
+   Balance: $329.97  |  3d to Go-Live  |  Target: $425 (Gate 4)
+
+[2026-06-27 12:30 BKK] === Watchdog run started ===
+✅ SigBot       last: 12:04 BKK  (26m ago)
+✅ Strategist   last: 12:10 BKK  (20m ago)
+✅ Trader       last: 12:20 BKK  (10m ago)
+
+==================================================
+AMBER ALERT:
+🟡 <b>WHALE-STREAM WATCHDOG — Issues Detected</b>
+🕐 2026-06-27 12:30 BKK
+
+<b>⚠️ Problems found this cycle:</b>
+🚨 <b>CIRCUIT BREAKER ACTIVE</b> — all orders are paused
+→ FIX: Double-click CLEAR_PAUSE.bat to resume trading
+→ Or delete the file: C:\Users\MAX\WhaleStream\paused.flag
+→ Review trader_log.txt to understand WHY the circuit breaker fired
+
+<b>Agent Status:</b>
+  ✅ SigBot       last: 12:04 BKK  (26m ago)
+  ✅ Strategist   last: 12:10 BKK  (20m ago)
+  ✅ Trader       last: 12:20 BKK  (10m ago)
+
+💰 Balance: $329.97
+✅ Watchdog alert sent to Telegram.
+   ✓ Status logged → watchdog_12
+
+[2026-06-27 12:30 BKK] Watchdog complete.
+
+┌─────────────────────────────────────────────────────┐
+│  🐋 WHALE-STREAM MISSION                            │
+│  Build trust through discipline. Earn live capital. │
+│  This system belongs to the whole team.             │
+└─────────────────────────────────────────────────────┘
+   Balance: $329.99  |  3d to Go-Live  |  Target: $425 (Gate 4)
+
+[2026-06-27 16:30 BKK] === Watchdog run started ===
+✅ SigBot       last: 16:05 BKK  (25m ago)
+✅ Strategist   last: 16:10 BKK  (20m ago)
+✅ Trader       last: 16:20 BKK  (10m ago)
+
+==================================================
+AMBER ALERT:
+🟡 <b>WHALE-STREAM WATCHDOG — Issues Detected</b>
+🕐 2026-06-27 16:30 BKK
+
+<b>⚠️ Problems found this cycle:</b>
+🚨 <b>CIRCUIT BREAKER ACTIVE</b> — all orders are paused
+→ FIX: Double-click CLEAR_PAUSE.bat to resume trading
+→ Or delete the file: C:\Users\MAX\WhaleStream\paused.flag
+→ Review trader_log.txt to understand WHY the circuit breaker fired
+
+<b>Agent Status:</b>
+  ✅ SigBot       last: 16:05 BKK  (25m ago)
+  ✅ Strategist   last: 16:10 BKK  (20m ago)
+  ✅ Trader       last: 16:20 BKK  (10m ago)
+
+💰 Balance: $329.99
+✅ Watchdog alert sent to Telegram.
+   ✓ Status logged → watchdog_16
+
+[2026-06-27 16:30 BKK] Watchdog complete.
+
+┌─────────────────────────────────────────────────────┐
+│  🐋 WHALE-STREAM MISSION                            │
+│  Build trust through discipline. Earn live capital. │
+│  This system belongs to the whole team.             │
+└─────────────────────────────────────────────────────┘
+   Balance: $329.99  |  3d to Go-Live  |  Target: $425 (Gate 4)
+
+[2026-06-27 20:30 BKK] === Watchdog run started ===
+✅ SigBot       last: 20:05 BKK  (25m ago)
+✅ Strategist   last: 20:10 BKK  (20m ago)
+✅ Trader       last: 20:23 BKK  (7m ago)
+
+✅ All agents healthy.
+🟢 <b>WHALE-STREAM — 4h Cycle Complete</b>
+🕐 2026-06-27 20:30 BKK
+
+<b>Agent Status:</b>
+  ✅ SigBot       — last run 20:05 BKK
+  ✅ Strategist   — last run 20:10 BKK
+  ✅ Trader       — last run 20:23 BKK
+  ✅ Tracker      — every 30 min
+  ✅ Monitor      — every 2 min
+
+💰 Balance: $329.99  (updated 2026-06-27 20:23 BKK)
+
+🐋 All systems running. Next cycle in ~4h.
+✅ Watchdog alert sent to Telegram.
+   ✓ Status logged → watchdog_20
+
+[2026-06-27 20:30 BKK] Watchdog complete.

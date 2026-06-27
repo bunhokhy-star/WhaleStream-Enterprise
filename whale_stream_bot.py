@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v46.62  —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v46.71  —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 coins from CoinGecko (free, no key)     ║
@@ -857,20 +857,20 @@ def fetch_signal_graveyard():
     This creates a self-improving feedback loop — Claude learns from its own
     recent performance before generating new signals.
     """
-    import gspread
-    from google.oauth2.service_account import Credentials
-
     try:
         creds_path = os.path.join(SCRIPT_DIR, GOOGLE_CREDENTIALS_FILE)
         if not os.path.exists(creds_path):
             return "", 50
 
-        scopes = [
+        # Use google.oauth2 directly — bypasses gspread.auth which fails on some Python 3.14 setups
+        from google.oauth2.service_account import Credentials as _GCreds
+        import gspread as _gspread
+        _SCOPES = [
             "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
+            "https://www.googleapis.com/auth/drive",
         ]
-        creds  = Credentials.from_service_account_file(creds_path, scopes=scopes)
-        client = gspread.authorize(creds)
+        creds = _GCreds.from_service_account_file(creds_path, scopes=_SCOPES)
+        client = _gspread.Client(auth=creds)
         sheet  = client.open_by_key(GOOGLE_SHEET_ID).sheet1
 
         all_rows = sheet.get_all_values()
@@ -2026,8 +2026,6 @@ def log_to_google_sheets(data, bkk_time):
              TP1 | TP2 | TP3 | TP4 | Pattern | Timestamp |
              Status | Entry Price | Exit Price | TP Hit | P&L % | Resolved At
     """
-    import gspread
-    from google.oauth2.service_account import Credentials
     print("📝 Logging to Google Sheets...")
 
     timestamp = bkk_time.strftime("%Y-%m-%d %H:%M")
@@ -2040,12 +2038,15 @@ def log_to_google_sheets(data, bkk_time):
             f"Please copy it to: {SCRIPT_DIR}"
         )
 
-    scopes = [
+    # Use google.oauth2 directly — bypasses gspread.auth which fails on some Python 3.14 setups
+    from google.oauth2.service_account import Credentials as _GCreds
+    import gspread as _gspread
+    _SCOPES = [
         "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
+        "https://www.googleapis.com/auth/drive",
     ]
-    creds  = Credentials.from_service_account_file(creds_path, scopes=scopes)
-    client = gspread.authorize(creds)
+    creds = _GCreds.from_service_account_file(creds_path, scopes=_SCOPES)
+    client = _gspread.Client(auth=creds)
     sheet  = client.open_by_key(GOOGLE_SHEET_ID).sheet1
 
     HEADERS = [
@@ -2138,8 +2139,11 @@ def log_to_google_sheets(data, bkk_time):
     # ── end top-3 filter ─────────────────────────────────────────────────
 
     if all_signals:
-        # ── Dedup: skip same coin+direction already OPEN today ───
-        today_str = bkk_time.strftime("%Y-%m-%d")
+        # ── Dedup: skip same coin+direction already OPEN in last 4h ──
+        # Using 4h window (not "today") so stale signals from earlier cycles
+        # don't block fresh entry zones from new bot runs.
+        from datetime import timedelta as _td
+        _cutoff_str = (bkk_time - _td(hours=4)).strftime("%Y-%m-%d %H:%M")
         existing_rows = sheet.get_all_values()[1:]  # skip header
         # Count resolved trades for Gate 1 progress
         _gate1_resolved = sum(
@@ -2152,13 +2156,14 @@ def log_to_google_sheets(data, bkk_time):
         )
         already_open = set()
         for r in existing_rows:
-            if len(r) >= 12 and r[11] == "OPEN" and r[10].startswith(today_str):
-                coin_key = r[0].upper()
-                # r[1] is like "🟢 Long" or "🔴 Short"
-                dir_key  = "LONG" if "Long" in r[1] else "SHORT"
-                already_open.add(f"{coin_key}_{dir_key}")
+            if len(r) >= 12 and r[11] == "OPEN" and len(r[10]) >= 16:
+                if r[10][:16] >= _cutoff_str:   # logged within last 4h
+                    coin_key = r[0].upper()
+                    # r[1] is like "🟢 Long" or "🔴 Short"
+                    dir_key  = "LONG" if "Long" in r[1] else "SHORT"
+                    already_open.add(f"{coin_key}_{dir_key}")
         if already_open:
-            print(f"   ℹ Skipping duplicates (coin+direction) already OPEN today: {len(already_open)} combos")
+            print(f"   ℹ Skipping duplicates (coin+direction) already OPEN in last 4h: {len(already_open)} combos")
         # ─────────────────────────────────────────────────────────
         def _parse_entry_mid(entry_zone):
             """Return midpoint of a range like '$435-$445', or single value."""
@@ -2183,7 +2188,7 @@ def log_to_google_sheets(data, bkk_time):
             direction = s.get("direction", "")
             combo_key = f"{coin.upper()}_{direction.upper()}"
             if combo_key in already_open:
-                continue   # same coin + same direction already OPEN today
+                continue   # same coin + same direction already OPEN in last 4h
             signal_emoji = "🟢 Long" if direction == "LONG" else "🔴 Short"
 
             # ── SHORT coin blocklist (code-level enforcement) ──────────

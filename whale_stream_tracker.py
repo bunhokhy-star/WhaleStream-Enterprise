@@ -342,17 +342,18 @@ def check_result(direction, entry, sl, tp1, tp2, tp3, tp4, current_price):
 # GOOGLE SHEETS CONNECTION
 # ─────────────────────────────────────────────────────────────
 def connect_sheet():
-    from google.oauth2.service_account import Credentials
-    import gspread
     creds_path = os.path.join(SCRIPT_DIR, GOOGLE_CREDENTIALS_FILE)
     if not os.path.exists(creds_path):
         raise FileNotFoundError(f"google_credentials.json not found in {SCRIPT_DIR}")
-    scopes = [
+    # Use google.oauth2 directly — bypasses gspread.auth which fails on some Python 3.14 setups
+    from google.oauth2.service_account import Credentials as _GCreds
+    import gspread as _gspread
+    _SCOPES = [
         "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
+        "https://www.googleapis.com/auth/drive",
     ]
-    creds  = Credentials.from_service_account_file(creds_path, scopes=scopes)
-    client = gspread.authorize(creds)
+    creds = _GCreds.from_service_account_file(creds_path, scopes=_SCOPES)
+    client = _gspread.Client(auth=creds)
     return client.open_by_key(GOOGLE_SHEET_ID).sheet1
 
 

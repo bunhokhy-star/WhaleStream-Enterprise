@@ -86,3 +86,109 @@ SyntaxError: unexpected character after line continuation character
     f"  ⛔ Vetoed: {', '.join(f\"{v['coin']} {v['direction']}\" for v in regime_vetoed)}"
                                ^
 SyntaxError: unexpected character after line continuation character
+
+╔══════════════════════════════════════════════════════╗
+║   🧠  WHALE-STREAM STRATEGIST v1.3                  ║
+║   Signal Quality Council — APPROVE / VETO / REDUCE  ║
+╚══════════════════════════════════════════════════════╝
+
+
+┌─────────────────────────────────────────────────────┐
+│  🐋 WHALE-STREAM MISSION                            │
+│  Build trust through discipline. Earn live capital. │
+│  This system belongs to the whole team.             │
+└─────────────────────────────────────────────────────┘
+   Balance: $329.97  |  3d to Go-Live  |  Target: $425 (Gate 4)
+
+[2026-06-27 09:39 BKK] === Strategist run started 2026-06-27 09:39 BKK ===
+[2026-06-27 09:39 BKK] ⚠ Circuit breaker ACTIVE — decisions will still be written but Trader is paused
+   ⚠ Note: paused.flag exists — Trader is paused but Strategist will still run
+📊 Loading portfolio state...
+   Balance: $329.97  Drawdown: 34.0%
+   Open positions: 1
+
+📋 Loading signals from Google Sheets...
+   ✓ Found 0 OPEN signal(s) from last bot run (within 26h)
+[2026-06-27 09:39 BKK] No signals to review — no OPEN signals found in last 26h
+
+   No signals to review. Bot may not have run yet or no signals generated.
+   ✓ Decisions written → strategist_decisions.json
+
+╔══════════════════════════════════════════════════════╗
+║   🧠  WHALE-STREAM STRATEGIST v1.3                  ║
+║   Signal Quality Council — APPROVE / VETO / REDUCE  ║
+╚══════════════════════════════════════════════════════╝
+
+
+┌─────────────────────────────────────────────────────┐
+│  🐋 WHALE-STREAM MISSION                            │
+│  Build trust through discipline. Earn live capital. │
+│  This system belongs to the whole team.             │
+└─────────────────────────────────────────────────────┘
+   Balance: $329.97  |  3d to Go-Live  |  Target: $425 (Gate 4)
+
+[2026-06-27 12:10 BKK] === Strategist run started 2026-06-27 12:10 BKK ===
+[2026-06-27 12:10 BKK] ⚠ Circuit breaker ACTIVE — decisions will still be written but Trader is paused
+   ⚠ Note: paused.flag exists — Trader is paused but Strategist will still run
+📊 Loading portfolio state...
+   Balance: $329.97  Drawdown: 34.0%
+   Open positions: 1
+
+📋 Loading signals from Google Sheets...
+   ✓ Found 0 OPEN signal(s) from last bot run (within 26h)
+[2026-06-27 12:10 BKK] No signals to review — no OPEN signals found in last 26h
+
+   No signals to review. Bot may not have run yet or no signals generated.
+   ✓ Decisions written → strategist_decisions.json
+
+╔══════════════════════════════════════════════════════╗
+║   🧠  WHALE-STREAM STRATEGIST v1.3                  ║
+║   Signal Quality Council — APPROVE / VETO / REDUCE  ║
+╚══════════════════════════════════════════════════════╝
+
+
+┌─────────────────────────────────────────────────────┐
+│  🐋 WHALE-STREAM MISSION                            │
+│  Build trust through discipline. Earn live capital. │
+│  This system belongs to the whole team.             │
+└─────────────────────────────────────────────────────┘
+   Balance: $329.97  |  3d to Go-Live  |  Target: $425 (Gate 4)
+
+[2026-06-27 16:10 BKK] === Strategist run started 2026-06-27 16:10 BKK ===
+[2026-06-27 16:10 BKK] ⚠ Circuit breaker ACTIVE — decisions will still be written but Trader is paused
+   ⚠ Note: paused.flag exists — Trader is paused but Strategist will still run
+📊 Loading portfolio state...
+   Balance: $329.97  Drawdown: 34.0%
+   Open positions: 1
+
+📋 Loading signals from Google Sheets...
+   ✓ Found 0 OPEN signal(s) from last bot run (within 26h)
+[2026-06-27 16:10 BKK] No signals to review — no OPEN signals found in last 26h
+
+   No signals to review. Bot may not have run yet or no signals generated.
+   ✓ Decisions written → strategist_decisions.json
+
+╔══════════════════════════════════════════════════════╗
+║   🧠  WHALE-STREAM STRATEGIST v1.3                  ║
+║   Signal Quality Council — APPROVE / VETO / REDUCE  ║
+╚══════════════════════════════════════════════════════╝
+
+
+┌─────────────────────────────────────────────────────┐
+│  🐋 WHALE-STREAM MISSION                            │
+│  Build trust through discipline. Earn live capital. │
+│  This system belongs to the whole team.             │
+└─────────────────────────────────────────────────────┘
+   Balance: $329.99  |  3d to Go-Live  |  Target: $425 (Gate 4)
+
+[2026-06-27 20:10 BKK] === Strategist run started 2026-06-27 20:10 BKK ===
+📊 Loading portfolio state...
+   Balance: $329.99  Drawdown: 34.0%
+   Open positions: 1
+
+📋 Loading signals from Google Sheets...
+   ✓ Found 0 OPEN signal(s) from last bot run (within 26h)
+[2026-06-27 20:10 BKK] No signals to review — no OPEN signals found in last 26h
+
+   No signals to review. Bot may not have run yet or no signals generated.
+   ✓ Decisions written → strategist_decisions.json

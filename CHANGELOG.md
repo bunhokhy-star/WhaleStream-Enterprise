@@ -1,5 +1,99 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.73 — 2026-06-27 — CRITICAL FIX: bypass gspread.auth entirely (google.oauth2 direct)
+
+### Bug Fixed: `No module named 'gspread.auth'` on Python 3.14 — definitive fix
+- Root cause: `gspread/auth.py` EXISTS but fails to load at runtime on this Python 3.14 setup
+  (likely a dependency inside auth.py is incompatible). Python 3.14 reports the failure as
+  `No module named 'gspread.auth'` even though the file is present.
+- **Definitive fix**: bypass `gspread.auth` ENTIRELY — use `google.oauth2.service_account.Credentials`
+  directly with `gspread.Client(auth=creds)`. This path:
+  - Does NOT import `gspread.auth` at all
+  - Uses `google.oauth2` (stable, part of google-auth) directly
+  - Passes credentials to `gspread.Client` which creates an `AuthorizedSession`
+- All 9 affected Python files updated (10 locations total):
+  - `whale_stream_trader.py` — connect_sheet()
+  - `whale_stream_strategist.py` — connect_sheet()
+  - `whale_stream_bot.py` — graveyard loader + log_to_google_sheets() (2 locations)
+  - `whale_stream_tracker.py` — connect_sheet()
+  - `morning_briefing.py`, `check_bybit_orphans.py`, `audit_open_signals.py`,
+    `analyze_shorts.py`, `repair_pnl_history.py`
+- `test_gspread.bat` updated to test both old and new approach at runtime
+
+---
+
+## v46.72 — 2026-06-27 — CRITICAL FIX: gspread submodule import (final fix for Sheets auth)
+
+### Bug Fixed: gspread.service_account() also not exported at top level on Python 3.14
+- Root cause confirmed: on this Python 3.14 + gspread v6 installation, `gspread.__init__.py`
+  does NOT re-export `service_account` from `gspread.auth`, so all top-level API calls fail
+- Previous fix in v46.71 used `gspread.Client(auth=creds)` → also failed (same reason)
+- **Definitive fix**: `from gspread.auth import service_account as _gspread_sa`
+  — imports DIRECTLY from the submodule where the function is defined, bypasses __init__ entirely
+- All 9 affected files now use the direct submodule import:
+  - `whale_stream_trader.py` — connect_sheet() + log() calls added for visibility
+  - `whale_stream_strategist.py` — connect_sheet()
+  - `whale_stream_bot.py` — graveyard loader + log_to_google_sheets() (2 locations)
+  - `whale_stream_tracker.py` — connect_sheet()
+  - `check_bybit_orphans.py`, `audit_open_signals.py`, `analyze_shorts.py`,
+    `morning_briefing.py`, `repair_pnl_history.py`
+- Evidence: strategist_log.txt showed 3 consecutive different errors across 3 cycles:
+  `gspread.authorize` → `gspread.Client` → `gspread.service_account` — all failed at top level
+
+---
+
+## v46.71 — 2026-06-27 — CRITICAL FIX: gspread.authorize() removed in gspread v6
+
+### Bug Fixed: All agents crash on Google Sheets connect (gspread v6 API break)
+- `gspread.authorize(creds)` was removed in gspread v6 — replaced with `gspread.Client(auth=creds)`
+- All 10 affected files updated:
+  - `whale_stream_trader.py` (line 738 — `connect_sheet()`)
+  - `whale_stream_strategist.py` (line 183 — `connect_sheet()`)
+  - `whale_stream_bot.py` (lines 873 + 2048 — main connect + graveyard loader)
+  - `whale_stream_tracker.py` (line 355 — `connect_sheet()`)
+  - `morning_briefing.py`, `check_bybit_orphans.py`, `audit_open_signals.py`,
+    `analyze_shorts.py`, `repair_pnl_history.py`
+- This was the root cause of 0 trades placed even after the v46.70 CB grace period fix
+
+---
+
+## v46.70 — 2026-06-27 — CRITICAL FIX: circuit breaker grace period (CB deadlock broken)
+
+### Bug Fixed: Trader immediately re-created paused.flag after every manual clear
+- `whale_stream_trader.py` — added **CB grace period** system
+- Root cause: `check_circuit_breaker()` returned True (same old LOSS streak) every time the
+  Trader ran, so it re-created `paused.flag` before placing any orders, making manual clears
+  completely useless
+- Fix: `RUN_FULL_CYCLE_NOW.bat` and `CLEAR_PAUSE.bat` now write `cb_grace.txt` (UTC timestamp)
+  when clearing the CB. The Trader reads this file and, if it was written within the last 60
+  minutes, skips re-creating `paused.flag` and proceeds with trading
+- After the grace run, any NEW consecutive losses will correctly re-trigger the CB
+- `RUN_FULL_CYCLE_NOW.bat` — added `cb_grace.txt` write step (Python one-liner)
+- `CLEAR_PAUSE.bat` — added `cb_grace.txt` write step after user confirms YES
+
+### Cascade effect: this was the final piece blocking ALL trading since 10:07 BKK
+The chain was: manual clear → Trader runs → CB still met → re-creates paused.flag → returns
+without placing orders → Tracker sees paused.flag → sends alert → next Watchdog also alerts
+→ repeated every 30 min. Now fixed.
+
+---
+
+## v46.69 — 2026-06-27 — CRITICAL FIX: duplicate skip window 24h → 4h
+
+### Bug Fixed: Bot blocking fresh signals all day (root cause of pipeline deadlock)
+- `whale_stream_bot.py` — duplicate skip logic changed from "same coin OPEN **today**" to
+  "same coin OPEN in the **last 4 hours**"
+- Previously: any coin logged at e.g. 02:08 BKK would be blocked from re-entry at 12:08, 16:08,
+  20:08 — even after its entry zone had expired hours ago
+- Now: only signals logged within the rolling 4h window are treated as duplicates, matching
+  the actual 4h cycle cadence
+- String-comparison approach used for efficiency: `r[10][:16] >= cutoff_str` compares
+  ISO timestamps lexicographically (safe because format is `YYYY-MM-DD HH:MM`)
+- This was the primary reason Strategist consistently found 0 OPEN signals despite bot running
+  every 4 hours — stale signals from earlier the same day blocked every fresh signal
+
+---
+
 ## v46.68 — 2026-06-27 — Full automation: 3-layer gap detection + morning briefing coverage report
 
 ### Gap Detection Layer 3 — Morning Briefing overnight coverage

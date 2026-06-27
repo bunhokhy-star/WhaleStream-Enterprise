@@ -464,12 +464,15 @@ def parse_yesterday_pnl():
         creds_path = os.path.join(BASE_DIR, GOOGLE_CREDENTIALS_FILE)
         if not os.path.exists(creds_path):
             return None
-        scopes = [
+        # Use google.oauth2 directly — bypasses gspread.auth which fails on some Python 3.14 setups
+        from google.oauth2.service_account import Credentials as _GCreds
+        import gspread as _gspread
+        _SCOPES = [
             "https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive",
         ]
-        creds  = Credentials.from_service_account_file(creds_path, scopes=scopes)
-        client = gspread.authorize(creds)
+        creds = _GCreds.from_service_account_file(creds_path, scopes=_SCOPES)
+        client = _gspread.Client(auth=creds)
         sheet  = client.open_by_key(GOOGLE_SHEET_ID).sheet1
         rows   = sheet.get_all_values()
     except Exception:

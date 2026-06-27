@@ -121,13 +121,15 @@ def get_sheet_signals():
             __import__(mod)
         except ImportError:
             subprocess.check_call([sys.executable, "-m", "pip", "install", pkg, "--quiet"])
-    from google.oauth2.service_account import Credentials
-    import gspread
-    creds  = Credentials.from_service_account_file(
-        GOOGLE_CREDENTIALS_FILE,
-        scopes=["https://www.googleapis.com/auth/spreadsheets",
-                "https://www.googleapis.com/auth/drive"])
-    client = gspread.authorize(creds)
+    # Use google.oauth2 directly — bypasses gspread.auth which fails on some Python 3.14 setups
+    from google.oauth2.service_account import Credentials as _GCreds
+    import gspread as _gspread
+    _SCOPES = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+    creds = _GCreds.from_service_account_file(GOOGLE_CREDENTIALS_FILE, scopes=_SCOPES)
+    client = _gspread.Client(auth=creds)
     sheet  = client.open_by_key(GOOGLE_SHEET_ID).sheet1
     rows   = sheet.get_all_values()[1:]
 

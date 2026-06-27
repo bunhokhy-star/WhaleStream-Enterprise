@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.68 — Full automation: 3-layer gap detection + morning briefing overnight coverage report"
+git commit -m "v46.73 — CRITICAL FIX: bypass gspread.auth entirely — google.oauth2 direct + gspread.Client (10 locations, 9 files)"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...

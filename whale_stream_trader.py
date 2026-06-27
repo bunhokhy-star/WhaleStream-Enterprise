@@ -725,17 +725,18 @@ def place_partial_closes(symbol, entry_side, qty, tp1_price, tp_high_price, info
 # ─────────────────────────────────────────────────────────────
 
 def connect_sheet():
-    from google.oauth2.service_account import Credentials
-    import gspread
     creds_path = os.path.join(SCRIPT_DIR, GOOGLE_CREDENTIALS_FILE)
     if not os.path.exists(creds_path):
         raise FileNotFoundError(f"google_credentials.json not found in {SCRIPT_DIR}")
-    scopes = [
+    # Use google.oauth2 directly — bypasses gspread.auth which fails on some Python 3.14 setups
+    from google.oauth2.service_account import Credentials as _GCreds
+    import gspread as _gspread
+    _SCOPES = [
         "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
+        "https://www.googleapis.com/auth/drive",
     ]
-    creds  = Credentials.from_service_account_file(creds_path, scopes=scopes)
-    client = gspread.authorize(creds)
+    creds = _GCreds.from_service_account_file(creds_path, scopes=_SCOPES)
+    client = _gspread.Client(auth=creds)
     return client.open_by_key(GOOGLE_SHEET_ID).sheet1
 
 
@@ -830,7 +831,9 @@ def main():
     print("\n📋 Loading signals from Google Sheets...")
     try:
         sheet = connect_sheet()
+        log("Google Sheets connected OK")
     except Exception as e:
+        log(f"Google Sheets FAILED: {e}")
         print(f"   ✗ Google Sheets error: {e}")
         return
 
@@ -846,28 +849,68 @@ def main():
         _cb_threshold = 5
         log(f"REPAIR MODE active — circuit breaker threshold raised to {_cb_threshold}")
     # ──────────────────────────────────────────────────────────
+
+    # ── CB grace period: did operator recently clear the CB? ──
+    # When RUN_FULL_CYCLE_NOW.bat or CLEAR_PAUSE.bat clears paused.flag,
+    # it also writes cb_grace.txt. We respect that override for 60 minutes
+    # so the Trader gets ONE real run before the CB can re-arm. Without
+    # this, the Trader would immediately re-create paused.flag from the
+    # same stale LOSS streak, making manual clears completely ineffective.
+    _cb_grace_active = False
+    _cb_grace_file   = os.path.join(SCRIPT_DIR, "cb_grace.txt")
+    try:
+        if os.path.exists(_cb_grace_file):
+            import json as _cbgj
+            with open(_cb_grace_file, "r") as _cbgf:
+                _grace_data = _cbgj.load(_cbgf)
+            _grace_ts = datetime.fromisoformat(_grace_data.get("cleared_at", ""))
+            # fromisoformat returns UTC-aware if string ends with +00:00
+            _now_utc  = datetime.now(timezone.utc)
+            if _grace_ts.tzinfo is None:
+                _grace_ts = _grace_ts.replace(tzinfo=timezone.utc)
+            _grace_age_min = (_now_utc - _grace_ts).total_seconds() / 60
+            if _grace_age_min < 60:
+                _cb_grace_active = True
+                log(f"CB grace period active — cleared {_grace_age_min:.0f}min ago by operator")
+                print(f"   ⚡ CB grace period active ({_grace_age_min:.0f}min ago) — overriding streak check")
+    except Exception as _gex:
+        pass  # grace file unreadable — treat as no grace
+
     if check_circuit_breaker(data_rows, threshold=_cb_threshold):
-        # Write the flag so future runs also halt until manually cleared
-        try:
-            bkk_now_flag = datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d %H:%M BKK")
-            with open(PAUSED_FILE, "w", encoding="utf-8") as f:
-                f.write(f"PAUSED by circuit breaker at {bkk_now_flag}\n"
-                        f"Last {_cb_threshold} resolved trades were all LOSS.\n"
-                        f"Delete this file or run CLEAR_PAUSE.bat to resume trading.\n")
-        except Exception:
-            pass
-        msg = (f"🚨 <b>CIRCUIT BREAKER TRIGGERED — TRADER NOW PAUSED</b>\n"
-               f"  Last {_cb_threshold} resolved trades all resolved as LOSS.\n"
-               f"  Possible bad market regime or systematic issue.\n"
-               f"  ⛔ No new orders placed this run.\n"
-               f"  To resume: review the situation, then run CLEAR_PAUSE.bat")
-        print(f"\n🚨 CIRCUIT BREAKER TRIGGERED!")
-        print(f"   Last {_cb_threshold} resolved trades all LOSS — auto-pausing trader.")
-        print("   Written: paused.flag")
-        print("   → Run CLEAR_PAUSE.bat after reviewing the situation to resume.")
-        send_telegram_alert(msg)
-        log(f"CIRCUIT BREAKER — last {_cb_threshold} trades all LOSS, trader PAUSED")
-        return
+        if _cb_grace_active:
+            # Operator cleared the CB — let this ONE run place orders
+            _grace_msg = (
+                f"⚡ <b>CB GRACE OVERRIDE — TRADING THIS CYCLE</b>\n"
+                f"  Last {_cb_threshold} resolved trades were LOSS, but you recently cleared the CB.\n"
+                f"  Placing orders this run as operator override.\n"
+                f"  CB will re-arm on the NEXT cycle if the loss streak continues."
+            )
+            print(f"\n⚡ CB GRACE OVERRIDE — operator cleared CB recently, proceeding with trading.")
+            send_telegram_alert(_grace_msg)
+            log(f"CB GRACE OVERRIDE — trading despite {_cb_threshold} consecutive LOSSes (operator cleared {_grace_age_min:.0f}min ago)")
+            # Fall through to normal trading below
+        else:
+            # Standard CB behavior — write flag and pause
+            try:
+                bkk_now_flag = datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d %H:%M BKK")
+                with open(PAUSED_FILE, "w", encoding="utf-8") as f:
+                    f.write(f"PAUSED by circuit breaker at {bkk_now_flag}\n"
+                            f"Last {_cb_threshold} resolved trades were all LOSS.\n"
+                            f"Delete this file or run CLEAR_PAUSE.bat to resume trading.\n")
+            except Exception:
+                pass
+            msg = (f"🚨 <b>CIRCUIT BREAKER TRIGGERED — TRADER NOW PAUSED</b>\n"
+                   f"  Last {_cb_threshold} resolved trades all resolved as LOSS.\n"
+                   f"  Possible bad market regime or systematic issue.\n"
+                   f"  ⛔ No new orders placed this run.\n"
+                   f"  To resume: review the situation, then run CLEAR_PAUSE.bat")
+            print(f"\n🚨 CIRCUIT BREAKER TRIGGERED!")
+            print(f"   Last {_cb_threshold} resolved trades all LOSS — auto-pausing trader.")
+            print("   Written: paused.flag")
+            print("   → Run CLEAR_PAUSE.bat after reviewing the situation to resume.")
+            send_telegram_alert(msg)
+            log(f"CIRCUIT BREAKER — last {_cb_threshold} trades all LOSS, trader PAUSED")
+            return
 
     # BKK time now (UTC+7)
     bkk_now = datetime.now(timezone(timedelta(hours=7)))

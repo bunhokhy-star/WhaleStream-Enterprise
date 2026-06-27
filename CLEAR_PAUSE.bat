@@ -27,8 +27,10 @@ set /p CONFIRM=Type YES to clear the pause (or anything else to cancel):
 
 if /i "%CONFIRM%"=="YES" (
     del "%FLAG_FILE%"
+    python -c "import json,datetime; f=open(r'C:\Users\MAX\WhaleStream\cb_grace.txt','w'); f.write(json.dumps({'cleared_at':datetime.datetime.now(datetime.timezone.utc).isoformat()})); f.close()"
     echo.
-    echo  ✅ Pause cleared. Trader will place orders on next scheduled run.
+    echo  ✅ Pause cleared. Grace period written ^(60min^).
+    echo     Trader will place orders on next run without re-triggering CB.
     echo     Next run: check Task Scheduler or wait for the 4-hour cycle.
 ) else (
     echo.

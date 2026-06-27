@@ -172,15 +172,16 @@ def send_telegram(msg):
 
 
 def connect_sheet():
-    from google.oauth2.service_account import Credentials
-    import gspread
     creds_path = os.path.join(SCRIPT_DIR, GOOGLE_CREDENTIALS_FILE)
-    scopes = [
+    # Use google.oauth2 directly — bypasses gspread.auth which fails on some Python 3.14 setups
+    from google.oauth2.service_account import Credentials as _GCreds
+    import gspread as _gspread
+    _SCOPES = [
         "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
+        "https://www.googleapis.com/auth/drive",
     ]
-    creds  = Credentials.from_service_account_file(creds_path, scopes=scopes)
-    client = gspread.authorize(creds)
+    creds = _GCreds.from_service_account_file(creds_path, scopes=_SCOPES)
+    client = _gspread.Client(auth=creds)
     return client.open_by_key(GOOGLE_SHEET_ID).sheet1
 
 
@@ -834,7 +835,7 @@ def main():
             f"{bias_emoji2} <b>REGIME FILTER: {market_bias}</b>\n"
             f"  BTC is {abs(btc_pct_sma):.1f}% {'below' if market_bias == 'BEARISH' else 'above'} 20-period 4h SMA\n"
             f"  {len(regime_vetoed)} signal(s) vetoed — trading only WITH the trend.\n"
-            f"  ⛔ Vetoed: {', '.join(f\"{v['coin']} {v['direction']}\" for v in regime_vetoed)}"
+            f"  ⛔ Vetoed: {', '.join(v['coin'] + ' ' + v['direction'] for v in regime_vetoed)}"
         )
         return
 
