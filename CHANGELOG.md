@@ -1,5 +1,18 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.75 — 2026-06-27 — FIX: _mark_done() missing on early-exit paths (Daily Checklist gaps)
+
+### Bug Fixed: Strategist + Trader never ticked Daily Checklist on early-exit paths
+- **Root cause**: `whale_stream_strategist.py` exits early (`return`) when no signals are found
+  (line 761), BEFORE reaching `_mark_done("strategist")` at line 933. So the Strategist never
+  wrote `strategist_XX` to `daily_status.json` on zero-signal cycles — causing 3/4 in checklist.
+- **Fix**: Added `_mark_done("strategist")` immediately before the early return in the no-signals
+  path so the Strategist always ticks, even when it has nothing to review.
+- **Second bug**: `whale_stream_trader.py` also exits early when circuit breaker is ACTIVE
+  (line 812), before reaching `_mark_done("trader")`. Trader would not tick when paused.
+- **Fix**: Added `_mark_done("trader")` before the circuit-breaker early return.
+- **Impact**: Starting with next cycle, Daily Checklist will show 4/4 on the 4h cycles.
+
 ## v46.74 — 2026-06-27 — FIX: RUN_FULL_CYCLE_NOW.bat wrong Python + stale version strings
 
 ### Bug Fixed: RUN_FULL_CYCLE_NOW.bat used bare `python` → resolved to Cowork hermes venv

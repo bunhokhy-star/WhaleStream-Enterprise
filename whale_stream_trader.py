@@ -809,6 +809,7 @@ def main():
         print("   → Delete 'paused.flag' or run CLEAR_PAUSE.bat to resume.")
         send_telegram_alert(msg)
         log("PAUSED — circuit breaker flag present, skipping all orders")
+        _mark_done("trader")
         return
 
     # ── Low balance warning ────────────────────────────────────

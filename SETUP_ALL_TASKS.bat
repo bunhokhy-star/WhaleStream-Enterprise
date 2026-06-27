@@ -162,6 +162,18 @@ if %ERRORLEVEL% NEQ 0 echo    WARNING: LogAnalyzer failed. Run as administrator!
 echo    OK: daily at 07:00 (log health report)
 echo.
 
+:: ── STEP 8d: STATUS SERVER — at login ────────────────────────────────
+echo [8d] Registering WhaleStream-StatusServer (on login, port 8765)...
+schtasks /Create ^
+  /TN "WhaleStream-StatusServer" ^
+  /TR "cmd.exe /c \"C:\Users\MAX\WhaleStream\run_status_server.bat\"" ^
+  /SC ONLOGON ^
+  /DELAY 0000:30 ^
+  /F
+if %ERRORLEVEL% NEQ 0 echo    WARNING: StatusServer failed. Run as administrator!
+echo    OK: starts 30s after login (serves daily_status.json to Daily Checklist HTML)
+echo.
+
 :: ── STEP 9: Verify all tasks ─────────────────────────────────────────
 echo [9/9] Verifying registered tasks...
 echo.

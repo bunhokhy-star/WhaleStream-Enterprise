@@ -1,2 +1,2 @@
-@echo off 
-start "" /B pythonw "C:\Users\MAX\WhaleStream\status_server.py" 
+@echo off
+start "" /B "C:\Users\MAX\AppData\Local\Python\bin\pythonw.exe" "C:\Users\MAX\WhaleStream\status_server.py"

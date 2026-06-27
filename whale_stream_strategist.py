@@ -758,6 +758,7 @@ def main():
             "reduced_count":  0,
         }
         write_decisions(empty)
+        _mark_done("strategist")
         return
 
     # ── Build per-coin trade history ─────────────────────────────

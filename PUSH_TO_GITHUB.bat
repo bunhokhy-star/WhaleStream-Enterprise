@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.74 — FIX: RUN_FULL_CYCLE_NOW.bat Python path (hermes venv root cause) + stale v46.62 version strings in bot.py"
+git commit -m "v46.75 — FIX: _mark_done() missing on early-exit paths in strategist.py + trader.py (Daily Checklist 3/4 → 4/4)"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...
