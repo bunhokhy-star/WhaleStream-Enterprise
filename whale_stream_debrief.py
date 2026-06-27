@@ -24,6 +24,19 @@ Each trade dict must have:
     outcome (WIN/LOSS), tp_hit, pnl
 """
 
+# ══════════════════════════════════════════════════════════════════
+# WHALE-STREAM CONSTITUTION — 7 PRINCIPLES (applies to every agent)
+# ══════════════════════════════════════════════════════════════════
+# P1  Clear isolated roles — each agent owns one job, never another's
+# P2  Continuous 4h schedule — Bot:00 Strategist:10 Trader:20 Watchdog:30
+#     Tracker every 30m | Monitor every 2m | Briefing 07:00 daily
+# P3  Report after every cycle — state what worked and what didn't
+# P4  24/7 proactive Telegram — never wait for the human to ask
+# P5  Multi-agent consensus — Debrief cross-checks Strategist vs actual outcome
+# P6  High-risk discipline — no vague signals; plan every entry precisely
+# P7  Mission — every trade generates capital to help those in need
+# ══════════════════════════════════════════════════════════════════
+
 import os
 import io
 import sys
@@ -58,10 +71,11 @@ except ImportError:
 
 DEBRIEF_MODEL = "claude-haiku-4-5-20251001"   # fast + cheap for short analysis
 
-SCRIPT_DIR       = os.path.dirname(os.path.abspath(__file__))
-MEMORY_FILE      = os.path.join(SCRIPT_DIR, "pattern_memory.json")
-LOG_FILE         = os.path.join(SCRIPT_DIR, "debrief_log.txt")
-MAX_MEMORY_ITEMS = 200   # keep last 200 debriefs in memory file
+SCRIPT_DIR          = os.path.dirname(os.path.abspath(__file__))
+MEMORY_FILE         = os.path.join(SCRIPT_DIR, "pattern_memory.json")
+STRATEGIST_FILE     = os.path.join(SCRIPT_DIR, "strategist_decisions.json")
+LOG_FILE            = os.path.join(SCRIPT_DIR, "debrief_log.txt")
+MAX_MEMORY_ITEMS    = 200   # keep last 200 debriefs in memory file
 
 # ═══════════════════════════════════════════════════════════════
 # HELPERS
@@ -224,6 +238,52 @@ RESPOND IN JSON ONLY. No prose. No explanation outside the JSON:
 }"""
 
 
+# ═══════════════════════════════════════════════════════════════
+# MULTI-AGENT CONSENSUS LAYER  (Principle 5)
+# Cross-reference Strategist's pre-trade call vs actual outcome.
+# ═══════════════════════════════════════════════════════════════
+
+def load_strategist_decision(coin, direction):
+    """
+    Load the Strategist's last decision for this coin+direction.
+    Returns a dict with keys: decision, confidence, reasoning — or None.
+    """
+    try:
+        with open(STRATEGIST_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        for d in data.get("decisions", []):
+            if (d.get("coin", "").upper() == coin.upper()
+                    and d.get("direction", "").upper() == direction.upper()):
+                return d
+    except Exception:
+        pass
+    return None
+
+
+def consensus_verdict(strat_decision, outcome):
+    """
+    Given the Strategist's pre-trade call and the actual outcome,
+    return a short verdict for the debrief context.
+    """
+    if not strat_decision:
+        return "No Strategist decision found for this trade (may have pre-dated Strategist)."
+
+    action = strat_decision.get("action", strat_decision.get("decision", "UNKNOWN")).upper()
+    if "APPROVE" in action:
+        if outcome == "WIN":
+            return f"✅ CONSENSUS VALIDATED — Strategist APPROVED, trade WON. Reinforce this assessment pattern."
+        else:
+            return f"❌ CONSENSUS MISS — Strategist APPROVED but trade LOST. Review approval logic for this setup."
+    elif "VETO" in action:
+        if outcome == "WIN":
+            return f"⚠️ VETO WAS WRONG — Strategist VETOED but trade would have WON. Review veto criteria."
+        else:
+            return f"✅ VETO SAVED US — Strategist VETOED and trade would have LOST. Veto logic validated."
+    elif "REDUCE" in action:
+        return f"📉 STRATEGIST REDUCED SIZE — outcome was {outcome}."
+    return f"Strategist action: {action} | Outcome: {outcome}"
+
+
 def build_debrief_prompt(trade):
     """Build the user message for Claude Haiku debrief."""
     coin      = trade.get("coin", "?")
@@ -242,6 +302,20 @@ def build_debrief_prompt(trade):
     if pnl:
         outcome_detail += f" — P&L: {pnl:+.1f}%"
 
+    # ── Multi-agent consensus layer (Principle 5) ─────────────
+    strat_decision = load_strategist_decision(coin, direction)
+    consensus      = consensus_verdict(strat_decision, outcome)
+    strat_note     = ""
+    if strat_decision:
+        action    = strat_decision.get("action", strat_decision.get("decision", "?"))
+        reasoning = strat_decision.get("reasoning", strat_decision.get("reason", ""))
+        strat_note = (
+            f"\nStrategist Pre-Trade Call:\n"
+            f"  Action:    {action}\n"
+            f"  Reasoning: {reasoning}\n"
+            f"  Consensus: {consensus}"
+        )
+
     return f"""Trade to debrief:
   Coin:       {coin}
   Direction:  {direction}
@@ -250,14 +324,15 @@ def build_debrief_prompt(trade):
   Entry:      {entry:.6g}
   Exit:       {exit_price:.6g}
   Outcome:    {outcome_detail}
-
+{strat_note}
 Context:
   We use 10× leverage on Bybit demo.
   A+ entries move immediately to TP2+. Poor entries sit near entry or reverse before recovering.
   Our known loser patterns: RS failure, dead cat bounce, meme continuation, "Continuation breakout" standalone.
   Our known winner patterns: Stage 5 distribution collapse (SHORT), Stage 2 expansion (LONG).
+  If Strategist was WRONG (approved a loser / vetoed a winner), your lesson should address WHY.
 
-Analyse this trade. Return JSON only."""
+Analyse this trade including the Strategist consensus. Return JSON only."""
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -332,6 +407,10 @@ def run_debrief(trades):
 
         log(f"   Debriefing {coin} {direction} {outcome}...")
 
+        # Load Strategist context for consensus (Principle 5)
+        strat_decision = load_strategist_decision(coin, direction)
+        consensus_note = consensus_verdict(strat_decision, outcome)
+
         prompt = build_debrief_prompt(trade)
         result = call_debrief_claude(prompt)
 
@@ -358,6 +437,9 @@ def run_debrief(trades):
             "lesson":        result.get("lesson", ""),
             "flag":          result.get("flag", "NEUTRAL"),
             "debrief_at":    now,
+            # Multi-agent consensus (Principle 5)
+            "strat_action":  strat_decision.get("action", "") if strat_decision else "",
+            "consensus":     consensus_note,
         }
 
         memory["debriefs"].append(entry)
@@ -373,16 +455,18 @@ def run_debrief(trades):
     save_memory(memory)
     log(f"✓ pattern_memory.json updated — {len(memory['debriefs'])} total debriefs")
 
-    # ── Telegram summary (ops channel) ────────────────────────
-    lines = [f"🧠 <b>DEBRIEF COMPLETE</b> — {len(debriefs_written)} trade(s) analysed"]
+    # ── Telegram summary (ops channel) — multi-agent consensus ──
+    lines = [f"🧠 <b>TEAM DEBRIEF</b> — {len(debriefs_written)} trade(s) | Multi-Agent Consensus"]
     for d in debriefs_written:
         icon      = "✅" if d["outcome"] == "WIN" else "❌"
         flag_icon = "🔁" if d["flag"] == "REINFORCE" else ("🚫" if d["flag"] == "AVOID" else "➡️")
         pnl_str   = f"{d['pnl']:+.1f}%" if d.get("pnl") else ""
+        consensus = d.get("consensus", "")
         lines.append(
             f"  {icon} <b>{d['coin']} {d['direction']}</b> [{d['entry_quality']}] {pnl_str}\n"
             f"  Why: {d['why']}\n"
-            f"  {flag_icon} Lesson: {d['lesson']}"
+            f"  {flag_icon} Lesson: {d['lesson']}\n"
+            f"  🤝 {consensus}"
         )
     send_telegram("\n".join(lines))
 

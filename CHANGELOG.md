@@ -1,5 +1,51 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.66 — 2026-06-27 — 7 Principles: Watchdog v2.0 + multi-agent consensus + system constitution
+
+### WHALE-STREAM Constitution — 7 Principles Embedded System-Wide
+
+The team's 7 operating principles are now embedded as a `WHALE-STREAM CONSTITUTION` comment block
+in **every agent file** (all 8 scripts). This ensures that every agent is coded with full
+awareness of the team's rules, mission, and operating discipline.
+
+| # | File | Change |
+|---|------|--------|
+| 1 | whale_stream_bot.py | Added CONSTITUTION block (P1–P7) |
+| 2 | whale_stream_strategist.py | Added CONSTITUTION block (P1–P7) |
+| 3 | whale_stream_trader.py | Added CONSTITUTION block (P1–P7) |
+| 4 | whale_stream_tracker.py | Added CONSTITUTION block (P1–P7) |
+| 5 | whale_stream_monitor.py | Added CONSTITUTION block (P1–P7) |
+| 6 | whale_stream_debrief.py | Added CONSTITUTION block (P1–P7) |
+| 7 | morning_briefing.py | Added CONSTITUTION block (P1–P7) |
+| 8 | whale_stream_watchdog.py | CONSTITUTION already embedded in v2.0 rewrite (this release) |
+
+### Watchdog v2.0 — 3-Tier Reporting (GREEN / AMBER / CRITICAL)
+
+Complete rewrite of `whale_stream_watchdog.py` implementing Principles 3, 4, and 6:
+
+| # | Change |
+|---|--------|
+| 1 | **GREEN report** sent every cycle when all agents healthy — confirms the team is alive (P3/P4) |
+| 2 | **AMBER alert** sent when any agent is behind — includes exact step-by-step fix instructions per agent |
+| 3 | **CRITICAL escalation** when Trader has been down >8 hours — 5-step immediate action list sent via Telegram |
+| 4 | `check_trader()` uses any BKK-formatted timestamp as fallback (not only "RUN COMPLETE") for more robust detection |
+| 5 | Per-agent fix messages: `FIX_BOT`, `FIX_STRATEGIST`, `FIX_TRADER`, `FIX_PAUSED` — human-readable action steps |
+
+### Multi-Agent Consensus — Debrief Cross-Checks Strategist (P5)
+
+Added to `whale_stream_debrief.py`:
+
+| # | Change |
+|---|--------|
+| 1 | `STRATEGIST_FILE` constant pointing to `strategist_decisions.json` |
+| 2 | `load_strategist_decision(coin, direction)` — looks up what the Strategist decided before the trade |
+| 3 | `consensus_verdict(strat_decision, outcome)` — 4 outcomes: VALIDATED / MISS / VETO WRONG / VETO SAVED US |
+| 4 | `build_debrief_prompt()` now injects Strategist's pre-trade reasoning into Claude's analysis context |
+| 5 | Pattern memory entries now include `strat_action` and `consensus` fields |
+| 6 | Telegram Debrief summary shows `🤝 [consensus verdict]` per trade |
+
+---
+
 ## v46.65 — 2026-06-27 — Fix retCode 10002 (PC clock drift causing all Bybit auth failures)
 
 ### Root Cause of 40+ Hour Trading Blackout

@@ -17,6 +17,19 @@
 ╚══════════════════════════════════════════════════════════════╝
 """
 
+# ══════════════════════════════════════════════════════════════════
+# WHALE-STREAM CONSTITUTION — 7 PRINCIPLES (applies to every agent)
+# ══════════════════════════════════════════════════════════════════
+# P1  Clear isolated roles — each agent owns one job, never another's
+# P2  Continuous 4h schedule — Bot:00 Strategist:10 Trader:20 Watchdog:30
+#     Tracker every 30m | Monitor every 2m | Briefing 07:00 daily
+# P3  Report after every cycle — state what worked and what didn't
+# P4  24/7 proactive Telegram — never wait for the human to ask
+# P5  Multi-agent consensus — Debrief cross-checks Strategist vs actual outcome
+# P6  High-risk discipline — no vague signals; plan every entry precisely
+# P7  Mission — every trade generates capital to help those in need
+# ══════════════════════════════════════════════════════════════════
+
 import io
 import sys
 import os

@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.65 — Fix retCode 10002: dynamic clock calibration against Bybit server time"
+git commit -m "v46.66 — 7 Principles: Watchdog v2.0 + multi-agent consensus + system constitution"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...
