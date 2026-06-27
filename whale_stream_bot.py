@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v46.71  —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v46.74  —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 coins from CoinGecko (free, no key)     ║
@@ -864,13 +864,18 @@ def fetch_signal_graveyard():
 
         # Use google.oauth2 directly — bypasses gspread.auth which fails on some Python 3.14 setups
         from google.oauth2.service_account import Credentials as _GCreds
-        import gspread as _gspread
+        try:
+            from gspread.client import Client as _GClient
+        except ImportError:
+            import subprocess as _sp
+            _sp.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "gspread", "--quiet"])
+            from gspread.client import Client as _GClient
         _SCOPES = [
             "https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive",
         ]
         creds = _GCreds.from_service_account_file(creds_path, scopes=_SCOPES)
-        client = _gspread.Client(auth=creds)
+        client = _GClient(auth=creds)
         sheet  = client.open_by_key(GOOGLE_SHEET_ID).sheet1
 
         all_rows = sheet.get_all_values()
@@ -1795,7 +1800,7 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     shorts = data.get("shorts", [])
 
     lines = []
-    lines.append(f"🐳 WHALE-STREAM v46.62")
+    lines.append(f"🐳 WHALE-STREAM v46.74")
     lines.append(f"📅 {ts}")
 
     # ── Market regime summary ─────────────────────────────────
@@ -2040,13 +2045,18 @@ def log_to_google_sheets(data, bkk_time):
 
     # Use google.oauth2 directly — bypasses gspread.auth which fails on some Python 3.14 setups
     from google.oauth2.service_account import Credentials as _GCreds
-    import gspread as _gspread
+    try:
+        from gspread.client import Client as _GClient
+    except ImportError:
+        import subprocess as _sp
+        _sp.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "gspread", "--quiet"])
+        from gspread.client import Client as _GClient
     _SCOPES = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
     ]
     creds = _GCreds.from_service_account_file(creds_path, scopes=_SCOPES)
-    client = _gspread.Client(auth=creds)
+    client = _GClient(auth=creds)
     sheet  = client.open_by_key(GOOGLE_SHEET_ID).sheet1
 
     HEADERS = [
@@ -2339,7 +2349,7 @@ def log_to_google_sheets(data, bkk_time):
 def main():
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🐳  WHALE-STREAM v46.62 — AUTO BOT STARTING    ║")
+    print("║   🐳  WHALE-STREAM v46.74 — AUTO BOT STARTING    ║")
     print("╚══════════════════════════════════════════════════╝")
     # Check conservative flag early so we can show it in the startup banner
     _short_conservative_early = os.path.exists(os.path.join(SCRIPT_DIR, "short_conservative.flag"))

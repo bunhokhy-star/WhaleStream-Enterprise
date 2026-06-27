@@ -108,13 +108,13 @@ def main():
 
     # Use google.oauth2 directly — bypasses gspread.auth which fails on some Python 3.14 setups
     from google.oauth2.service_account import Credentials as _GCreds
-    import gspread as _gspread
+    from gspread.client import Client as _GClient
     _SCOPES = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
     ]
     creds = _GCreds.from_service_account_file(GOOGLE_CREDENTIALS_FILE, scopes=_SCOPES)
-    gc = _gspread.Client(auth=creds)
+    gc = _GClient(auth=creds)
     sh = gc.open_by_key(GOOGLE_SHEET_ID)
     ws = sh.get_worksheet(0)
 

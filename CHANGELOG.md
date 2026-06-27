@@ -1,5 +1,25 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.74 — 2026-06-27 — FIX: RUN_FULL_CYCLE_NOW.bat wrong Python + stale version strings
+
+### Bug Fixed: RUN_FULL_CYCLE_NOW.bat used bare `python` → resolved to Cowork hermes venv
+- Root cause: `RUN_FULL_CYCLE_NOW.bat` previously used bare `python` command which resolved
+  to `C:\Users\MAX\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe` (Cowork's
+  internal venv). This venv has no `pip`, an old gspread without `gspread.client` submodule,
+  and cannot self-heal. The Task Scheduler bat files were fine (already used full paths) but
+  the manual trigger bat was broken.
+- **Fix**: Updated all 4 Python calls in `RUN_FULL_CYCLE_NOW.bat` to use the full path:
+  `"C:\Users\MAX\AppData\Local\Python\bin\python.exe"` — same Python used by Task Scheduler
+- Confirmed via Run 4: full cycle completed without errors, Google Sheets connected,
+  Strategist ran (0 vetoes), Trader ran (0 orders — all 6 signals had existing positions)
+
+### Fix: stale version strings in whale_stream_bot.py
+- `whale_stream_bot.py` had `v46.62` hardcoded in 2 locations (Telegram output line 1803
+  and startup banner line 2352) even after header was bumped to v46.71 in v46.71 release
+- Both corrected to v46.74
+
+---
+
 ## v46.73 — 2026-06-27 — CRITICAL FIX: bypass gspread.auth entirely (google.oauth2 direct)
 
 ### Bug Fixed: `No module named 'gspread.auth'` on Python 3.14 — definitive fix

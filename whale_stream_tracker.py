@@ -347,13 +347,18 @@ def connect_sheet():
         raise FileNotFoundError(f"google_credentials.json not found in {SCRIPT_DIR}")
     # Use google.oauth2 directly — bypasses gspread.auth which fails on some Python 3.14 setups
     from google.oauth2.service_account import Credentials as _GCreds
-    import gspread as _gspread
+    try:
+        from gspread.client import Client as _GClient
+    except ImportError:
+        import subprocess as _sp, sys as _sys
+        _sp.check_call([_sys.executable, "-m", "pip", "install", "--upgrade", "gspread", "--quiet"])
+        from gspread.client import Client as _GClient
     _SCOPES = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
     ]
     creds = _GCreds.from_service_account_file(creds_path, scopes=_SCOPES)
-    client = _gspread.Client(auth=creds)
+    client = _GClient(auth=creds)
     return client.open_by_key(GOOGLE_SHEET_ID).sheet1
 
 

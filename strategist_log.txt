@@ -31,3 +31,11 @@
 [2026-06-27 20:11 BKK] ✗ Google Sheets connection failed: No module named 'gspread.auth'
 [2026-06-27 20:23 BKK] === Strategist run started 2026-06-27 20:23 BKK ===
 [2026-06-27 20:23 BKK] ✗ Google Sheets connection failed: No module named 'gspread.auth'
+[2026-06-27 20:37 BKK] === Strategist run started 2026-06-27 20:37 BKK ===
+[2026-06-27 20:37 BKK] ✗ Google Sheets connection failed: module 'gspread' has no attribute 'Client'
+[2026-06-27 20:41 BKK] === Strategist run started 2026-06-27 20:41 BKK ===
+[2026-06-27 20:41 BKK] ✗ Google Sheets connection failed: No module named 'gspread.client'
+[2026-06-27 20:43 BKK] === Strategist run started 2026-06-27 20:43 BKK ===
+[2026-06-27 20:43 BKK] ✗ Google Sheets connection failed: Command '['C:\\Users\\MAX\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe', '-m', 'pip', 'install', '--upgrade', 'gspread', '--quiet']' returned non-zero exit status 1.
+[2026-06-27 20:55 BKK] === Strategist run started 2026-06-27 20:55 BKK ===
+[2026-06-27 20:55 BKK] No signals to review — no OPEN signals found in last 26h

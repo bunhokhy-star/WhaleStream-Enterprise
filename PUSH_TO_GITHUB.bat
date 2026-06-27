@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.73 — CRITICAL FIX: bypass gspread.auth entirely — google.oauth2 direct + gspread.Client (10 locations, 9 files)"
+git commit -m "v46.74 — FIX: RUN_FULL_CYCLE_NOW.bat Python path (hermes venv root cause) + stale v46.62 version strings in bot.py"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...

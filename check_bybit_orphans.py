@@ -123,13 +123,13 @@ def get_sheet_signals():
             subprocess.check_call([sys.executable, "-m", "pip", "install", pkg, "--quiet"])
     # Use google.oauth2 directly — bypasses gspread.auth which fails on some Python 3.14 setups
     from google.oauth2.service_account import Credentials as _GCreds
-    import gspread as _gspread
+    from gspread.client import Client as _GClient
     _SCOPES = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
     ]
     creds = _GCreds.from_service_account_file(GOOGLE_CREDENTIALS_FILE, scopes=_SCOPES)
-    client = _gspread.Client(auth=creds)
+    client = _GClient(auth=creds)
     sheet  = client.open_by_key(GOOGLE_SHEET_ID).sheet1
     rows   = sheet.get_all_values()[1:]
 

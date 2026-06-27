@@ -31,7 +31,7 @@ IF EXIST "%DIR%\paused.flag" (
     echo [0] No circuit breaker active.
 )
 :: Write cb_grace.txt so Trader won't re-create paused.flag this run
-python -c "import json,datetime; f=open(r'%DIR%\cb_grace.txt','w'); f.write(json.dumps({'cleared_at':datetime.datetime.now(datetime.timezone.utc).isoformat()})); f.close()"
+"C:\Users\MAX\AppData\Local\Python\bin\python.exe" -c "import json,datetime; f=open(r'%DIR%\cb_grace.txt','w'); f.write(json.dumps({'cleared_at':datetime.datetime.now(datetime.timezone.utc).isoformat()})); f.close()"
 echo     Grace period written ^(60min^ — Trader will trade even if loss streak detected^).
 echo.
 
@@ -39,7 +39,7 @@ echo.
 echo [1] Running Bot ^(scanning 200 coins for signals^)...
 echo     This takes ~2-3 minutes. Watch Telegram for signal alert.
 echo.
-python "%DIR%\whale_stream_bot.py"
+"C:\Users\MAX\AppData\Local\Python\bin\python.exe" "%DIR%\whale_stream_bot.py"
 echo.
 echo     [Bot complete]
 echo.
@@ -48,7 +48,7 @@ echo.
 echo [2] Running Strategist ^(Claude reviewing signals^)...
 echo     This takes ~30-60 seconds. Watch Telegram for approval report.
 echo.
-python "%DIR%\whale_stream_strategist.py"
+"C:\Users\MAX\AppData\Local\Python\bin\python.exe" "%DIR%\whale_stream_strategist.py"
 echo.
 echo     [Strategist complete]
 echo.
@@ -57,7 +57,7 @@ echo.
 echo [3] Running Trader ^(placing approved orders on Bybit Demo^)...
 echo     Watch Telegram for order placement alerts.
 echo.
-python "%DIR%\whale_stream_trader.py"
+"C:\Users\MAX\AppData\Local\Python\bin\python.exe" "%DIR%\whale_stream_trader.py"
 echo.
 echo     [Trader complete]
 echo.
