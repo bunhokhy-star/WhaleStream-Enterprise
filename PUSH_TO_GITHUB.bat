@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.67 — Autonomous self-tick: agents mark done in Daily Checklist (status_server + _mark_done)"
+git commit -m "v46.68 — Full automation: 3-layer gap detection + morning briefing overnight coverage report"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...

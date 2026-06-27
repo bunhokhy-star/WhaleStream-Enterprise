@@ -519,6 +519,49 @@ def parse_yesterday_pnl():
 # BUILD MESSAGE
 # ─────────────────────────────────────────────────────────────
 
+def _agent_coverage_section():
+    """
+    Read daily_status.json and return overnight agent coverage lines.
+    At 07:00 BKK the 00:xx and 04:xx cycles should have all 4 agents done.
+    """
+    status_path = os.path.join(BASE_DIR, "daily_status.json")
+    try:
+        with open(status_path, encoding="utf-8") as _f:
+            _data = json.load(_f)
+        _today = datetime.now(BKK).date().isoformat()
+        if _data.get("date") != _today:
+            return "  ⏳ No data yet for today (first cycle hasn't run)"
+    except Exception:
+        return "  ⚠ daily_status.json missing — is status_server running?"
+
+    _cycle_agents   = ["sigbot", "strategist", "trader", "watchdog"]
+    _overnight      = ["00", "04"]   # cycles that should be done by 07:00 BKK
+    _lines          = []
+    _any_gap        = False
+
+    for _hh in _overnight:
+        _missing = [_a for _a in _cycle_agents if not _data.get(f"{_a}_{_hh}")]
+        if not _missing:
+            _lines.append(f"  ✅ {_hh}:xx — all 4 agents completed")
+        else:
+            _any_gap = True
+            _lines.append(f"  ❌ {_hh}:xx — MISSED: {', '.join(_missing)}")
+            _lines.append(f"     → Task Scheduler → find the agent → right-click → Run")
+
+    # Always-running
+    _static_gaps = [_a for _a in ["tracker", "monitor"] if not _data.get(_a)]
+    if not _static_gaps:
+        _lines.append("  ✅ Tracker & Monitor active")
+    else:
+        _any_gap = True
+        _lines.append(f"  ❌ NOT seen today: {', '.join(_static_gaps)}")
+
+    if not _any_gap:
+        _lines.insert(0, "  All overnight agents confirmed ✓")
+
+    return "\n".join(_lines)
+
+
 def build_message():
     now_bkk   = datetime.now(BKK)
     date_str  = now_bkk.strftime("%Y-%m-%d %H:%M BKK")
@@ -748,6 +791,13 @@ def build_message():
         "",
         f"🔄 Monitor: {monitor_status}",
         f"🤖 Trader:  {trader_status}",
+    ]
+
+    # ── Layer 3 gap detection — overnight agent coverage ──────────
+    lines += [
+        "",
+        "🤖 OVERNIGHT AGENT COVERAGE",
+        _agent_coverage_section(),
     ]
 
     return "\n".join(lines)

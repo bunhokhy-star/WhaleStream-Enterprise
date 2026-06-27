@@ -1,5 +1,29 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.68 — 2026-06-27 — Full automation: 3-layer gap detection + morning briefing coverage report
+
+### Gap Detection Layer 3 — Morning Briefing overnight coverage
+- `morning_briefing.py` — new `_agent_coverage_section()` helper reads `daily_status.json` at 07:00 BKK
+  and appends `🤖 OVERNIGHT AGENT COVERAGE` section to the daily Telegram briefing
+- Shows ✅ or ❌ for each overnight cycle (00:xx, 04:xx) and for Tracker/Monitor
+- If any agent missed its cycle, the briefing names it and tells the operator to check Task Scheduler
+- This is the 3rd and final detection layer (no missed cycle can survive all three)
+
+### Gap Detection Layer 2 — Status Gap Checker (every 4h at :45)
+- `check_daily_status.py` — new script, runs every 4h, reads `daily_status.json`,
+  computes which agents should have completed by that time, sends ✅ all-green or
+  ⚠️ gap alert to Telegram ops channel, with exact agent names + Task Scheduler task IDs
+- `ADD_STATUS_CHECK_TASK.bat` — registers `WhaleStream-StatusCheck` (00:45, repeat every 4h)
+
+### Full 3-layer gap detection now active
+```
+Layer 1 — Watchdog      :30 every cycle  → logs last-seen timestamps
+Layer 2 — StatusCheck   :45 every cycle  → daily_status.json completions → Telegram alert
+Layer 3 — MorningBrief  07:00 daily      → overnight summary in Telegram briefing
+```
+
+---
+
 ## v46.67 — 2026-06-27 — Autonomous self-tick: agents mark themselves done in Daily Checklist
 
 ### Agent Self-Tick System (24/7 autonomous operation)
