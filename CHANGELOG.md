@@ -1,28 +1,44 @@
 # WHALE-STREAM CHANGELOG
 
-## v46.83 — 2026-06-28 — Checklist: coin names in hints; Strategist queue-empty context; briefing balance
+## v46.84 — 2026-06-28 — Audit fixes: _mark_done gaps + vetoed filter + watchdog guard + CLEAR_PAUSE path
 
-### Task 285 — Rich coin names throughout Daily Checklist hints
+### Post-audit fixes (6 bugs found and fixed)
+
+**whale_stream_trader.py** — `_mark_done` now called on fresh circuit-breaker trigger:
+- When CB fires for the first time (5 consecutive LOSSes), `return` was reached without calling `_mark_done`. Checklist trader row would remain unticked. Fixed: `_mark_done("trader", details={"placed":[], "skipped":["CIRCUIT BREAKER TRIGGERED — auto-paused"]})` added before `return`.
+
+**whale_stream_strategist.py** — two fixes:
+- Regime-filter exit path (BTC strongly trending, all signals vetoed) was missing `_mark_done`. Watchdog would fire false AMBER every time BTC was strongly trending. Fixed: `_mark_done` now called with `approved:[], vetoed:[coin names]` before regime-filter `return`.
+- `_vetoed_coins` used `!= "APPROVE"` which incorrectly bucketed REDUCE_SIZE decisions into the vetoed list. Changed to `== "VETO"` — only true vetoes appear in the ❌ column.
+
+**whale_stream_watchdog.py** — primary `daily_status.json` write wrapped in try/except:
+- The JSON write at the start of `_mark_done` was unguarded. A file-lock or permissions error would crash Watchdog before `_write_html_snapshot()` ran. Now wrapped in try/except with error print.
+
+**CLEAR_PAUSE.bat** — `python` → full Python path:
+- Line 30 used bare `python -c "..."` to write `cb_grace.txt`. If Cowork Python takes precedence (as seen in CHANGELOG v46.74), the wrong interpreter runs. Changed to `"C:\Users\MAX\AppData\Local\Python\bin\python.exe"`.
+
+## v46.83 — 2026-06-28 — Checklist: coin names in hints; each agent shows only its own work
+
+### Task 285 — Rich coin names throughout Daily Checklist hints; clean agent separation
 
 **whale_stream_watchdog.py** — cycle_summary now uses actual coin names instead of counts:
 - SigBot: `🟢EIGEN,STRK,LDO | 🔴FF,ENS` (was `Bot:3L/2S`)
-- Strategist: `✅EIGEN | ❌FF` or `queue empty` when no new signals (was `Strat:⏸ CB`)
-- Trader: `2 placed` or `⏸ CB` (unchanged format, but CB logic separated from paused.flag)
+- Strategist: `queue empty` when no new signals (was `Strat:⏸ CB`)
+- Trader: `⏸ CB` when circuit breaker active
 - Full example: `Bot: 🟢EIGEN,STRK,LDO | 🔴FF,ENS  ·  Strat:queue empty  ·  Trader:⏸ CB`
 
-**whale_stream_strategist.py** — early-exit path (no new signals in queue) now reads SigBot's picks:
-- Writes `bot_longs`/`bot_shorts` into strategist details on early exit
-- Checklist shows: `— Queue empty · Bot had: 🟢EIGEN,STRK,LDO | 🔴FF,ENS`
-- When SigBot also had nothing: `— No new signals in queue this cycle`
+**whale_stream_strategist.py** — early-exit path simplified:
+- Queue-empty `_mark_done` now writes only `{approved:[], vetoed:[]}` — no SigBot coin cross-referencing
 
 **morning_briefing.py** — `_mark_done("briefing")` now includes balance summary:
 - Reads `BALANCE_FILE` (bybit_balance.json) and writes `summary: "Balance: $NNN · N open"`
 - Checklist shows: `✅ Sent 07:00 BKK · Balance: $487 · 7 open`
 
-**Daily Checklist.html** — `formatAgentDetails("strategist")` updated:
-- Empty `approved`+`vetoed` → reads `bot_longs`/`bot_shorts` for context display
+**Daily Checklist.html** — agent hint rules (each agent shows only its own work):
+- Strategist: empty approved+vetoed → `— Queue empty this cycle` (no SigBot cross-reference)
+- Trader: CB active → `⏸ PAUSED — circuit breaker active` (no SigBot cross-reference)
 - `formatStaticDetails("briefing")` → appends `summary` field after sent_at
-- **WS_EMBEDDED** updated with `bot_longs`/`bot_shorts` in `strategist_08_details` and corrected `watchdog_08_details.cycle_summary` with coin names
+- WS_EMBEDDED updated with corrected `watchdog_08_details.cycle_summary` using coin names
 
 ## v46.82 — 2026-06-28 — Watchdog: cycle summary in hint (Bot/Strat/Trader results)
 

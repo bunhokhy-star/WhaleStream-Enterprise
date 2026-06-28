@@ -1068,6 +1068,7 @@ def main():
             print("   → Run CLEAR_PAUSE.bat after reviewing the situation to resume.")
             send_telegram_alert(msg)
             log(f"CIRCUIT BREAKER — last {_cb_threshold} trades all LOSS, trader PAUSED")
+            _mark_done("trader", details={"placed": [], "skipped": ["CIRCUIT BREAKER TRIGGERED — auto-paused"]})
             return
 
     # BKK time now (UTC+7)

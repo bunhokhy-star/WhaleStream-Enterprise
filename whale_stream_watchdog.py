@@ -93,8 +93,11 @@ def _mark_done(agent_name, details=None):
     _data[_key] = True
     if details:
         _data[f"{_key}_details"] = details
-    with open(_path, "w", encoding="utf-8") as _f:
-        json.dump(_data, _f, indent=2)
+    try:
+        with open(_path, "w", encoding="utf-8") as _f:
+            json.dump(_data, _f, indent=2)
+    except Exception as _we:
+        print(f"   ⚠ Status write failed: {_we}")
     try:
         _jspath = _path.replace("daily_status.json", "daily_status.js")
         with open(_jspath, "w", encoding="utf-8") as _f:

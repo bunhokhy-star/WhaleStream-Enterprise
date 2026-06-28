@@ -49,3 +49,5 @@
 [2026-06-28 08:10 BKK] === Strategist run started 2026-06-28 08:10 BKK ===
 [2026-06-28 08:10 BKK] ⚠ Circuit breaker ACTIVE — decisions will still be written but Trader is paused
 [2026-06-28 08:10 BKK] No signals to review — no OPEN signals found in last 26h
+[2026-06-28 12:10 BKK] === Strategist run started 2026-06-28 12:10 BKK ===
+[2026-06-28 12:10 BKK] No signals to review — no OPEN signals found in last 26h

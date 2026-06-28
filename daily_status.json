@@ -41,7 +41,7 @@
   "monitor_details": {
     "positions": 7,
     "alerts": 0,
-    "last_run": "12:06 BKK"
+    "last_run": "12:14 BKK"
   },
   "tracker_details": {
     "resolved": 0,
@@ -62,5 +62,10 @@
       "FF",
       "MNT"
     ]
+  },
+  "strategist_12": true,
+  "strategist_12_details": {
+    "approved": [],
+    "vetoed": []
   }
 }

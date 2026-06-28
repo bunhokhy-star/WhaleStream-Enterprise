@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.83 — Checklist: coin names in Watchdog/Strategist hints; briefing balance; queue-empty context"
+git commit -m "v46.84 — Audit fixes: _mark_done gaps in trader/strategist; vetoed filter; watchdog guard; CLEAR_PAUSE path"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...

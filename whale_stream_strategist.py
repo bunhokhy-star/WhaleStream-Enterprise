@@ -875,6 +875,10 @@ def main():
             f"  {len(regime_vetoed)} signal(s) vetoed — trading only WITH the trend.\n"
             f"  ⛔ Vetoed: {', '.join(v['coin'] + ' ' + v['direction'] for v in regime_vetoed)}"
         )
+        _mark_done("strategist", details={
+            "approved": [],
+            "vetoed":   [v["coin"] for v in regime_vetoed],
+        })
         return
 
     # ── Load Pattern Memory ──────────────────────────────────────
@@ -963,8 +967,8 @@ def main():
     # ── Send Telegram ─────────────────────────────────────────────
     send_telegram_summary(parsed, signals)
 
-    _approved_coins = [d.get("coin","?") for d in parsed.get("decisions",[]) if d.get("decision")=="APPROVE"]
-    _vetoed_coins   = [d.get("coin","?") for d in parsed.get("decisions",[]) if d.get("decision") != "APPROVE"]
+    _approved_coins = [d.get("coin","?") for d in parsed.get("decisions",[]) if d.get("decision") == "APPROVE"]
+    _vetoed_coins   = [d.get("coin","?") for d in parsed.get("decisions",[]) if d.get("decision") == "VETO"]
     _mark_done("strategist", details={"approved": _approved_coins, "vetoed": _vetoed_coins})
     print()
     print("✅ Strategist complete.")
