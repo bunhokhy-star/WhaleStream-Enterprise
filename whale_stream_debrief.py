@@ -81,6 +81,31 @@ MAX_MEMORY_ITEMS    = 200   # keep last 200 debriefs in memory file
 # HELPERS
 # ═══════════════════════════════════════════════════════════════
 
+def _mark_done(agent_name="debrief", details=None):
+    """Mark this agent done for the current cycle in daily_status.json."""
+    import json as _json, datetime as _dt
+    _path  = os.path.join(SCRIPT_DIR, "daily_status.json")
+    _today = _dt.date.today().isoformat()
+    _h     = _dt.datetime.now().hour
+    _cycle = str((_h // 4) * 4).zfill(2)
+    _key   = f"{agent_name}_{_cycle}"
+    try:
+        with open(_path, encoding="utf-8") as _f:
+            _data = _json.load(_f)
+        if _data.get("date") != _today:
+            _data = {"date": _today}
+    except Exception:
+        _data = {"date": _today}
+    _data[_key] = True
+    if details:
+        _data[f"{_key}_details"] = details
+    try:
+        with open(_path, "w", encoding="utf-8") as _f:
+            _json.dump(_data, _f, indent=2)
+    except Exception:
+        pass
+
+
 def log(msg):
     bkk = datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d %H:%M BKK")
     line = f"[{bkk}] {msg}"
@@ -485,6 +510,7 @@ def main():
 
     if len(sys.argv) < 2:
         log("✗ No trade data argument provided. Usage: python whale_stream_debrief.py '<json>'")
+        _mark_done(details={"error": "no_arg"})
         return
 
     try:
@@ -493,10 +519,12 @@ def main():
             trades = [trades]
     except Exception as e:
         log(f"✗ Failed to parse trade data: {e}")
+        _mark_done(details={"error": "parse_failed"})
         return
 
     log(f"=== Debrief run — {len(trades)} trade(s) to analyse ===")
     run_debrief(trades)
+    _mark_done(details={"trades": len(trades)})
     print()
     print("✅ Debrief complete.")
     print()

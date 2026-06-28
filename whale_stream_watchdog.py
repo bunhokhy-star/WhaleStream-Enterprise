@@ -119,7 +119,7 @@ def _mark_done(agent_name, details=None):
 BOT_DEADLINE_MIN        = 32   # Bot at :00, Watchdog at :30 = 30 min
 STRATEGIST_DEADLINE_MIN = 22   # Strategist at :10
 TRADER_DEADLINE_MIN     = 16   # Trader at :20
-TRADER_CRITICAL_HOURS   = 8    # Escalate to CRITICAL if Trader down this long
+TRADER_CRITICAL_HOURS   = 4    # Escalate to CRITICAL if Trader down this long (4h = 1 missed cycle)
 
 
 # ─────────────────────────────────────────────────────────────

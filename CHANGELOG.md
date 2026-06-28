@@ -1,5 +1,167 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.91 — 2026-06-28 — 4 final pre-ship fixes (second audit pass)
+
+### Fix added after v46.90
+**whale_stream_debrief.py — `_mark_done()` never called — Debrief always showed missed in Daily Checklist**
+- `_mark_done` was not defined or called anywhere in debrief.py
+- Every debrief run completed successfully but the Daily Checklist.html would always show it as missed
+- Fixed: added `_mark_done()` function definition (same pattern as all other agents) and added calls at all 3 exit paths in `main()` — no-arg early exit (details: "no_arg"), parse error (details: "parse_failed"), normal completion (details: trade count)
+
+---
+
+## v46.90 — 2026-06-28 — 3 final pre-ship fixes from second audit pass
+
+### Critical fix
+**whale_stream_trader.py — `TRADE_MARGIN_USDT` hardcoded, JULY1 checklist Step 5 was broken**
+- `TRADE_MARGIN_USDT = 20` was a plain hardcoded assignment with NO `try: from local_config` import
+- The JULY1 checklist Step 5 tells the operator to set this in `local_config.py` — that instruction had zero effect
+- Fixed: wrapped in `try: from local_config import TRADE_MARGIN_USDT except ImportError: TRADE_MARGIN_USDT = 20`
+- Operator can now set live margin in `local_config.py` and the system will use it correctly
+
+### Medium fix
+**whale_stream_trader.py — Gate 4 position cap not enforced mid-loop**
+- `n_positions` was fetched before the order loop and never incremented after a successful order placement
+- In Gate 4 mode (cap = 4): if 3 positions existed and 3 signals passed the cap check simultaneously, all 3 were placed (giving 6, not 4)
+- Fixed: `n_positions += 1` after each successful `place_order()` call keeps the cap accurate mid-loop
+
+### Medium fix (cosmetic)
+**ADD_RECHECK_TASKS.bat — stale v46.87 version string in comment block header**
+- Line 4 comment still said "v46.87 continuous decision loop" while echo banner was already correct (v46.89)
+- Fixed: comment updated to v46.90
+
+---
+
+## v46.89 — 2026-06-28 — 4-agent audit: 16 critical/high/medium fixes across 8 files
+
+### Critical fixes
+
+**whale_stream_trader.py — `send_telegram` NameError in `close_position_at_market_for_veto()`**
+- Both urgent failure Telegrams called `send_telegram()` which does not exist — only `send_telegram_alert()` does
+- All VETO failure alerts were silently swallowed by `try/except Exception: pass`
+- Fixed: both calls now use `send_telegram_alert()` — failures will now actually alert the operator
+
+**whale_stream_trader.py — timezone inflation in `get_stale_entry_orders()`**
+- `.replace(tzinfo=timezone.utc)` was stripping the real tz and relabelling as UTC, inflating age by 7h
+- `bkk_now` (UTC+7) was being labelled "UTC" so difference was artificially 7h too large
+- Could trigger auto-cancellation of valid live orders 7h early
+- Fixed: `age_h = (bkk_now - created_dt).total_seconds() / 3600` — both are already tz-aware
+
+**whale_stream_strategist.py — parse-failure fallback fell through to normal execution**
+- After JSON parse error, code set a `parsed` dict missing `cycle_id`, `recheck_count`, `recheck_changes`
+- Missing `write_decisions()`, `_mark_done()`, and `return` — execution continued into merge/tally block
+- VETO-all safety was bypassed; normal decision-writing proceeded with incomplete data
+- Fixed: parse-failure path now builds complete dict, calls `write_decisions()`, `_mark_done()`, and `return`
+
+**whale_stream_strategist.py — no-signal and regime-filter early exits missing 3 required fields**
+- `cycle_id`, `recheck_count`, `recheck_changes` were absent from the empty-decisions dict in 2 code paths
+- Downstream `--recheck` mode reads these fields; missing keys caused KeyError crashes
+- Fixed: both early exits now include all 3 fields
+
+**whale_stream_bot.py — `fetch_signal_graveyard()` returned 2-tuple but caller unpacks 3 values**
+- 3 return sites (`return "", 50`) missing the third element; caller uses `graveyard, short_wr, coin_perf = ...`
+- Would raise `ValueError: not enough values to unpack` when Google credentials file is absent
+- Fixed: all 3 sites now return `"", 50, ""`
+
+### High fixes
+
+**whale_stream_watchdog.py — `TRADER_CRITICAL_HOURS = 8` should be 4**
+- At 4h cycles, 8h means 2 full missed cycles before CRITICAL escalation — too slow to respond
+- Fixed: `TRADER_CRITICAL_HOURS = 4` (1 missed cycle triggers CRITICAL Telegram)
+
+**whale_stream_strategist.py — `btc_pct_sma` None guard added in format strings**
+- `btc_pct_sma` could theoretically be None if `get_btc_market_bias()` returns None mid-flow
+- Format string `{btc_pct_sma:+.1f}` would raise `ValueError` on None
+- Fixed: all 3 occurrences now use `(btc_pct_sma or 0)` as safe default
+
+**whale_stream_tracker.py — "Day 0" on launch day (July 1)**
+- `abs(_days_to_live)` returns 0 on July 1 itself — showed "Day 0 of live trading"
+- Fixed: `abs(_days_to_live) + 1` → shows "Day 1" on July 1, "Day 2" on July 2, etc.
+
+### Medium/ops fixes
+
+**ADD_RECHECK_TASKS.bat — version banner updated**
+- Echo banner still said `v46.87`; updated to `v46.89`
+
+**ADD_STATUS_SERVER_TASK.bat — stale "OVERWRITES" warning removed**
+- Warning said "This script OVERWRITES run_status_server.bat" but it no longer does (guard was added in v46.88)
+- Updated comment now correctly describes the skip-if-exists behaviour
+
+**JULY1_GOLIVE_CHECKLIST.md — 4 corrections**
+- Footer version: `v46.87` → `v46.89`
+- Step 2 / Step 7: "all 8 WhaleStream tasks" → "all 15 WhaleStream tasks"
+- Step 5: removed instruction to edit `whale_stream_trader.py` directly (contradicted Step 3 "THE ONLY FILE YOU TOUCH is `local_config.py`")
+- Step 5: added instruction to update `BYBIT_START_BALANCE` in trader.py + tracker.py at go-live
+
+## v46.88 — 2026-06-28 — Pre-go-live first audit: 15 fixes across 9 files
+
+### Audit findings addressed (3-agent parallel audit run)
+
+**whale_stream_tracker.py — 2 missing `_mark_done()` calls fixed**
+- Google Sheets connection failure early exit now calls `_mark_done("tracker", error=...)`
+- No-trade-rows early exit now calls `_mark_done("tracker", rows=0)`
+- Previously: Daily Checklist would show tracker as "not run" on transient Sheets API errors
+
+**whale_stream_tracker.py — go-live countdown no longer goes negative after July 1**
+- Countdown card now switches to "🚀 LIVE — Day N of live trading" after July 1
+- Previously: dashboard showed "−N days to Go-Live" for eternity after launch
+
+**whale_stream_tracker.py — BYBIT_START_BALANCE sync comment added**
+- Comment now reads: "MUST match BYBIT_START_BALANCE in whale_stream_trader.py"
+
+**whale_stream_strategist.py — Claude API fallback changed from APPROVE-all to VETO-all**
+- Previously: any Claude API failure or JSON parse error caused ALL signals to be silently approved
+- Now: failure writes VETO for every signal + sends urgent Telegram alert to ops channel
+- Financial risk eliminated: unreviewed trades can no longer enter Bybit during Claude outages
+
+**whale_stream_trader.py — cancel_order() retry logic added (3 attempts, exponential backoff)**
+- Retries 3× on transient network failures (1s, 2s delay between attempts)
+- Immediately skips retry on `retCode=20001` (order already gone — not an error)
+- Previously: single transient failure caused cancel to return False, triggering unnecessary market close
+
+**whale_stream_trader.py — close_position_at_market_for_veto() retry logic added**
+- After cancel fails, retries `get_position_for_coin()` up to 3× with 3s delay (Bybit fill-propagation lag)
+- On market-close failure: sends urgent Telegram "⛔ VETO CLOSE FAILED — MANUAL CLOSE REQUIRED"
+- On position-not-found after retries: sends "⚠️ VETO FAILED — MANUAL ACTION REQUIRED" Telegram
+- Previously: single-pass; failure was silent (logged only, no escalation)
+
+**whale_stream_trader.py — REDUCE_SIZE minimum size floor added**
+- Gate 4 (0.40×) + REDUCE_SIZE (×0.5) = 0.20× can fall below Bybit minimum order value
+- Floor clamped to 0.25× with log warning and console message
+- Previously: could silently produce qty=0 or rejected orders on cheap coins
+
+**whale_stream_trader.py — stale orphan orders now auto-cancelled (not alert-only)**
+- `get_stale_entry_orders()` result now triggers `cancel_order()` for each orphan
+- Telegram report shows ✅/✗ per coin — any failed cancels flagged for manual follow-up
+- Previously: Telegram alert said "cancel manually in Bybit if needed" — relied on human action
+
+**whale_stream_trader.py — LONG_COIN_AVOID_LIST synced with bot.py blocklist**
+- Added `QNT` and `WIF` to `LONG_COIN_AVOID_LIST` (were in bot.py `LONG_COIN_BLOCKLIST` but missing from trader's second-defence layer)
+
+**whale_stream_trader.py — BYBIT_START_BALANCE sync comment added**
+- Comment now reads: "MUST match BYBIT_START_BALANCE in whale_stream_tracker.py"
+
+**check_daily_status.py — task name mismatch fixed**
+- `AGENT_TASK` dict corrected: `WhaleStreamStrategist` and `WhaleStreamWatchdog` (no hyphens)
+- Previously: gap-alert fix instructions pointed to non-existent task names in Task Scheduler
+
+**run_strategist_recheck.bat + run_trader_reactive.bat — log output added**
+- Both now redirect stdout+stderr to `strategist_recheck_log.txt` / `trader_reactive_log.txt`
+- Previously: Task Scheduler errors from re-check runs were invisible
+
+**JULY1_GOLIVE_CHECKLIST.md — 3 gaps filled**
+- Pre-flight now checks `gate4_breach.flag` absent (was missing)
+- Pre-flight now checks `paused.flag` absent (was missing)
+- Pre-flight now includes step to verify/run `ADD_RECHECK_TASKS.bat` (6 v46.87 tasks)
+- WR thresholds adjusted to realistic baselines (LONG ≥50%, SHORT ≥70%)
+
+**SETUP_ALL_TASKS.bat — stale "only file you need" comment fixed**
+- Header now correctly notes that `ADD_RECHECK_TASKS.bat` must also be run for recheck tasks
+
+**ADD_STATUS_SERVER_TASK.bat — DISABLED guard added**
+- Now skips overwriting `run_status_server.bat` if it already exists
+- Added prominent warning that SETUP_ALL_TASKS.bat already registers StatusServer
+
 ## v46.87 — 2026-06-28 — Continuous decision loop: Strategist re-checks + Trader reactive mode
 
 ### Design

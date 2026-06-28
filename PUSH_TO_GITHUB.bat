@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.87 — Continuous decision loop: Strategist --recheck (3 rules, no Claude) + Trader --reactive (cancel/close vetoed orders)"
+git commit -m "v46.91 — 4 final pre-ship fixes: TRADE_MARGIN_USDT try/except import, Gate 4 n_positions mid-loop, ADD_RECHECK comment stale, debrief.py _mark_done missing (Daily Checklist never ticked)"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...

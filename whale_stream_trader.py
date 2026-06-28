@@ -108,7 +108,10 @@ except ImportError:
     BYBIT_API_SECRET = _os.getenv("BYBIT_API_SECRET", "")
 
 # Trade settings
-TRADE_MARGIN_USDT = 20      # USDT margin per trade ($20)
+try:
+    from local_config import TRADE_MARGIN_USDT        # noqa — set in local_config.py to override
+except ImportError:
+    TRADE_MARGIN_USDT = 20  # default: $20/trade; set TRADE_MARGIN_USDT in local_config.py for live
 LEVERAGE          = 10      # 10x leverage → $200 position per trade
 MAX_OPEN_TRADES   = 6       # max 6 simultaneous positions (3 long + 3 short)
 
@@ -149,7 +152,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Balance file (read by whale_stream_tracker.py for dashboard)
 BYBIT_BALANCE_FILE  = os.path.join(SCRIPT_DIR, "bybit_balance.json")
-BYBIT_START_BALANCE = 500.00   # initial demo deposit
+BYBIT_START_BALANCE = 500.00   # initial deposit — MUST match BYBIT_START_BALANCE in whale_stream_tracker.py
 LOG_FILE   = os.path.join(SCRIPT_DIR, "trader_log.txt")
 
 # Skip-counter: after this many consecutive mark-price skips, mark signal UNREACHABLE
@@ -172,7 +175,7 @@ SHORT_RECOVERY_COINS = {"H", "FF"}  # approved recovery coins (bypass SHORT REPA
 ORDER_CONTEXT_FILE   = os.path.join(SCRIPT_DIR, "order_context.json")
 
 # Coins with poor historical LONG win rate — skip LONG signals for these
-LONG_COIN_AVOID_LIST = ["COMP", "HYPE", "ZRO"]
+LONG_COIN_AVOID_LIST = ["COMP", "HYPE", "ZRO", "QNT", "WIF"]   # must match LONG_COIN_BLOCKLIST in bot.py
 
 def log(msg):
     """Write to console and trader_log.txt with timestamp."""
@@ -546,7 +549,7 @@ def get_stale_entry_orders(sheet_open_coins, min_age_hours=72):
         created  = order.get("createdTime", "0")
         try:
             created_dt = datetime.fromtimestamp(int(created) / 1000, tz=timezone.utc)
-            age_h = (bkk_now.replace(tzinfo=timezone.utc) - created_dt.replace(tzinfo=timezone.utc)).total_seconds() / 3600
+            age_h = (bkk_now - created_dt).total_seconds() / 3600
         except Exception:
             age_h = 0
 
@@ -564,14 +567,31 @@ def get_stale_entry_orders(sheet_open_coins, min_age_hours=72):
     return stale
 
 
-def cancel_order(symbol, order_id):
-    """Cancel a specific open order by orderId. Returns True on success."""
-    result = bybit_request("POST", "/v5/order/cancel", body={
-        "category": BYBIT_CATEGORY,
-        "symbol":   symbol,
-        "orderId":  order_id,
-    })
-    return result.get("retCode") == 0
+def cancel_order(symbol, order_id, _max_retries=3):
+    """
+    Cancel a specific open order by orderId.
+    Retries up to _max_retries times on transient failures with exponential backoff.
+    Returns True on success. Returns False immediately if order is already gone (retCode 20001).
+    """
+    import time as _time
+    for _attempt in range(_max_retries):
+        result = bybit_request("POST", "/v5/order/cancel", body={
+            "category": BYBIT_CATEGORY,
+            "symbol":   symbol,
+            "orderId":  order_id,
+        })
+        ret_code = result.get("retCode", -1)
+        if ret_code == 0:
+            return True
+        if ret_code == 20001:
+            # Order no longer exists (already filled or cancelled) — don't retry
+            return False
+        if _attempt < _max_retries - 1:
+            _sleep = 2 ** _attempt   # 1s, 2s, 4s
+            log(f"cancel_order {symbol} attempt {_attempt+1} failed (retCode={ret_code}) — retrying in {_sleep}s")
+            _time.sleep(_sleep)
+    log(f"cancel_order {symbol} failed after {_max_retries} attempts")
+    return False
 
 
 def get_position_for_coin(symbol):
@@ -596,27 +616,49 @@ def close_position_at_market_for_veto(symbol, bybit_order_id):
     Called when Strategist vetoes a coin whose order was already placed.
 
     Step 1 — Try to cancel the open order (if still unfilled).
-    Step 2 — If cancel fails (order already filled / executed), close the
-             live position at market with reduceOnly=True.
+             cancel_order() already retries 3x on transient failures.
+    Step 2 — If cancel fails (order filled), retry get_position_for_coin() up to 3 times
+             with 3s delay to handle Bybit fill-propagation lag (1–5s typical).
+    Step 3 — Close the live position at market with reduceOnly=True.
+    Step 4 — On final failure, send urgent Telegram so manual intervention can happen.
 
     Returns (action, success) where action is 'cancelled' | 'closed' | 'failed'.
     """
-    # Step 1: attempt cancel
+    import time as _time
+
+    # Step 1: attempt cancel (with built-in retries)
     cancelled = cancel_order(symbol, bybit_order_id)
     if cancelled:
         log(f"REACTIVE VETO: {symbol} order {bybit_order_id} cancelled successfully")
         print(f"   ✅ Order cancelled: {symbol} (order {bybit_order_id})")
         return "cancelled", True
 
-    # Step 2: order may have filled — look for a live position
-    log(f"REACTIVE VETO: cancel failed for {symbol} — checking for live position")
-    pos = get_position_for_coin(symbol)
+    # Step 2: order may have filled — retry position check to handle API propagation lag
+    log(f"REACTIVE VETO: cancel failed for {symbol} — checking for live position (up to 3 retries)")
+    pos = None
+    for _retry in range(3):
+        pos = get_position_for_coin(symbol)
+        if pos is not None:
+            break
+        if _retry < 2:
+            log(f"REACTIVE VETO: position not yet visible for {symbol} — waiting 3s (attempt {_retry+1}/3)")
+            _time.sleep(3)
+
     if pos is None:
-        # No position found — order may have been auto-cancelled already
-        log(f"REACTIVE VETO: no open position for {symbol} — nothing to close")
-        print(f"   ℹ No open position for {symbol} — nothing to close")
+        # Position genuinely not found after retries — send urgent Telegram
+        _msg = (f"⚠️ <b>VETO FAILED — MANUAL ACTION REQUIRED</b>\n"
+                f"Symbol: {symbol}\n"
+                f"Order {bybit_order_id} could not be cancelled and no open position found.\n"
+                f"Please check Bybit manually and close if needed.")
+        try:
+            send_telegram_alert(_msg)
+        except Exception:
+            pass
+        log(f"REACTIVE VETO FAILED: {symbol} — no position found after 3 retries, Telegram sent")
+        print(f"   ✗ VETO FAILED for {symbol} — no position found. Telegram alert sent.")
         return "failed", False
 
+    # Step 3: close position at market
     pos_size = pos.get("size", "0")
     pos_side = pos.get("side", "")      # "Buy" (LONG) or "Sell" (SHORT)
     close_side = "Sell" if pos_side == "Buy" else "Buy"
@@ -634,10 +676,20 @@ def close_position_at_market_for_veto(symbol, bybit_order_id):
         log(f"REACTIVE VETO: {symbol} position closed at market (size={pos_size})")
         print(f"   ✅ Position closed at market: {symbol} {pos_size} (Strategist veto)")
         return "closed", True
-    else:
-        log(f"REACTIVE VETO: failed to close {symbol} position — {result.get('retMsg','?')}")
-        print(f"   ✗ Failed to close {symbol}: {result.get('retMsg','?')}")
-        return "failed", False
+
+    # Step 4: market close also failed — urgent Telegram
+    _err_msg = result.get("retMsg", "?")
+    _alert = (f"⛔ <b>VETO CLOSE FAILED — MANUAL CLOSE REQUIRED</b>\n"
+              f"Symbol: {symbol}  Size: {pos_size}\n"
+              f"Error: {_err_msg}\n"
+              f"Go to Bybit → Positions → close {symbol} manually NOW.")
+    try:
+        send_telegram_alert(_alert)
+    except Exception:
+        pass
+    log(f"REACTIVE VETO CLOSE FAILED: {symbol} size={pos_size} — {_err_msg}. Telegram sent.")
+    print(f"   ✗ Failed to close {symbol}: {_err_msg} — Telegram alert sent")
+    return "failed", False
 
 
 def load_order_context():
@@ -1488,6 +1540,13 @@ def main():
             log(f"STRATEGIST REDUCE: {coin} {_strat_key[1]} — size {_size_mult:.2f}x → {_coin_size_mult:.2f}x")
         else:
             _coin_size_mult = _size_mult
+        # Minimum size floor — Gate 4 (0.40×) + REDUCE_SIZE (×0.5) = 0.20×, which can
+        # fall below Bybit's minimum order value. Floor at 0.25× to stay safely above.
+        _MIN_SIZE_MULT = 0.25
+        if _coin_size_mult < _MIN_SIZE_MULT:
+            log(f"SIZE FLOOR: {coin} — {_coin_size_mult:.3f}x below minimum {_MIN_SIZE_MULT}x floor → clamped to {_MIN_SIZE_MULT}x")
+            print(f"   ⚠️ SIZE FLOOR: {coin} multiplier {_coin_size_mult:.2f}x → clamped to {_MIN_SIZE_MULT}x (Bybit min order protection)")
+            _coin_size_mult = _MIN_SIZE_MULT
         # ── end Strategist check ───────────────────────────────────────────────
 
         # Skip if already have a position OR an unfilled order
@@ -1653,6 +1712,7 @@ def main():
             order_id = result
             placed  += 1
             placed_coins.append(coin)
+            n_positions += 1   # keep Gate 4 position cap accurate mid-loop
             sheet_order_writes.append((sheet_row_idx, order_id))
             skip_counts.pop(f"row_{sheet_row_idx}", None)
 
@@ -1900,18 +1960,31 @@ def main():
 
         _stale = get_stale_entry_orders(_sheet_open_coins, min_age_hours=72)
         if _stale:
-            print(f"\n⚠  {len(_stale)} STALE ENTRY ORDER(S) DETECTED (>72h, no sheet OPEN row):")
+            print(f"\n⚠  {len(_stale)} STALE ENTRY ORDER(S) DETECTED (>72h, no sheet OPEN row) — auto-cancelling:")
+            _cancelled_ok  = []
+            _cancelled_fail = []
             for _s in _stale:
                 print(f"   {_s['coin']:10s} {_s['side']:5s} qty={_s['qty']:8s} "
                       f"@ {_s['price']:12s}  age={_s['age_h']:.0f}h  ID={_s['orderId']}")
+                _ok = cancel_order(_s["symbol"], _s["orderId"])
+                if _ok:
+                    _cancelled_ok.append(_s)
+                    log(f"STALE ORDER AUTO-CANCELLED: {_s['coin']} {_s['side']} ID={_s['orderId']} age={_s['age_h']:.0f}h")
+                    print(f"     ✅ Cancelled: {_s['coin']} ID={_s['orderId']}")
+                else:
+                    _cancelled_fail.append(_s)
+                    log(f"STALE ORDER CANCEL FAILED: {_s['coin']} {_s['side']} ID={_s['orderId']} age={_s['age_h']:.0f}h")
+                    print(f"     ✗ Cancel failed: {_s['coin']} ID={_s['orderId']}")
+
+            # Build Telegram report
             _stale_msg = (
-                f"⚠️ <b>STALE ENTRY ORDERS DETECTED</b> — {len(_stale)} unfilled order(s) "
+                f"⚠️ <b>STALE ENTRY ORDERS AUTO-CANCELLED</b> — {len(_stale)} unfilled order(s) "
                 f"older than 72h with no matching sheet signal:\n"
             )
-            for _s in _stale:
-                _stale_msg += (f"  {_s['coin']} {_s['side']} qty={_s['qty']} "
-                               f"@ {_s['price']}  ({_s['age_h']:.0f}h old)\n")
-            _stale_msg += "  ➡ Review and cancel manually in Bybit if no longer needed."
+            for _s in _cancelled_ok:
+                _stale_msg += f"  ✅ {_s['coin']} {_s['side']} qty={_s['qty']} @ {_s['price']}  ({_s['age_h']:.0f}h old)\n"
+            for _s in _cancelled_fail:
+                _stale_msg += f"  ✗ {_s['coin']} {_s['side']} qty={_s['qty']} — CANCEL FAILED — check Bybit manually\n"
             send_telegram_alert(_stale_msg)
         else:
             print("\n✅ No stale entry orders detected (all open orders have active sheet signals)")

@@ -874,7 +874,7 @@ def fetch_signal_graveyard():
     try:
         creds_path = os.path.join(SCRIPT_DIR, GOOGLE_CREDENTIALS_FILE)
         if not os.path.exists(creds_path):
-            return "", 50
+            return "", 50, ""
 
         # Use google.oauth2 directly — bypasses gspread.auth which fails on some Python 3.14 setups
         from google.oauth2.service_account import Credentials as _GCreds
@@ -894,7 +894,7 @@ def fetch_signal_graveyard():
 
         all_rows = sheet.get_all_values()
         if len(all_rows) < 2:
-            return "", 50
+            return "", 50, ""
 
         # Collect all WIN/LOSS rows (skip OPEN, EXPIRED, NO SIGNAL)
         resolved = []
@@ -935,7 +935,7 @@ def fetch_signal_graveyard():
             })
 
         if not resolved:
-            return "", 50
+            return "", 50, ""
 
         # ── Coin performance summary (last 30 resolved LONGs) ──────
         _coin_perf = {}

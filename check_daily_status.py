@@ -74,9 +74,9 @@ AGENT_LABEL = {
 # Task Scheduler task names (for fix instructions)
 AGENT_TASK = {
     "sigbot":      "WhaleStream-Bot",
-    "strategist":  "WhaleStream-Strategist",
+    "strategist":  "WhaleStreamStrategist",
     "trader":      "WhaleStream-Trader",
-    "watchdog":    "WhaleStream-Watchdog",
+    "watchdog":    "WhaleStreamWatchdog",
     "tracker":     "WhaleStream-Tracker",
     "monitor":     "WhaleStream-Monitor",
     "briefing":    "WhaleStream-Briefing",

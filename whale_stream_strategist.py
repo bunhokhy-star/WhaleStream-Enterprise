@@ -975,12 +975,15 @@ def main():
         print("\n   No signals to review. Bot may not have run yet or no signals generated.")
         # Write empty decisions so trader knows strategist ran
         empty = {
-            "run_at":         bkk_str,
-            "decisions":      [],
-            "regime_note":    "No signals to review",
-            "approved_count": 0,
-            "vetoed_count":   0,
-            "reduced_count":  0,
+            "run_at":          bkk_str,
+            "cycle_id":        _get_cycle_id(),
+            "recheck_count":   0,
+            "recheck_changes": [],
+            "decisions":       [],
+            "regime_note":     "No signals to review",
+            "approved_count":  0,
+            "vetoed_count":    0,
+            "reduced_count":   0,
         }
         write_decisions(empty)
         _mark_done("strategist", details={
@@ -1028,7 +1031,7 @@ def main():
         fighting_trend = [s for s in signals if s["direction"] == "LONG"]
         signals        = [s for s in signals if s["direction"] != "LONG"]
         for s in fighting_trend:
-            reason = f"REGIME VETO — market BEARISH (BTC {btc_pct_sma:+.1f}% below 4h SMA) — no LONGs"
+            reason = f"REGIME VETO — market BEARISH (BTC {(btc_pct_sma or 0):+.1f}% below 4h SMA) — no LONGs"
             regime_vetoed.append({"coin": s["coin"], "direction": "LONG",
                                    "decision": "VETO", "grade": "D", "reason": reason})
             log(f"Regime pre-veto: {s['coin']} LONG ({reason})")
@@ -1038,7 +1041,7 @@ def main():
         fighting_trend = [s for s in signals if s["direction"] == "SHORT"]
         signals        = [s for s in signals if s["direction"] != "SHORT"]
         for s in fighting_trend:
-            reason = f"REGIME VETO — market BULLISH (BTC {btc_pct_sma:+.1f}% above 4h SMA) — no SHORTs"
+            reason = f"REGIME VETO — market BULLISH (BTC {(btc_pct_sma or 0):+.1f}% above 4h SMA) — no SHORTs"
             regime_vetoed.append({"coin": s["coin"], "direction": "SHORT",
                                    "decision": "VETO", "grade": "D", "reason": reason})
             log(f"Regime pre-veto: {s['coin']} SHORT ({reason})")
@@ -1055,19 +1058,22 @@ def main():
         log(f"No signals remain after regime filter — {bias_lbl}")
         print(f"\n   No signals remain after regime filter ({bias_lbl}).")
         empty = {
-            "run_at":         bkk_str,
-            "decisions":      regime_vetoed,
-            "regime_note":    f"Market {bias_lbl}",
-            "approved_count": 0,
-            "vetoed_count":   len(regime_vetoed),
-            "reduced_count":  0,
-            "market_bias":    market_bias,
+            "run_at":          bkk_str,
+            "cycle_id":        _get_cycle_id(),
+            "recheck_count":   0,
+            "recheck_changes": [],
+            "decisions":       regime_vetoed,
+            "regime_note":     f"Market {bias_lbl}",
+            "approved_count":  0,
+            "vetoed_count":    len(regime_vetoed),
+            "reduced_count":   0,
+            "market_bias":     market_bias,
         }
         write_decisions(empty)
         send_telegram(
             f"🧠 <b>STRATEGIST</b> — {bkk_str}\n"
             f"{bias_emoji2} <b>REGIME FILTER: {market_bias}</b>\n"
-            f"  BTC is {abs(btc_pct_sma):.1f}% {'below' if market_bias == 'BEARISH' else 'above'} 20-period 4h SMA\n"
+            f"  BTC is {abs(btc_pct_sma or 0):.1f}% {'below' if market_bias == 'BEARISH' else 'above'} 20-period 4h SMA\n"
             f"  {len(regime_vetoed)} signal(s) vetoed — trading only WITH the trend.\n"
             f"  ⛔ Vetoed: {', '.join(v['coin'] + ' ' + v['direction'] for v in regime_vetoed)}"
         )
@@ -1094,19 +1100,29 @@ def main():
     except Exception as e:
         log(f"✗ Claude API call failed: {e}")
         print(f"   ✗ Claude call failed: {e}")
-        # Write fallback (approve all) so trader doesn't block on missing file
+        # SAFETY: VETO all signals when Claude is unavailable — do NOT approve blindly
+        _vetoed_coins = [s["coin"] for s in signals]
         fallback = {
             "run_at":         bkk_str,
+            "cycle_id":       _get_cycle_id(),
+            "recheck_count":  0,
+            "recheck_changes":[],
             "decisions":      [{"coin": s["coin"], "direction": s["direction"],
-                                "decision": "APPROVE", "grade": "B",
-                                "reason": "Strategist unavailable — approve by default"} for s in signals],
-            "regime_note":    "Strategist Claude call failed — fallback: approve all",
-            "approved_count": len(signals),
-            "vetoed_count":   0,
+                                "decision": "VETO", "grade": "F",
+                                "reason": "Strategist Claude API unavailable — VETO for safety"} for s in signals],
+            "regime_note":    "⛔ Claude API failed — all signals VETOED (safety fallback)",
+            "approved_count": 0,
+            "vetoed_count":   len(signals),
             "reduced_count":  0,
         }
         write_decisions(fallback)
-        _mark_done("strategist", details={"approved": [], "vetoed": [], "error": "claude_failed"})
+        send_telegram(
+            f"⚠️ <b>STRATEGIST ALERT</b> — Claude API call FAILED\n"
+            f"All {len(signals)} signal(s) VETOED for safety.\n"
+            f"Error: {str(e)[:100]}\n"
+            f"Next cycle will retry. Check Anthropic status if this persists."
+        )
+        _mark_done("strategist", details={"approved": [], "vetoed": _vetoed_coins, "error": "claude_failed"})
         return
 
     # ── Parse decisions ──────────────────────────────────────────
@@ -1115,13 +1131,29 @@ def main():
         log(f"✗ Failed to parse Strategist JSON response. Raw: {raw_response[:300]}")
         print(f"   ✗ Could not parse response — see log for raw output")
         print(f"   Raw tail: {raw_response[-200:]}")
-        # Fallback: approve all
-        parsed = {
-            "decisions": [{"coin": s["coin"], "direction": s["direction"],
-                           "decision": "APPROVE", "grade": "B",
-                           "reason": "Parse error — approve by default"} for s in signals],
-            "regime_note": "Parse error — fallback approve",
+        # SAFETY: VETO all on parse failure — same principle as API failure
+        _vetoed_coins = [s["coin"] for s in signals]
+        _parse_fallback = {
+            "run_at":          bkk_str,
+            "cycle_id":        _get_cycle_id(),
+            "recheck_count":   0,
+            "recheck_changes": [],
+            "decisions":       [{"coin": s["coin"], "direction": s["direction"],
+                                 "decision": "VETO", "grade": "F",
+                                 "reason": "Strategist response parse error — VETO for safety"} for s in signals],
+            "regime_note":     "⛔ Parse error — all signals VETOED (safety fallback)",
+            "approved_count":  0,
+            "vetoed_count":    len(signals),
+            "reduced_count":   0,
         }
+        write_decisions(_parse_fallback)
+        send_telegram(
+            f"⚠️ <b>STRATEGIST ALERT</b> — Response parse FAILED\n"
+            f"All {len(signals)} signal(s) VETOED for safety.\n"
+            f"Check strategist_log.txt for raw response."
+        )
+        _mark_done("strategist", details={"approved": [], "vetoed": _vetoed_coins, "error": "parse_failed"})
+        return
 
     # ── Merge regime pre-vetoes into decisions ────────────────────
     # regime_vetoed contains any signals dropped before Claude saw them.

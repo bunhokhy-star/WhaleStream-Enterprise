@@ -110,7 +110,7 @@ except ImportError:
 
 # ── Bybit Demo balance file (written by whale_stream_trader.py) ─
 BYBIT_BALANCE_FILE = os.path.join(SCRIPT_DIR, "bybit_balance.json")
-BYBIT_START_BALANCE = 500.00   # initial demo deposit
+BYBIT_START_BALANCE = 500.00   # initial deposit — MUST match BYBIT_START_BALANCE in whale_stream_trader.py
 PAUSED_FILE        = os.path.join(SCRIPT_DIR, "paused.flag")   # circuit-breaker flag
 
 # ── Bybit Demo API auth (same creds as whale_stream_trader.py) ─
@@ -847,16 +847,28 @@ def write_dashboard_html(all_rows):
         '</div>'
     )
 
-    # ── July 1 Go-Live countdown ─────────────────────────────────
+    # ── Go-Live milestone card ─────────────────────────────────
+    # Shows countdown until July 1, then switches to "LIVE" days-since card.
     from datetime import date as _date
-    _days_to_live = (_date(2026, 7, 1) - _date.today()).days
-    _countdown_color = "#ff4d4d" if _days_to_live <= 3 else "#ffc107" if _days_to_live <= 7 else "#00d4a8"
-    _countdown_card_html = (
-        '<div style="text-align:center;padding:10px;background:#1a1a2e;border-radius:8px;margin-bottom:20px;">'
-        f'<span style="color:{_countdown_color};font-size:24px;font-weight:700;">{_days_to_live}</span>'
-        '<span style="color:#888;font-size:13px;"> days to July 1 Go-Live</span>'
-        '</div>'
-    )
+    _go_live_date = _date(2026, 7, 1)
+    _today = _date.today()
+    _days_to_live = (_go_live_date - _today).days
+    if _days_to_live > 0:
+        _countdown_color = "#ff4d4d" if _days_to_live <= 3 else "#ffc107" if _days_to_live <= 7 else "#00d4a8"
+        _countdown_card_html = (
+            '<div style="text-align:center;padding:10px;background:#1a1a2e;border-radius:8px;margin-bottom:20px;">'
+            f'<span style="color:{_countdown_color};font-size:24px;font-weight:700;">{_days_to_live}</span>'
+            '<span style="color:#888;font-size:13px;"> days to July 1 Go-Live</span>'
+            '</div>'
+        )
+    else:
+        _days_live = abs(_days_to_live) + 1  # +1: Day 1 on launch day (July 1), Day 2 next, etc.
+        _countdown_card_html = (
+            '<div style="text-align:center;padding:10px;background:#1a1a2e;border-radius:8px;margin-bottom:20px;">'
+            '<span style="color:#00d4a8;font-size:18px;font-weight:700;">🚀 LIVE</span>'
+            f'<span style="color:#888;font-size:13px;"> — Day {_days_live} of live trading</span>'
+            '</div>'
+        )
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -1469,11 +1481,13 @@ def main():
         sheet = connect_sheet()
     except Exception as e:
         print(f"✗ Google Sheets error: {e}")
+        _mark_done("tracker", details={"error": f"sheets_connect_failed: {str(e)[:60]}"})
         return
 
     all_rows_raw = sheet.get_all_values()
     if len(all_rows_raw) < 2:
         print("   No trade rows found.")
+        _mark_done("tracker", details={"rows": 0})
         return
 
     headers  = all_rows_raw[0]

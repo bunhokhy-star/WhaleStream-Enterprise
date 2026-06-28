@@ -1,0 +1,28 @@
+
+┌─────────────────────────────────────────────────────┐
+│  🐋 WHALE-STREAM MISSION                            │
+│  Build trust through discipline. Earn live capital. │
+│  This system belongs to the whole team.             │
+└─────────────────────────────────────────────────────┘
+   Balance: $329.92  |  2d to Go-Live  |  Target: $425 (Gate 4)
+
+
+╔══════════════════════════════════════════════════╗
+║   🤖  WHALE-STREAM TRADER — BYBIT DEMO          ║
+║   💰  $20 margin × 10x = $200 per trade        ║
+╚══════════════════════════════════════════════════╝
+
+   ⏱ PC clock is 1434 ms ahead of Bybit — offset applied
+⚡ REACTIVE MODE — re-checking decisions from Strategist re-check
+💳 Checking Bybit demo wallet...
+   ✓ Available USDT: $329.92  (total: $329.92)
+[2026-06-28 14:15 BKK] LOW BALANCE WARNING — $329.92 (34.0% drawdown)
+
+📋 Loading signals from Google Sheets...
+[2026-06-28 14:15 BKK] Google Sheets connected OK
+
+🚨 CIRCUIT BREAKER TRIGGERED!
+   Last 3 resolved trades all LOSS — auto-pausing trader.
+   Written: paused.flag
+   → Run CLEAR_PAUSE.bat after reviewing the situation to resume.
+[2026-06-28 14:15 BKK] CIRCUIT BREAKER — last 3 trades all LOSS, trader PAUSED

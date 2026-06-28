@@ -4,8 +4,9 @@
 :: ║   Single source of truth for ALL scheduled tasks.               ║
 :: ║   Right-click → "Run as administrator"                          ║
 :: ║                                                                  ║
-:: ║   This is the ONLY file you need to run to set up or            ║
-:: ║   repair the Task Scheduler. Do NOT use any other bat.          ║
+:: ║   Run this first to set up the core 9 tasks.                    ║
+:: ║   Then also run ADD_RECHECK_TASKS.bat to add the 6             ║
+:: ║   intra-cycle recheck/reactive tasks (--recheck / --reactive). ║
 :: ║                                                                  ║
 :: ║   4-hour team cycle (BKK time):                                  ║
 :: ║     :00  Bot       00:00 04:00 08:00 12:00 16:00 20:00          ║
