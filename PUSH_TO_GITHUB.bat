@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.86 — Full _mark_done coverage: all agent error exits guaranteed; BAT python paths fixed"
+git commit -m "v46.87 — Continuous decision loop: Strategist --recheck (3 rules, no Claude) + Trader --reactive (cancel/close vetoed orders)"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...

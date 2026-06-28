@@ -720,6 +720,13 @@ def send_telegram_summary(decisions_data, signals):
 # SECTION 8 — MAIN
 # ═══════════════════════════════════════════════════════════════
 
+def _get_cycle_id():
+    """Return a stable cycle ID for the current 4h window, e.g. '2026-06-28_0800'."""
+    now = bkk_now()
+    cycle_hour = (now.hour // 4) * 4
+    return f"{now.strftime('%Y-%m-%d')}_{cycle_hour:02d}00"
+
+
 def main():
     print()
     print("╔══════════════════════════════════════════════════════╗")
@@ -732,21 +739,209 @@ def main():
     print_mission_banner()
     log(f"=== Strategist run started {bkk_str} ===")
 
+    # ── Detect re-check mode (--recheck flag bypasses cycle guard) ──
+    import sys as _sys
+    _is_recheck = "--recheck" in _sys.argv
+
     # ── Cycle guard: skip if already done this 4h slot ──────────────
     import json as _jcg, datetime as _dcg
     _cg_path  = os.path.join(SCRIPT_DIR, "daily_status.json")
     _cg_hour  = _dcg.datetime.now().hour
     _cg_cycle = str((_cg_hour // 4) * 4).zfill(2)
     _cg_key   = f"strategist_{_cg_cycle}"
-    try:
-        with open(_cg_path, encoding="utf-8") as _cgf:
-            _cg_data = _jcg.load(_cgf)
-        if _cg_data.get("date") == _dcg.date.today().isoformat() and _cg_data.get(_cg_key):
-            print(f"[CYCLE GUARD] {_cg_key} already completed today — skipping duplicate run.")
-            return
-    except Exception:
-        pass  # status missing → proceed normally
+    if not _is_recheck:   # re-checks always bypass the guard
+        try:
+            with open(_cg_path, encoding="utf-8") as _cgf:
+                _cg_data = _jcg.load(_cgf)
+            if _cg_data.get("date") == _dcg.date.today().isoformat() and _cg_data.get(_cg_key):
+                print(f"[CYCLE GUARD] {_cg_key} already completed today — skipping duplicate run.")
+                return
+        except Exception:
+            pass  # status missing → proceed normally
     # ── End cycle guard ─────────────────────────────────────────────
+
+    # ════════════════════════════════════════════════════════════════
+    # RE-CHECK MODE — rules-only intra-cycle evaluation (no Claude)
+    # ════════════════════════════════════════════════════════════════
+    if _is_recheck:
+        print("\n🔄 STRATEGIST RE-CHECK MODE — rules-based (no Claude API)")
+        log("Strategist re-check started")
+
+        # Load previous decisions for this cycle
+        _prev_decisions = {}
+        _prev = {}
+        try:
+            with open(DECISIONS_FILE, "r", encoding="utf-8") as _pf:
+                _prev = json.load(_pf)
+            _prev_cycle = _prev.get("cycle_id", "")
+            for _d in _prev.get("decisions", []):
+                _key = (_d.get("coin", "").upper(), _d.get("direction", "").upper())
+                _prev_decisions[_key] = {
+                    "decision": _d.get("decision", "APPROVE"),
+                    "reason":   _d.get("reason", ""),
+                    "grade":    _d.get("grade", "B"),
+                }
+            print(f"   ✓ Loaded {len(_prev_decisions)} previous decision(s)  [cycle {_prev_cycle}]")
+        except Exception as _pe:
+            print(f"   ⚠ Could not load previous decisions: {_pe} — nothing to re-check")
+            _mark_done("strategist", details={"approved": [], "vetoed": [], "recheck": True, "error": "no_prev_decisions"})
+            return
+
+        # Connect to Google Sheets for current signals
+        try:
+            sheet     = connect_sheet()
+            all_rows  = sheet.get_all_values()
+            data_rows = all_rows[1:] if len(all_rows) > 1 else []
+        except Exception as _se:
+            print(f"   ✗ Sheets failed: {_se} — skipping re-check")
+            _mark_done("strategist", details={"approved": [], "vetoed": [], "recheck": True, "error": "sheets_failed"})
+            return
+
+        signals = load_latest_signals(data_rows)
+        if not signals:
+            print("   ℹ No current signals — nothing to re-check")
+            _mark_done("strategist", details={"approved": [], "vetoed": [], "recheck": True})
+            return
+
+        # Fetch BTC market bias (fast, no Claude)
+        market_bias, _btc_px, _btc_sma, _btc_pct = get_btc_market_bias()
+        print(f"   📈 BTC regime: {market_bias}")
+
+        # Fetch current prices for entry-staleness check
+        _current_prices = {}
+        try:
+            _pr = requests.get(
+                "https://api.bybit.com/v5/market/tickers",
+                params={"category": "linear"}, timeout=10
+            )
+            for _t in _pr.json().get("result", {}).get("list", []):
+                _sym = _t.get("symbol", "")
+                if _sym.endswith("USDT"):
+                    try:
+                        _current_prices[_sym[:-4]] = float(_t.get("lastPrice", 0) or 0)
+                    except (ValueError, TypeError):
+                        pass
+            print(f"   ✓ Prices fetched for {len(_current_prices)} coins")
+        except Exception as _pre:
+            print(f"   ⚠ Price fetch failed: {_pre} — staleness check skipped")
+
+        # Load pattern memory
+        memory = load_pattern_memory()
+
+        # ── Apply 3 rules per signal ─────────────────────────────────
+        _new_decisions = []
+        _changes       = []
+
+        for _sig in signals:
+            _coin = _sig.get("coin", "?").upper()
+            _raw_dir = _sig.get("direction", "").upper()
+            _direction = "LONG" if "LONG" in _raw_dir else "SHORT"
+            _key = (_coin, _direction)
+            _prev_dec    = _prev_decisions.get(_key, {}).get("decision", "APPROVE")
+            _prev_reason = _prev_decisions.get(_key, {}).get("reason", "carry-forward")
+            _prev_grade  = _prev_decisions.get(_key, {}).get("grade", "B")
+            _new_dec     = _prev_dec
+            _new_reason  = _prev_reason
+
+            # Rule 1 — BTC regime flip
+            if market_bias == "BEARISH" and _direction == "LONG" and _new_dec != "VETO":
+                _new_dec    = "VETO"
+                _new_reason = "Re-check R1: BTC regime BEARISH — vetoing LONG"
+            elif market_bias == "BULLISH" and _direction == "SHORT" and _new_dec != "VETO":
+                _new_dec    = "VETO"
+                _new_reason = "Re-check R1: BTC regime BULLISH — vetoing SHORT"
+
+            # Rule 2 — Entry-zone staleness (>5% past entry high/low)
+            if _new_dec != "VETO":
+                _px = _current_prices.get(_coin, 0)
+                _entry_str = str(_sig.get("entry", "")).replace(",", "").strip()
+                if _px and _entry_str:
+                    try:
+                        if " - " in _entry_str:
+                            _parts = [float(x) for x in _entry_str.split(" - ") if x.strip()]
+                        elif "-" in _entry_str:
+                            _parts = [float(x) for x in _entry_str.split("-") if x.strip()]
+                        else:
+                            _v = float(_entry_str)
+                            _parts = [_v * 0.98, _v * 1.02]
+                        _el, _eh = min(_parts), max(_parts)
+                        if _direction == "LONG" and _px > _eh * 1.05:
+                            _new_dec    = "VETO"
+                            _new_reason = (f"Re-check R2: entry zone missed — "
+                                           f"price {_px:.4g} > entry high {_eh:.4g} +5%")
+                        elif _direction == "SHORT" and _px < _el * 0.95:
+                            _new_dec    = "VETO"
+                            _new_reason = (f"Re-check R2: entry zone missed — "
+                                           f"price {_px:.4g} < entry low {_el:.4g} -5%")
+                    except (ValueError, TypeError):
+                        pass
+
+            # Rule 3 — Pattern memory: ≥3 consecutive losses
+            if _new_dec != "VETO":
+                _consec = (memory.get("coin_lessons", {})
+                               .get(_coin, {})
+                               .get("consecutive_losses", 0))
+                if _consec >= 3:
+                    _new_dec    = "VETO"
+                    _new_reason = (f"Re-check R3: pattern memory — "
+                                   f"{_coin} has {_consec} consecutive losses")
+
+            # Track changes
+            if _new_dec != _prev_dec:
+                _changes.append({
+                    "coin":      _coin,
+                    "direction": _direction,
+                    "prev":      _prev_dec,
+                    "new":       _new_dec,
+                    "reason":    _new_reason,
+                })
+                _icon = "APPROVE→VETO" if _new_dec == "VETO" else "VETO→APPROVE"
+                print(f"   🔄 {_icon}: {_coin} {_direction} — {_new_reason}")
+
+            _new_decisions.append({
+                "coin":      _coin,
+                "direction": _direction,
+                "decision":  _new_dec,
+                "grade":     _prev_grade,
+                "reason":    _new_reason,
+            })
+
+        if not _changes:
+            print(f"   ✅ No changes — all {len(_new_decisions)} decision(s) carry forward")
+        else:
+            print(f"\n   ⚡ {len(_changes)} change(s) — writing updated decisions file")
+
+        # Write updated decisions
+        _recheck_num = _prev.get("recheck_count", 0) + 1
+        _rc_approved = [d["coin"] for d in _new_decisions if d["decision"] == "APPROVE"]
+        _rc_vetoed   = [d["coin"] for d in _new_decisions if d["decision"] == "VETO"]
+
+        _updated = dict(_prev)
+        _updated["decisions"]       = _new_decisions
+        _updated["recheck_at"]      = bkk_str
+        _updated["recheck_count"]   = _recheck_num
+        _updated["recheck_changes"] = _changes
+        _updated["approved_count"]  = len(_rc_approved)
+        _updated["vetoed_count"]    = len(_rc_vetoed)
+        write_decisions(_updated)
+
+        # Telegram only when decisions changed
+        if _changes:
+            _lines = []
+            for _c in _changes:
+                _arr = "✅→⛔" if _c["new"] == "VETO" else "⛔→✅"
+                _lines.append(f"  {_arr} {_c['coin']} {_c['direction']}: {_c['reason']}")
+            send_telegram(
+                f"🔄 <b>STRATEGIST RE-CHECK #{_recheck_num}</b> — {bkk_str}\n"
+                f"{len(_changes)} change(s):\n" + "\n".join(_lines) +
+                f"\n\n📊 Now: {len(_rc_approved)} approved, {len(_rc_vetoed)} vetoed"
+            )
+
+        _mark_done("strategist", details={"approved": _rc_approved, "vetoed": _rc_vetoed, "recheck": True})
+        log(f"Re-check #{_recheck_num} complete — {len(_changes)} change(s)")
+        print(f"\n✅ Re-check #{_recheck_num} complete.")
+        return
+    # ── End re-check mode ────────────────────────────────────────────
 
     # ── Note if circuit breaker is active (don't block the run — just log it) ──
     if os.path.exists(PAUSED_FILE):
@@ -959,6 +1154,9 @@ def main():
         print(f"\n   Regime: {regime_note}")
 
     # ── Write decisions to file ──────────────────────────────────
+    parsed["cycle_id"]       = _get_cycle_id()
+    parsed["recheck_count"]  = 0
+    parsed["recheck_changes"]= []
     print()
     write_decisions(parsed)
 

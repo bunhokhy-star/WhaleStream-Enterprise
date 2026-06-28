@@ -1,5 +1,51 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.87 — 2026-06-28 — Continuous decision loop: Strategist re-checks + Trader reactive mode
+
+### Design
+Every 4h cycle now has 3 intra-cycle re-checks at +1h10m, +2h10m, +3h10m. Each re-check is rules-only (no Claude cost) and takes ~5 seconds. Trader reacts 5 minutes later. "Think → act → review → improve → act" without human touch.
+
+### whale_stream_strategist.py — `--recheck` mode
+- New `_get_cycle_id()` helper: stable ID per 4h window (e.g. `2026-06-28_0800`)
+- First-pass decisions now include `cycle_id`, `recheck_count=0`, `recheck_changes=[]`
+- `--recheck` CLI flag bypasses cycle guard and runs 3 rules per remaining signal:
+  - **Rule 1 — BTC regime flip**: BTC BEARISH → veto all LONGs; BULLISH → veto all SHORTs
+  - **Rule 2 — Entry staleness**: price >5% past entry zone high/low → VETO (zone missed)
+  - **Rule 3 — Pattern memory**: ≥3 consecutive losses for this coin → VETO
+- Writes updated decisions file with `recheck_at`, `recheck_count`, `recheck_changes`
+- Sends Telegram only if any decisions changed (zero noise when market is calm)
+- `_mark_done("strategist", recheck=True)` — checklist stays green
+
+### whale_stream_trader.py — `--reactive` mode
+- `--reactive` CLI flag bypasses cycle guard
+- In reactive mode, coins with an existing Bybit Order ID are skipped in the new-order loop (already placed — don't double-place)
+- New reactive veto scan: for each OPEN signal row that has a Bybit Order ID AND is now VETOED by Strategist → `close_position_at_market_for_veto()`:
+  - Step 1: call `cancel_order(symbol, order_id)` — works if order still unfilled
+  - Step 2: if cancel fails (order filled, position open) → place Market + `reduceOnly=True` to exit
+- New `get_position_for_coin(symbol)` — queries `/v5/position/list` for live position details
+- New `close_position_at_market_for_veto(symbol, bybit_order_id)` — orchestrates cancel→close
+
+### New files
+- `run_strategist_recheck.bat` — calls `whale_stream_strategist.py --recheck`
+- `run_trader_reactive.bat` — calls `whale_stream_trader.py --reactive`
+- `ADD_RECHECK_TASKS.bat` — registers 6 Task Scheduler tasks (3 re-check + 3 reactive):
+  - `WhaleStream-Strategist-Recheck-A/B/C` at :10 of 4h+1/2/3
+  - `WhaleStream-Trader-Reactive-A/B/C` at :15 of 4h+1/2/3
+
+### Full cycle schedule (BKK time, per 4h boundary)
+```
+:00  SigBot      — generates 3 LONG + 1 SHORT signals
+:10  Strategist  — Claude deep analysis → APPROVE / VETO / REDUCE
+:20  Trader      — places first wave of approved orders
+:30  Watchdog    — logs cycle health
+1:10 Strategist re-check A — rules-only (BTC regime + staleness + memory)
+1:15 Trader reactive A     — cancel/close newly vetoed; place newly approved
+2:10 Strategist re-check B — rules-only
+2:15 Trader reactive B
+3:10 Strategist re-check C — rules-only
+3:15 Trader reactive C
+```
+
 ## v46.86 — 2026-06-28 — Full _mark_done coverage: every agent exit path guaranteed to tick checklist
 
 ### whale_stream_bot.py

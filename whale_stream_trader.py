@@ -574,6 +574,72 @@ def cancel_order(symbol, order_id):
     return result.get("retCode") == 0
 
 
+def get_position_for_coin(symbol):
+    """
+    Return the open position dict for symbol, or None if no position.
+    Returns a dict with at least 'size' (str) and 'side' ('Buy'/'Sell').
+    """
+    result = bybit_request("GET", "/v5/position/list",
+                           params={"category": BYBIT_CATEGORY, "symbol": symbol})
+    if result.get("retCode") == 0:
+        for pos in result.get("result", {}).get("list", []):
+            try:
+                if float(pos.get("size", 0)) > 0:
+                    return pos
+            except (ValueError, TypeError):
+                pass
+    return None
+
+
+def close_position_at_market_for_veto(symbol, bybit_order_id):
+    """
+    Called when Strategist vetoes a coin whose order was already placed.
+
+    Step 1 — Try to cancel the open order (if still unfilled).
+    Step 2 — If cancel fails (order already filled / executed), close the
+             live position at market with reduceOnly=True.
+
+    Returns (action, success) where action is 'cancelled' | 'closed' | 'failed'.
+    """
+    # Step 1: attempt cancel
+    cancelled = cancel_order(symbol, bybit_order_id)
+    if cancelled:
+        log(f"REACTIVE VETO: {symbol} order {bybit_order_id} cancelled successfully")
+        print(f"   ✅ Order cancelled: {symbol} (order {bybit_order_id})")
+        return "cancelled", True
+
+    # Step 2: order may have filled — look for a live position
+    log(f"REACTIVE VETO: cancel failed for {symbol} — checking for live position")
+    pos = get_position_for_coin(symbol)
+    if pos is None:
+        # No position found — order may have been auto-cancelled already
+        log(f"REACTIVE VETO: no open position for {symbol} — nothing to close")
+        print(f"   ℹ No open position for {symbol} — nothing to close")
+        return "failed", False
+
+    pos_size = pos.get("size", "0")
+    pos_side = pos.get("side", "")      # "Buy" (LONG) or "Sell" (SHORT)
+    close_side = "Sell" if pos_side == "Buy" else "Buy"
+
+    result = bybit_request("POST", "/v5/order/create", body={
+        "category":    BYBIT_CATEGORY,
+        "symbol":      symbol,
+        "side":        close_side,
+        "orderType":   "Market",
+        "qty":         pos_size,
+        "reduceOnly":  True,
+        "timeInForce": "IOC",
+    })
+    if result.get("retCode") == 0:
+        log(f"REACTIVE VETO: {symbol} position closed at market (size={pos_size})")
+        print(f"   ✅ Position closed at market: {symbol} {pos_size} (Strategist veto)")
+        return "closed", True
+    else:
+        log(f"REACTIVE VETO: failed to close {symbol} position — {result.get('retMsg','?')}")
+        print(f"   ✗ Failed to close {symbol}: {result.get('retMsg','?')}")
+        return "failed", False
+
+
 def load_order_context():
     """Load order_context.json — {order_id: {symbol, side, btc_price, placed_at}}."""
     if os.path.exists(ORDER_CONTEXT_FILE):
@@ -907,20 +973,27 @@ def main():
     # ── Calibrate clock against Bybit server time ─────────────
     _calibrate_clock()
 
+    # ── Detect reactive mode (--reactive flag from Strategist re-check) ──
+    import sys as _sys
+    _is_reactive = "--reactive" in _sys.argv
+
     # ── Cycle guard: skip if already done this 4h slot ──────────────
     import json as _jcg, datetime as _dcg
     _cg_path  = os.path.join(SCRIPT_DIR, "daily_status.json")
     _cg_hour  = _dcg.datetime.now().hour
     _cg_cycle = str((_cg_hour // 4) * 4).zfill(2)
     _cg_key   = f"trader_{_cg_cycle}"
-    try:
-        with open(_cg_path, encoding="utf-8") as _cgf:
-            _cg_data = _jcg.load(_cgf)
-        if _cg_data.get("date") == _dcg.date.today().isoformat() and _cg_data.get(_cg_key):
-            print(f"[CYCLE GUARD] {_cg_key} already completed today — skipping duplicate run.")
-            return
-    except Exception:
-        pass  # status missing → proceed normally
+    if not _is_reactive:   # reactive mode always bypasses the guard
+        try:
+            with open(_cg_path, encoding="utf-8") as _cgf:
+                _cg_data = _jcg.load(_cgf)
+            if _cg_data.get("date") == _dcg.date.today().isoformat() and _cg_data.get(_cg_key):
+                print(f"[CYCLE GUARD] {_cg_key} already completed today — skipping duplicate run.")
+                return
+        except Exception:
+            pass  # status missing → proceed normally
+    else:
+        print("⚡ REACTIVE MODE — re-checking decisions from Strategist re-check")
     # ── End cycle guard ─────────────────────────────────────────────
 
     # ── Check wallet balance (runs even when paused — keeps balance file fresh) ──
@@ -1277,6 +1350,41 @@ def main():
     else:
         print("   ℹ Strategist file not found — no vetoes applied (Strategist may not have run yet)")
 
+    # ── REACTIVE MODE: cancel/close orders Strategist has newly vetoed ──────
+    if _is_reactive and _strat_loaded:
+        print("\n🔄 REACTIVE MODE — scanning for newly vetoed placed orders...")
+        _react_cancelled = 0
+        _react_closed    = 0
+        _react_failed    = 0
+        for _rr_idx, _rr_row in open_trades:
+            _rr_coin   = _rr_row[COL_COIN].strip().upper()
+            _rr_signal = _rr_row[COL_SIGNAL].strip().upper()
+            _rr_dir    = "LONG" if ("LONG" in _rr_signal or "🟢" in _rr_signal) else "SHORT"
+            _rr_bybit  = _rr_row[COL_BYBIT_ID].strip() if len(_rr_row) > COL_BYBIT_ID else ""
+            _rr_key    = (_rr_coin, _rr_dir)
+            _rr_symbol = f"{_rr_coin}USDT"
+
+            if not _rr_bybit:
+                # Not yet placed — no cancellation needed (will be skipped in order loop below)
+                continue
+            if _rr_key not in _strat_vetoes:
+                # Not vetoed — leave it
+                continue
+
+            # Placed AND vetoed → try to cancel / close
+            print(f"   ⛔ VETO on placed order: {_rr_coin} {_rr_dir}  (order {_rr_bybit})")
+            _act, _ok = close_position_at_market_for_veto(_rr_symbol, _rr_bybit)
+            if _act == "cancelled":
+                _react_cancelled += 1
+            elif _act == "closed":
+                _react_closed += 1
+            else:
+                _react_failed += 1
+
+        print(f"   ✅ Reactive scan done: {_react_cancelled} cancelled, "
+              f"{_react_closed} closed at market, {_react_failed} failed")
+    # ── End reactive mode veto scan ──────────────────────────────────────────
+
     # ── Cancel-on-reversal: drop LONG orders where BTC moved ≥3% against us ──
     print("\n🔍 Checking for reversed LONG orders (BTC ≥3% drop since placement)...")
     try:
@@ -1298,6 +1406,13 @@ def main():
     for sheet_row_idx, row in open_trades:
         coin       = row[COL_COIN].strip()
         signal     = row[COL_SIGNAL].strip()
+
+        # ── Reactive mode: skip coins already placed this cycle ──────────
+        if _is_reactive:
+            _existing_id = row[COL_BYBIT_ID].strip() if len(row) > COL_BYBIT_ID else ""
+            if _existing_id:
+                continue   # already placed — handled by reactive veto scan above or leave as-is
+
         entry_zone = row[COL_ENTRY_ZONE].strip()
         sl_str     = row[COL_SL].strip()
         tp1_str    = row[COL_TP1].strip()
