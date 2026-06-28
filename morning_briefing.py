@@ -510,7 +510,8 @@ def parse_yesterday_pnl():
         # Parse pnl_pct — stored as e.g. "+12.50%" or "-5.20%" or "12.50"
         pnl_val = 0.0
         try:
-            pnl_val = float(pnl_raw.replace("%", "").replace("+", "").strip())
+            m = re.search(r'([+-]?\d+(?:\.\d+)?)', str(pnl_raw))
+            pnl_val = float(m.group(1)) if m else 0.0
         except (ValueError, AttributeError):
             pnl_val = 0.0
 
@@ -758,7 +759,7 @@ def build_message():
         f"  Available:  ${available_bal:,.2f}",
         f"  In Margin:  ${margin_in_use:,.2f}",
         f"  Unreal P&L: {pnl_sign}${unreal_pnl:,.2f}",
-        f"  Size scale: {size_scale_pct}%  (v46.42 drawdown protection)",
+        f"  Size scale: {size_scale_pct}%  (v47.0 drawdown protection)",
         f"  Updated:    {bal_updated}",
         "",
         "📊 GATE PROGRESS",

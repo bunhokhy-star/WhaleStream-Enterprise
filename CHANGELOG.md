@@ -1,5 +1,60 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.0 — 2026-06-28 — Fifth full audit pass: 9 critical fixes across 6 files (Quad-TP detection, BKK clocks, be_set propagation, content guards)
+
+### P0 — Critical fixes
+
+**`monitor.py` — PARTIAL_CLOSE_RATIO = 0.60 broke TP1 detection for Quad-TP system**
+- Quad-TP closes 25% at TP1, leaving 75% of position remaining. `75% remaining > 60% threshold` = FALSE → monitor NEVER fired on TP1
+- TP1 hit was completely invisible: no SL-to-BE move, no Telegram alert, no `be_set` flag set
+- Fixed: `PARTIAL_CLOSE_RATIO = 0.85` — fires on any ≥15% position reduction, correctly catching 25% (TP1), 33% (TP2), 50% (TP3)
+- Telegram text also corrected: "Remaining 50% riding to TP2/TP3" → "Remaining 75% riding to TP2/TP3/TP4"
+
+**`monitor.py` — `be_set` flag lost on TP2/TP3 state update → SL-to-BE re-fires**
+- After TP1 hit: `be_set=True` saved in state. On TP2, Bybit API returns fresh `curr` dict with no `be_set` key
+- `be_needed = not prev.get("be_set")` = False (correct — already done). But code never reaches `curr["be_set"] = True`
+- State saved with no `be_set` → next 2-min cycle: `prev.get("be_set")` = False → SL-to-BE re-fires on TP2, TP3, TP4
+- Fixed: added `if prev.get("be_set") and not curr.get("be_set"): curr["be_set"] = True` before all 3 `state["positions"][symbol] = curr` assignments
+
+**`bot.py` — `rescue_msg.content[0].text` unguarded → IndexError on empty API response**
+- Anthropic API can return empty `content` list on rate-limit edge cases
+- `rescue_msg.content[0]` raises `IndexError` → run aborts without fallback or Telegram alert
+- Fixed: `rescue_msg.content[0].text if rescue_msg.content else ""`
+- (Previously fixed: same guard on `message.content[0].text` at line 1639)
+
+**`morning_briefing.py` — P&L parser crashes on Bybit `[B]` suffix**
+- Bybit closed P&L stored as e.g. `"+45.20% [B]"`. After `replace("%","").replace("+","")` → `"45.20 [B]"`
+- `float("45.20 [B]")` raises `ValueError` → all Bybit write-back trades show as 0% P&L in briefing
+- Fixed: regex extraction `re.search(r'([+-]?\d+(?:\.\d+)?)', str(pnl_raw))` handles all suffix variants
+
+### P1 — High-priority fixes
+
+**`watchdog.py` — STRATEGIST_LOG pointed to wrong filename**
+- Watchdog line 48: `STRATEGIST_LOG = "strategist_task_log.txt"` — file that never existed
+- Strategist writes to `strategist_log.txt` (confirmed line 125 of strategist.py)
+- `check_strategist()` always read a missing file → always fell back to "never run" state → false AMBER alert every cycle
+- Fixed: `STRATEGIST_LOG = os.path.join(BASE_DIR, "strategist_log.txt")`
+
+**`watchdog.py` — `_mark_done()` used local system clock, not BKK**
+- `__import__("datetime").datetime.now().hour` uses local machine clock
+- If server is not UTC+7, cycle key (e.g. `watchdog_08`) computed from wrong hour → wrong slot ticked
+- Fixed: inline BKK-aware datetime before computing `_today`, `_h`, `_cycle`
+
+**`strategist.py` — `_mark_done()` + cycle guard both used local clock, not BKK**
+- Lines 58-59: `datetime.date.today()` and `datetime.datetime.now().hour` use local clock
+- Line 759 cycle guard: same issue — `_dcg.datetime.now().hour` and `_dcg.date.today().isoformat()`
+- Fixed: all 3 locations now use `datetime.now(timezone(timedelta(hours=7)))` for BKK-aware time
+
+**`morning_briefing.py` — Stale version reference**
+- `f"Size scale: {size_scale_pct}% (v46.42 drawdown protection)"` — stale since v46.42
+- Fixed: updated to v47.0
+
+**`trader.py` — `get_open_positions_full()` silently returns `[]` on API failure**
+- Bybit API failure returns empty list with no log output — SL-to-BE check silently skipped
+- Fixed: added `print("⚠ get_open_positions_full(): Bybit API failure — SL-to-BE skipped (monitor handles it)")` before `return []`
+
+---
+
 ## v46.99 — 2026-06-28 — Fourth full audit pass: 11 fixes across 7 files (learning loop P0, monitor hardening, SL-BE idempotency, scheduler)
 
 ### P0 — Critical fixes

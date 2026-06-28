@@ -1636,7 +1636,7 @@ def analyze_with_claude(market_data_text, graveyard_text="", dominance_text="", 
         ],
     )
 
-    result      = message.content[0].text
+    result      = message.content[0].text if message.content else ""
     stop_reason = message.stop_reason
 
     # ── Token usage report ──
@@ -1684,7 +1684,7 @@ def analyze_with_claude(market_data_text, graveyard_text="", dominance_text="", 
                     )},
                 ],
             )
-            rescue_text = rescue_msg.content[0].text
+            rescue_text = rescue_msg.content[0].text if rescue_msg.content else ""
             rescue_out  = getattr(rescue_msg.usage, "output_tokens", 0) or 0
             if "##JSON_START##" in rescue_text:
                 print(f"   ✅ Rescue call succeeded! ({rescue_out} tokens) — JSON recovered")

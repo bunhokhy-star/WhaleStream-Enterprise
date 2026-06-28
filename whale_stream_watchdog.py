@@ -45,7 +45,7 @@ except ImportError:
 # ── Paths ──────────────────────────────────────────────────────
 BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
 BOT_LOG         = os.path.join(BASE_DIR, "bot_log.txt")
-STRATEGIST_LOG  = os.path.join(BASE_DIR, "strategist_task_log.txt")
+STRATEGIST_LOG  = os.path.join(BASE_DIR, "strategist_log.txt")
 TRADER_LOG      = os.path.join(BASE_DIR, "trader_log.txt")
 BALANCE_FILE    = os.path.join(BASE_DIR, "bybit_balance.json")
 PAUSED_FLAG     = os.path.join(BASE_DIR, "paused.flag")
@@ -79,8 +79,11 @@ def _write_html_snapshot():
 def _mark_done(agent_name, details=None):
     """Mark this agent done for the current cycle in daily_status.json."""
     _path  = os.path.join(BASE_DIR, "daily_status.json")
-    _today = __import__("datetime").date.today().isoformat()
-    _h     = __import__("datetime").datetime.now().hour
+    _dt    = __import__("datetime")
+    _bkk   = _dt.timezone(_dt.timedelta(hours=7))
+    _now   = _dt.datetime.now(_bkk)
+    _today = _now.date().isoformat()
+    _h     = _now.hour
     _cycle = str((_h // 4) * 4).zfill(2)
     _key   = f"{agent_name}_{_cycle}" if agent_name not in ("tracker", "monitor", "briefing") else agent_name
     try:

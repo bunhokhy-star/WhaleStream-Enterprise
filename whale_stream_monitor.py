@@ -115,7 +115,9 @@ STATE_FILE      = os.path.join(SCRIPT_DIR, "monitor_state.json")
 LOG_FILE        = os.path.join(SCRIPT_DIR, "monitor_log.txt")
 
 # Threshold: if remaining size / previous size <= this, treat as partial close (TP1)
-PARTIAL_CLOSE_RATIO = 0.60   # 50% close → ratio ~0.50, allow up to 0.60 for rounding
+# Quad-TP: 25% close leaves 75% remaining.  Need ratio > 0.75 to detect it.
+# 0.85 fires on any ≥15% position reduction — catches TP1 (25%), TP2 (33%), TP3 (50%).
+PARTIAL_CLOSE_RATIO = 0.85   # Quad-TP 25% close leaves 75%; fire on any ≥15% reduction
 
 # ─────────────────────────────────────────────────────────────
 # LOGGING
@@ -373,22 +375,30 @@ def run_monitor():
                     f"  Size: {prev_size} → {curr_size}\n"
                     f"  Entry (avg): {prev_avg:.6g}"
                     f"{sl_note}\n"
-                    f"  Remaining 50% riding to TP2/TP3\n"
+                    f"  Remaining 75% riding to TP2/TP3/TP4\n"
                     f"  🕐 {bkk.strftime('%H:%M BKK')}"
                 )
                 send_alert(msg)
                 alerts_fired += 1
 
                 # Update stored size to current
+                # Always carry be_set forward — it is only set on curr when be_needed=True,
+                # so TP2/TP3 partial closes would lose it without this propagation.
+                if prev.get("be_set") and not curr.get("be_set"):
+                    curr["be_set"] = True
                 state["positions"][symbol] = curr  # curr already has updated sl/size
 
             elif curr_size > prev_size * 1.20:
                 # Size grew significantly — position was added to; update state silently
                 log(f"   ℹ {symbol}: position size grew {prev_size} → {curr_size} (position added or avg'd down)")
+                if prev.get("be_set") and not curr.get("be_set"):
+                    curr["be_set"] = True
                 state["positions"][symbol] = curr
 
             else:
                 # Normal — just update sl/unrealised fields
+                if prev.get("be_set") and not curr.get("be_set"):
+                    curr["be_set"] = True
                 state["positions"][symbol] = curr
 
     # ── Add newly opened positions to state ───────────────────

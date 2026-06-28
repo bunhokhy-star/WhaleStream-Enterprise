@@ -515,6 +515,7 @@ def get_open_positions_full():
     if result.get("retCode") == 0:
         return [p for p in result["result"].get("list", [])
                 if float(p.get("size", 0)) > 0]
+    print("   ⚠ get_open_positions_full(): Bybit API failure — SL-to-BE skipped (monitor handles it)")
     return []
 
 
