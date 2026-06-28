@@ -137,7 +137,7 @@ def log(msg):
 # ─────────────────────────────────────────────────────────────
 def bybit_request(method, endpoint, params=None, body=None):
     """Authenticated Bybit V5 API request (Demo account)."""
-    timestamp   = str(int(time.time() * 1000) - 1000)
+    timestamp   = str(int(time.time() * 1000))
     recv_window = "20000"
 
     if method == "GET":
@@ -158,8 +158,9 @@ def bybit_request(method, endpoint, params=None, body=None):
         "X-BAPI-TIMESTAMP":   timestamp,
         "X-BAPI-RECV-WINDOW": recv_window,
         "X-BAPI-SIGN":        signature,
-        "X-BAPI-DEMO-TRADING": "1",
     }
+    if "demo" in BYBIT_BASE_URL:           # Only send demo header on demo endpoint
+        headers["X-BAPI-DEMO-TRADING"] = "1"
 
     url = BYBIT_BASE_URL + endpoint
     try:
@@ -337,11 +338,12 @@ def run_monitor():
                     be_needed = True
 
                 if be_needed:
-                    ok, result = move_sl_to_breakeven(symbol, prev_side, prev_avg)
+                    ok, result = move_sl_to_breakeven(symbol, prev_side, curr["avgPrice"])  # use live avg, not stale prev_avg
                     if ok:
+                        was_str = f"{curr_sl:.6g}" if curr_sl else "none"   # pre-compute to avoid invalid f-string format spec
                         sl_note = (
                             f"\n  🛡 SL moved to breakeven: {result:.6g}"
-                            f" (was: {curr_sl:.6g if curr_sl else 'none'})"
+                            f" (was: {was_str})"
                         )
                         log(f"   🛡 SL moved to BE for {symbol}: {result}")
                     else:

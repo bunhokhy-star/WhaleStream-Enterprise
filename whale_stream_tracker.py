@@ -527,7 +527,7 @@ def write_dashboard_html(all_rows):
     except Exception:
         pass
 
-    bybit_delta = (bybit_balance - BYBIT_START_BALANCE) if bybit_balance else None
+    bybit_delta = (bybit_balance - BYBIT_START_BALANCE) if bybit_balance is not None else None  # is not None — 0.0 balance is valid
     bybit_pct   = (bybit_delta / BYBIT_START_BALANCE * 100) if bybit_delta is not None else None
 
     resolved = [r for r in all_rows if r["status"] in ("WIN", "LOSS")]

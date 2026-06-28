@@ -1149,6 +1149,7 @@ def main():
     # this, the Trader would immediately re-create paused.flag from the
     # same stale LOSS streak, making manual clears completely ineffective.
     _cb_grace_active = False
+    _grace_age_min   = 0            # default — avoids NameError if try block partially executes
     _cb_grace_file   = os.path.join(SCRIPT_DIR, "cb_grace.txt")
     try:
         if os.path.exists(_cb_grace_file):
@@ -1250,7 +1251,8 @@ def main():
                           f"(max {MAX_SIGNAL_AGE_HOURS}h)")
                     continue
             except Exception:
-                pass  # if timestamp unparseable, include it
+                print(f"   ⏭ Skipping {row[COL_COIN].strip()} — timestamp unparseable: {ts_str!r}")
+                continue  # unparseable timestamp → skip rather than silently include
         open_trades.append((i + 2, row))  # (sheet row 1-indexed, data)
 
     if skipped_stale:
@@ -1835,6 +1837,12 @@ def main():
 
     # ── Persist skip counts ───────────────────────────────────
     save_skip_counts(skip_counts)
+
+    # ── Refresh balance file with final position count ─────────
+    # The first write (before pause check) used _early_n_positions.
+    # After placing orders, n_positions reflects the actual post-run count.
+    if placed > 0:
+        write_balance_file(total_balance, open_positions=n_positions)
 
     # ── Summary ───────────────────────────────────────────────
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")

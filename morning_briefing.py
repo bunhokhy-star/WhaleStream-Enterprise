@@ -616,11 +616,11 @@ def build_message():
     bal_updated  = bal.get("updated_at", "unknown")
     unreal_pnl   = sum(p["unrealisedPnl"] for p in positions)
     margin_in_use = len(positions) * 20.0  # $20 margin per position at 10x
-    available_bal = total_bal - margin_in_use
+    available_bal = max(0.0, total_bal - margin_in_use)   # clamp — can't go negative
     pnl_sign = "+" if unreal_pnl >= 0 else ""
 
     # ── Capital health ──
-    drawdown_pct = (start_bal - total_bal) / start_bal * 100 if start_bal > 0 else 0.0
+    drawdown_pct = max(0.0, (start_bal - total_bal) / start_bal * 100) if start_bal > 0 else 0.0  # clamp — negative means profit, not drawdown
     if drawdown_pct >= 15:
         gate4_line = f"  Gate 4: 🚨 BREACH — {drawdown_pct:.1f}% drawdown (limit 15%)"
     elif drawdown_pct >= 12:
@@ -828,7 +828,7 @@ def send_telegram(text):
         "parse_mode": "HTML",   # HTML mode — supports <b> bold tags in message
     }
     try:
-        resp = requests.post(url, data=data, timeout=15)
+        resp = requests.post(url, json=data, timeout=15)   # json= for safe Unicode encoding
         if resp.status_code == 200 and resp.json().get("ok"):
             print("✅ Briefing sent to Telegram.")
         else:

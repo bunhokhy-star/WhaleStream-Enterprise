@@ -372,7 +372,7 @@ def call_debrief_claude(prompt):
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     msg = client.messages.create(
         model=DEBRIEF_MODEL,
-        max_tokens=320,
+        max_tokens=450,   # raised from 320 — prevents truncation mid-JSON on multi-field responses
         system=[{"type": "text", "text": DEBRIEF_SYSTEM, "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": prompt}],
     )

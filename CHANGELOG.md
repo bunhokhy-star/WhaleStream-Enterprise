@@ -1,5 +1,82 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.96 — 2026-06-28 — Full system audit + 14 targeted fixes across all 8 agents
+
+### P0 — Go-live blockers fixed
+
+**`monitor.py` — Demo-trading header conditional (go-live blocker)**
+- `X-BAPI-DEMO-TRADING: "1"` was hardcoded unconditionally — would make live Bybit positions invisible on July 1
+- Fixed: header only sent when `"demo" in BYBIT_BASE_URL`
+
+**`monitor.py` — f-string crash on zero SL**
+- `f"{curr_sl:.6g if curr_sl else 'none'}"` is invalid Python inside an f-string format spec — crashes when `curr_sl == 0`
+- Fixed: pre-compute `was_str` before the f-string
+
+**`monitor.py` — SL moved to stale entry price**
+- `move_sl_to_breakeven()` was called with `prev_avg` (price from LAST monitor run), not live `curr["avgPrice"]`
+- Fixed: use `curr["avgPrice"]` for accurate breakeven SL
+
+**`monitor.py` — Remove 1000ms timestamp backdate**
+- `-1000` from timestamp was unnecessary with `recv_window=20000`; removed
+
+**`strategist.py` — Emoji prefix in direction silently dropped all signals (P0)**
+- Sheet stores `"🟢 Long"` / `"🔴 Short"` — `direction.strip().upper()` produced `"🟢 LONG"` which != `"LONG"` → all signals dropped every run
+- Fixed: extract canonical LONG/SHORT by checking if substring present in direction string
+
+### P1 — High severity bugs fixed
+
+**`trader.py` — `_grace_age_min` NameError guard**
+- Variable could be uninitialized if `try` block raised after `_cb_grace_active = True` but before assignment
+- Fixed: initialize `_grace_age_min = 0` before the try block
+
+**`trader.py` — Missing timestamp skips signal instead of silently including**
+- Signals with unparseable timestamps were silently included as "fresh" — could trade ancient signals
+- Fixed: `continue` (skip) instead of `pass` (include) on parse failure
+
+**`trader.py` — Balance file refresh after order loop**
+- `bybit_balance.json` was written before orders with stale `_early_n_positions` count
+- Fixed: second `write_balance_file()` call after loop when orders were placed
+
+**`tracker.py` — `bybit_balance` falsy guard**
+- `if bybit_balance` was False for balance == 0.0 (Bybit API hiccup), cascading to None format crash
+- Fixed: `if bybit_balance is not None`
+
+**`bot.py` — Rescue call misses truncated-mid-JSON case**
+- Rescue only triggered when `##JSON_START##` absent; if present but `##JSON_END##` missing (truncated JSON), no rescue → silent STAY OUT
+- Fixed: trigger rescue also when `##JSON_END##` absent
+
+**`bot.py` — Cross-direction conflict guard**
+- Same coin could appear as both LONG and SHORT simultaneously from two batches — contradictory signals sent to trader
+- Fixed: post-merge conflict check removes both sides
+
+### Speed / token optimizations
+
+**`bot.py` — CoinGecko stale sleep**
+- `if page < 3: time.sleep(2)` fired after LAST page too (wasted 2s per run)
+- Fixed: `if page < 2`
+
+**`strategist.py` — Lesson list reversed() incorrect**
+- `reversed(lesson_list[-4:])` presented oldest lesson last → model read stale lesson with highest attention
+- Fixed: removed `reversed()` — newest lesson now last (highest model attention weight)
+
+**`strategist.py` — `_icon` change label for REDUCE_SIZE**
+- `_icon` was hardcoded "APPROVE→VETO" or "VETO→APPROVE"; missed REDUCE_SIZE transitions
+- Fixed: `f"{_prev_dec}→{_new_dec}"`
+
+**`debrief.py` — `max_tokens` raised 320→450**
+- 320 was too tight for multi-field JSON responses; caused silent truncation → "Review manually" noise
+- Fixed: `max_tokens=450`
+
+**`morning_briefing.py` — Telegram `data=` → `json=`**
+- Form encoding could corrupt Unicode/emoji in Telegram HTML messages
+- Fixed: `json=data` for safe encoding
+
+**`morning_briefing.py` — Negative drawdown clamped**
+- When profitable, drawdown was negative → misleading "Gate 4: ✅ OK — -3.2% drawdown"
+- Fixed: `max(0.0, ...)` clamp; also clamped `available_bal` to 0 floor
+
+---
+
 ## v46.95 — 2026-06-28 — Fix WS_EMBEDDED regex in bot, strategist, trader, tracker
 
 ### Root-cause fix — Daily Checklist never updating for 4 agents

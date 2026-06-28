@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.95 — Fix WS_EMBEDDED regex [^;]* → [\s\S]*? in bot+strategist+trader+tracker _mark_done(); root cause of Daily Checklist never ticking for 4 agents"
+git commit -m "v46.96 — Full audit + 14 fixes: monitor demo-header conditional (go-live blocker), strategist emoji direction fix (P0 — was silently dropping all signals), monitor f-string crash on zero SL, monitor live avgPrice for SL-to-BE, bot JSON_END rescue + cross-direction conflict guard, trader timestamp skip + balance refresh, debrief max_tokens 450, tracker balance is-not-None guard, briefing drawdown clamp + json= Telegram"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...

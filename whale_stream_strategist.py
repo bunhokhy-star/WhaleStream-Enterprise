@@ -249,12 +249,19 @@ def load_latest_signals(all_rows):
         if ts and ts < cutoff:
             continue   # too old — from a previous run
 
-        coin      = row[COL_COIN].strip().upper()
-        direction = row[COL_SIGNAL].strip().upper()
-        conf_raw  = row[COL_CONF].strip() if len(row) > COL_CONF else ""
-        pattern   = row[COL_PATTERN].strip() if len(row) > COL_PATTERN else ""
-        entry     = row[COL_ENTRY_ZONE].strip() if len(row) > COL_ENTRY_ZONE else ""
-        conf      = safe_float(conf_raw) or 0.0
+        coin     = row[COL_COIN].strip().upper()
+        # Sheet stores e.g. "🟢 Long" or "🔴 Short" — extract canonical LONG/SHORT
+        _dir_raw = row[COL_SIGNAL].strip().upper()
+        if "LONG" in _dir_raw:
+            direction = "LONG"
+        elif "SHORT" in _dir_raw:
+            direction = "SHORT"
+        else:
+            direction = _dir_raw   # keep for the not-in check below
+        conf_raw = row[COL_CONF].strip() if len(row) > COL_CONF else ""
+        pattern  = row[COL_PATTERN].strip() if len(row) > COL_PATTERN else ""
+        entry    = row[COL_ENTRY_ZONE].strip() if len(row) > COL_ENTRY_ZONE else ""
+        conf     = safe_float(conf_raw) or 0.0
 
         if not coin or direction not in ("LONG", "SHORT"):
             continue
@@ -577,7 +584,7 @@ def build_strategist_user_message(signals, history, positions, balance, drawdown
                     # Only show if this coin is actually in a matching direction signal
                     if any(s["coin"] == coin and s["direction"] == direction for s in signals):
                         lines.append(f"\n  {coin} {direction} lessons (most recent first):")
-                        for lesson in reversed(lesson_list[-4:]):  # show up to 4, newest last = most relevant
+                        for lesson in lesson_list[-4:]:  # newest last = highest model attention weight
                             lines.append(f"    • {lesson}")
             if avoid_patterns:
                 lines.append(f"\n  ⚠ Avoid these patterns (repeated losers): {', '.join(avoid_patterns[:6])}")
@@ -895,7 +902,7 @@ def main():
                     "new":       _new_dec,
                     "reason":    _new_reason,
                 })
-                _icon = "APPROVE→VETO" if _new_dec == "VETO" else "VETO→APPROVE"
+                _icon = f"{_prev_dec}→{_new_dec}"
                 print(f"   🔄 {_icon}: {_coin} {_direction} — {_new_reason}")
 
             _new_decisions.append({

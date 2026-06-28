@@ -1459,7 +1459,7 @@ def fetch_top_300_coins():
             print(f"   ✓ CoinGecko page {page}: {len(coins)} coins (total: {len(all_coins)})")
         except Exception as e:
             print(f"   ✗ CoinGecko page {page} failed: {e}")
-        if page < 3:
+        if page < 2:          # sleep only between pages, not after the last one
             time.sleep(2)
 
     # ── Step C: Merge — Bybit overwrites price/volume fields + funding ──
@@ -1659,7 +1659,9 @@ def analyze_with_claude(market_data_text, graveyard_text="", dominance_text="", 
     # Strategy: pass the truncated response as the "assistant" turn, then ask Claude
     # to complete ONLY the JSON block. This is cheap (~2k tokens output) and reliable
     # because Claude already did the analysis — it just needs to write out the JSON.
-    if stop_reason == "max_tokens" and "##JSON_START##" not in result:
+    if stop_reason == "max_tokens" and (
+        "##JSON_START##" not in result or "##JSON_END##" not in result
+    ):
         print("   ⚠ Output cut off AND no JSON found — sending rescue call...")
         try:
             rescue_msg = client.messages.create(
@@ -2532,6 +2534,15 @@ def main():
         if sym and sym not in seen_s:
             seen_s.add(sym)
             merged_shorts.append(sig)
+
+    # ── Cross-direction conflict guard ─────────────────────────────────────────
+    # A coin cannot be both LONG and SHORT simultaneously — drop both sides if conflict.
+    _conflict_coins = {s.get("coin", "").upper() for s in merged_shorts} & \
+                      {s.get("coin", "").upper() for s in merged_longs}
+    if _conflict_coins:
+        print(f"   ⚠ Cross-direction conflict removed (LONG+SHORT same coin): {_conflict_coins}")
+        merged_longs  = [s for s in merged_longs  if s.get("coin", "").upper() not in _conflict_coins]
+        merged_shorts = [s for s in merged_shorts if s.get("coin", "").upper() not in _conflict_coins]
 
     # ── Programmatic SHORT confidence filter (belt + suspenders) ──────────────
     # If SHORT WR is critical, strip any shorts Claude emitted below the threshold,
