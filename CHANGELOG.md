@@ -1,6 +1,6 @@
 # WHALE-STREAM CHANGELOG
 
-## v47.5 — 2026-06-28 — Final Audit: 9 bugs fixed (HTML race, WLD blocklist, version sync)
+## v47.5 — 2026-06-28 — Final Audit: 12 bugs fixed (HTML race, WLD blocklist, version sync, confidence floor)
 
 ### `whale_stream_trader.py` — 4 fixes
 - **HTML race condition**: Removed `WS_EMBEDDED` HTML write from `_mark_done` —
@@ -31,10 +31,24 @@
 - Header comment said "~50% size drop → TP1". Updated to "≥15% size drop" to match
   actual Quad-TP 25% close detection logic (PARTIAL_CLOSE_RATIO = 0.85).
 
-### `whale_stream_tracker.py` — Bybit price fetch failure alert
-- Silent failure: if `load_bybit_prices()` threw an exception, tracker printed a line
-  but continued silently — all trades stalled for the cycle with no notification.
-- Now sends Telegram alert on Bybit price fetch failure so operator knows immediately.
+### `whale_stream_tracker.py` — 2 fixes
+- **Bybit price fetch failure alert**: Silent failure: if `load_bybit_prices()` threw an
+  exception, tracker printed a line but continued silently — all trades stalled for the
+  cycle with no notification. Now sends Telegram alert immediately on failure.
+- **HTML race condition**: Removed `WS_EMBEDDED` HTML write from `_mark_done` — same
+  race condition as trader.py/briefing.py. Watchdog is sole HTML writer.
+
+### `whale_stream_strategist.py` — Version banner sync
+- Header docstring + startup banner: v1.3 → v47.5. Stale since initial build.
+
+### `signal_scorer.py` — Version banner sync
+- Header docstring: v1.0 → v47.5. Stale since initial build.
+
+### `whale_stream_bot.py` — SHORT confidence floor fix
+- COMBINED MACRO MATRIX "BTC.D HIGH + Extreme Greed" rule said "Only SHORTs ≥ 93%"
+  but REPAIR MODE floor (same prompt, 40 lines later) says "Minimum SHORT confidence: 95%".
+  Changed 93% → 95% in the macro matrix to eliminate the contradiction. Claude would have
+  seen two conflicting floors in the same system prompt — now consistent at 95%.
 
 ---
 

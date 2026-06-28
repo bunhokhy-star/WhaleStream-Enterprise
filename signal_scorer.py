@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM SIGNAL SCORER v1.0                            ║
+║   WHALE-STREAM SIGNAL SCORER v47.5                           ║
 ║                                                              ║
 ║  Pre-scores every signal 0–10 BEFORE sending to Strategist.  ║
 ║  Deterministic — no API calls, instant evaluation.           ║

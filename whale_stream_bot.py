@@ -162,6 +162,7 @@ LONG_COIN_BLOCKLIST = {
     "COMP",  # 0W/3L — 0% WR, avg -59.8%  ← added v46.62 (2026-06-26)
     "QNT",   # 0W/3L — 0% WR, avg -65.6%  ← added v46.62 (2026-06-26)
     "WIF",   # 1W/4L — 25% WR, avg -48.7% ← added v46.62 (2026-06-26)
+    "WLD",   # 0W/2L — 0% WR, counter-trend coin ← added v47.5 (2026-06-28)
 }
 
 # ── Malformed coin blocklist (BOTH directions) ────────────────────────────────
@@ -370,7 +371,7 @@ Combine with BTC Dominance Gate for complete macro picture before analyzing any 
 {FEAR_GREED_GATE}
 
 COMBINED MACRO MATRIX (apply both gates together):
-• BTC.D HIGH + Extreme Greed  → Highest danger zone. Only SHORTs ≥ 93%. Reject LONGs < 95%.
+• BTC.D HIGH + Extreme Greed  → Highest danger zone. Only SHORTs ≥ 95%. Reject LONGs < 95%.
 • BTC.D HIGH + Extreme Fear   → CAPITULATION ZONE. REJECT ALL SHORTS. Only reversal LONGs ≥ 90%.
                                  Alts bounce hard from fear bottoms — shorts get destroyed here.
 • BTC.D LOW  + Extreme Fear   → Alt season entry signal. LONG bias strongly favored.
