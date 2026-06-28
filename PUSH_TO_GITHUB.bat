@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.75 — FIX: _mark_done() missing on early-exit paths in strategist.py + trader.py (Daily Checklist 3/4 → 4/4)"
+git commit -m "v46.76 — FIX: cycle guard added to Strategist + Trader; CHANGE_TO_2H.bat deleted"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...

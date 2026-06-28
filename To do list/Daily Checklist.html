@@ -115,7 +115,7 @@
     font-weight: 400;
   }
   .item.done .item-desc { color: #d1d5db; text-decoration: line-through; }
-  .item.done .item-hint { color: #d1d5db; text-decoration: line-through; }
+  .item.done .item-hint { color: #6b7280; text-decoration: none; }  /* keep hint readable — contains actual agent results */
 
   /* ── Divider ── */
   .divider { height: 1px; background: #f0f0f0; margin: 4px 0; }
@@ -327,9 +327,14 @@ function load() {
   } catch(e) {}
 }
 
+// ── Embedded status (updated by _mark_done() in each agent) ──────
+var WS_EMBEDDED={"date":"2026-06-28","monitor":true,"tracker":true,"sigbot_00":true,"strategist_00":true,"watchdog_00":true,"sigbot_04":true,"strategist_04":true,"trader_04":true,"watchdog_04":true,"briefing":true,"sigbot_08":true,"sigbot_08_details":{"longs":["EIGEN","STRK","LDO"],"shorts":["FF","ENS"]},"strategist_08":true,"strategist_08_details":{"approved":[],"vetoed":[]},"trader_08":true,"trader_08_details":{"placed":[],"skipped":["PAUSED — circuit breaker active"]},"watchdog_08":true,"watchdog_08_details":{"health":"AMBER"}};
+
 // ── Status server auto-polling ────────────────────────────────────
-var STATUS_URL = 'http://localhost:8765/daily_status.json';
-var POLL_MS    = 30000; // 30 seconds
+var STATUS_URL  = 'http://localhost:8765/daily_status.json';
+var STATUS_FILE = 'file:///C:/Users/MAX/WhaleStream/daily_status.json';
+var STATUS_JS   = '../daily_status.js';   // script-tag fallback (works in Electron file://)
+var POLL_MS     = 30000; // 30 seconds
 
 // Cycle-agent position within each 4h section (item index)
 var CYCLE_AGENT_IDX = { sigbot: 0, strategist: 1, trader: 2, watchdog: 3 };
@@ -350,10 +355,43 @@ function autoTick(itemId, secId, total) {
   save();
 }
 
+function formatAgentDetails(agent, details) {
+  if (!details) return null;
+  if (agent === 'sigbot') {
+    var l = (details.longs  || []).join(', ') || '—';
+    var s = (details.shorts || []).join(', ') || '—';
+    return '🟢 ' + l + '  |  🔴 ' + s;
+  }
+  if (agent === 'strategist') {
+    var a = (details.approved || []).join(', ') || '—';
+    var v = (details.vetoed   || []).join(', ') || '—';
+    return '✅ ' + a + '  |  ❌ ' + v;
+  }
+  if (agent === 'trader') {
+    var p  = (details.placed  || []).join(', ') || '—';
+    var sk = (details.skipped || []).join(', ') || '—';
+    return '🟢 ' + p + '  |  ⏸ ' + sk;
+  }
+  if (agent === 'watchdog') {
+    var h = details.health || '?';
+    return h === 'GREEN' ? '🟢 All healthy' : (h === 'CRITICAL' ? '🔴 CRITICAL' : '🟡 AMBER');
+  }
+  return null;
+}
+
+function updateHint(itemId, text) {
+  if (!text) return;
+  var el = document.getElementById(itemId);
+  if (!el) return;
+  var hint = el.querySelector('.item-hint');
+  if (hint) hint.textContent = text;
+}
+
 function applyStatus(data) {
   if (!data || typeof data !== 'object') return;
   Object.keys(data).forEach(function(key) {
     if (key === 'date' || !data[key]) return;
+    if (key.indexOf('_details') !== -1) return;
     // Static agents
     if (STATIC_ITEM[key]) {
       autoTick(STATIC_ITEM[key], 's6', SECTIONS[6].items.length);
@@ -362,13 +400,16 @@ function applyStatus(data) {
     // Cycle agents: agent_HH
     var parts = key.split('_');
     if (parts.length === 2) {
-      var agent = parts[0];
-      var hh    = parts[1];
-      var secId = HH_TO_SEC[hh];
-      var idx   = CYCLE_AGENT_IDX[agent];
+      var agent  = parts[0];
+      var hh     = parts[1];
+      var secId  = HH_TO_SEC[hh];
+      var idx    = CYCLE_AGENT_IDX[agent];
       if (secId !== undefined && idx !== undefined) {
         var secNum = parseInt(secId.slice(1), 10);
-        autoTick('item-' + secId + '-' + idx, secId, SECTIONS[secNum].items.length);
+        var itemId = 'item-' + secId + '-' + idx;
+        autoTick(itemId, secId, SECTIONS[secNum].items.length);
+        var details = data[key + '_details'];
+        if (details) updateHint(itemId, formatAgentDetails(agent, details));
       }
     }
   });
@@ -381,11 +422,39 @@ function setBadge(live) {
   b.style.color  = live ? '#22c55e' : '#d1d5db';
 }
 
+function loadViaScriptTag() {
+  // Script-tag injection — always works in Electron file:// context (no CORS restrictions)
+  var old = document.getElementById('_ws_status_js');
+  if (old) old.parentNode.removeChild(old);
+  window.WHALE_STATUS = null;
+  var s = document.createElement('script');
+  s.id  = '_ws_status_js';
+  s.src = STATUS_JS + '?t=' + Date.now();
+  s.onload  = function() {
+    if (window.WHALE_STATUS) { setBadge(true); applyStatus(window.WHALE_STATUS); }
+    else { setBadge(false); }
+  };
+  s.onerror = function() { setBadge(false); };
+  document.head.appendChild(s);
+}
+
 function pollStatus() {
+  // Apply embedded data immediately (works in sandboxed Cowork panel — no fetch needed)
+  var today = new Date().toISOString().slice(0, 10);
+  if (window.WS_EMBEDDED && window.WS_EMBEDDED.date === today) {
+    setBadge(true);
+    applyStatus(window.WS_EMBEDDED);
+  }
+  // Also try live fetch (works in Chrome via localhost:8765)
   fetch(STATUS_URL + '?t=' + Date.now())
     .then(function(r) { return r.json(); })
     .then(function(data) { setBadge(true); applyStatus(data); })
-    .catch(function()   { setBadge(false); });
+    .catch(function() {
+      fetch(STATUS_FILE)
+        .then(function(r) { return r.json(); })
+        .then(function(data) { setBadge(true); applyStatus(data); })
+        .catch(function() { loadViaScriptTag(); });
+    });
   setTimeout(pollStatus, POLL_MS);
 }
 

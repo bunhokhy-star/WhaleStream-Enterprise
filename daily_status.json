@@ -1,13 +1,41 @@
 {
-  "date": "2026-06-27",
+  "date": "2026-06-28",
   "monitor": true,
   "tracker": true,
+  "sigbot_00": true,
+  "strategist_00": true,
+  "watchdog_00": true,
+  "sigbot_04": true,
+  "strategist_04": true,
+  "trader_04": true,
+  "watchdog_04": true,
+  "briefing": true,
   "sigbot_08": true,
-  "sigbot_12": true,
-  "watchdog_12": true,
-  "sigbot_16": true,
-  "watchdog_16": true,
-  "sigbot_20": true,
-  "trader_20": true,
-  "watchdog_20": true
+  "sigbot_08_details": {
+    "longs": [
+      "EIGEN",
+      "STRK",
+      "LDO"
+    ],
+    "shorts": [
+      "FF",
+      "ENS"
+    ]
+  },
+  "strategist_08": true,
+  "strategist_08_details": {
+    "approved": [],
+    "vetoed": []
+  },
+  "trader_08": true,
+  "trader_08_details": {
+    "placed": [],
+    "skipped": [
+      "PAUSED \u2014 circuit breaker active"
+    ]
+  },
+  "watchdog_08": true,
+  "watchdog_08_details": {
+    "health": "AMBER"
+  }
 }

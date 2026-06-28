@@ -39,3 +39,13 @@
 [2026-06-27 20:43 BKK] ✗ Google Sheets connection failed: Command '['C:\\Users\\MAX\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe', '-m', 'pip', 'install', '--upgrade', 'gspread', '--quiet']' returned non-zero exit status 1.
 [2026-06-27 20:55 BKK] === Strategist run started 2026-06-27 20:55 BKK ===
 [2026-06-27 20:55 BKK] No signals to review — no OPEN signals found in last 26h
+[2026-06-27 22:54 BKK] === Strategist run started 2026-06-27 22:54 BKK ===
+[2026-06-27 22:54 BKK] No signals to review — no OPEN signals found in last 26h
+[2026-06-28 00:10 BKK] === Strategist run started 2026-06-28 00:10 BKK ===
+[2026-06-28 00:10 BKK] No signals to review — no OPEN signals found in last 26h
+[2026-06-28 04:10 BKK] === Strategist run started 2026-06-28 04:10 BKK ===
+[2026-06-28 04:10 BKK] ⚠ Circuit breaker ACTIVE — decisions will still be written but Trader is paused
+[2026-06-28 04:10 BKK] No signals to review — no OPEN signals found in last 26h
+[2026-06-28 08:10 BKK] === Strategist run started 2026-06-28 08:10 BKK ===
+[2026-06-28 08:10 BKK] ⚠ Circuit breaker ACTIVE — decisions will still be written but Trader is paused
+[2026-06-28 08:10 BKK] No signals to review — no OPEN signals found in last 26h

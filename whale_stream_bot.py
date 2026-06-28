@@ -46,7 +46,7 @@ if hasattr(sys.stderr, "buffer"):
 
 
 # ── Self-tick helper (writes completion to daily_status.json) ────
-def _mark_done(agent_name):
+def _mark_done(agent_name, details=None):
     """Mark this agent done for the current cycle in daily_status.json."""
     import json, datetime
     _path  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "daily_status.json")
@@ -62,9 +62,22 @@ def _mark_done(agent_name):
     except Exception:
         _data = {"date": _today}
     _data[_key] = True
+    if details:
+        _data[f"{_key}_details"] = details
     try:
         with open(_path, "w", encoding="utf-8") as _f:
             json.dump(_data, _f, indent=2)
+        _jspath = _path.replace("daily_status.json", "daily_status.js")
+        with open(_jspath, "w", encoding="utf-8") as _f:
+            _f.write("window.WHALE_STATUS=" + json.dumps(_data) + ";")
+        import re as _re
+        _html_path = os.path.join(os.path.dirname(_path), "To do list", "Daily Checklist.html")
+        with open(_html_path, encoding="utf-8") as _hf:
+            _html = _hf.read()
+        _inject = "var WS_EMBEDDED=" + json.dumps(_data, separators=(',', ':')) + ";"
+        _html = _re.sub(r'var WS_EMBEDDED=\{[^;]*\};', _inject, _html)
+        with open(_html_path, "w", encoding="utf-8") as _hf:
+            _hf.write(_html)
     except Exception:
         pass
 
@@ -2347,9 +2360,25 @@ def log_to_google_sheets(data, bkk_time):
 # ─────────────────────────────────────────────────────────────
 
 def main():
+    # ── Cycle guard: skip if already done this 4h slot ──────────────
+    import json as _jcg, datetime as _dcg
+    _cg_path  = os.path.join(SCRIPT_DIR, "daily_status.json")
+    _cg_hour  = _dcg.datetime.now().hour
+    _cg_cycle = str((_cg_hour // 4) * 4).zfill(2)
+    _cg_key   = f"sigbot_{_cg_cycle}"
+    try:
+        with open(_cg_path, encoding="utf-8") as _cgf:
+            _cg_data = _jcg.load(_cgf)
+        if _cg_data.get("date") == _dcg.date.today().isoformat() and _cg_data.get(_cg_key):
+            print(f"[CYCLE GUARD] {_cg_key} already completed today — skipping duplicate run.")
+            return
+    except Exception:
+        pass  # status missing → proceed normally
+    # ── End cycle guard ─────────────────────────────────────────────
+
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🐳  WHALE-STREAM v46.74 — AUTO BOT STARTING    ║")
+    print("║   🐳  WHALE-STREAM v46.75 — AUTO BOT STARTING    ║")
     print("╚══════════════════════════════════════════════════╝")
     # Check conservative flag early so we can show it in the startup banner
     _short_conservative_early = os.path.exists(os.path.join(SCRIPT_DIR, "short_conservative.flag"))
@@ -2647,7 +2676,9 @@ def main():
     print()
     print("✅  WHALE-STREAM run complete!")
     print()
-    _mark_done("sigbot")
+    _long_coins  = [s.get("coin", "?").upper() for s in signal_data.get("longs",  [])]
+    _short_coins = [s.get("coin", "?").upper() for s in signal_data.get("shorts", [])]
+    _mark_done("sigbot", details={"longs": _long_coins, "shorts": _short_coins})
 
 
 if __name__ == "__main__":

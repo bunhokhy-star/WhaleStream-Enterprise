@@ -1,17 +1,73 @@
 # WHALE-STREAM CHANGELOG
 
-## v46.75 — 2026-06-27 — FIX: _mark_done() missing on early-exit paths (Daily Checklist gaps)
+## v46.76 — 2026-06-28 — FIX: Cycle guard added to Strategist + Trader; CHANGE_TO_2H.bat deleted
 
-### Bug Fixed: Strategist + Trader never ticked Daily Checklist on early-exit paths
-- **Root cause**: `whale_stream_strategist.py` exits early (`return`) when no signals are found
-  (line 761), BEFORE reaching `_mark_done("strategist")` at line 933. So the Strategist never
-  wrote `strategist_XX` to `daily_status.json` on zero-signal cycles — causing 3/4 in checklist.
-- **Fix**: Added `_mark_done("strategist")` immediately before the early return in the no-signals
-  path so the Strategist always ticks, even when it has nothing to review.
-- **Second bug**: `whale_stream_trader.py` also exits early when circuit breaker is ACTIVE
-  (line 812), before reaching `_mark_done("trader")`. Trader would not tick when paused.
-- **Fix**: Added `_mark_done("trader")` before the circuit-breaker early return.
-- **Impact**: Starting with next cycle, Daily Checklist will show 4/4 on the 4h cycles.
+### Fix: No cycle guard in whale_stream_strategist.py and whale_stream_trader.py (pre-July 1 safety)
+- **Risk**: If Task Scheduler fired Strategist or Trader twice in the same 4h slot (e.g. PC wakes
+  from sleep mid-cycle), Strategist would re-process signals and Trader could place duplicate orders
+  on Bybit — a real financial risk 3 days before July 1 go-live.
+- **Fix**: Added identical cycle guard block to the top of `main()` in both files:
+  - `whale_stream_strategist.py`: guard key `strategist_{cycle}`, placed before circuit-breaker check
+  - `whale_stream_trader.py`: guard key `trader_{cycle}`, placed after `_calibrate_clock()`
+  - Reads `daily_status.json`; if `{key}` already `True` for today, prints
+    `[CYCLE GUARD] strategist_12 already completed today — skipping duplicate run.` and returns.
+  - Matches the existing cycle guard already in `whale_stream_bot.py`.
+- **All 3 cycle agents now protected**: bot ✅ strategist ✅ trader ✅
+
+### Cleanup: CHANGE_TO_2H.bat deleted permanently
+- Dangerous BAT file that switches bot schedule from 4h → 2h (caused the duplicate-run bug we
+  spent 4 days fixing) has been permanently deleted from the repository.
+- File no longer exists in `C:\Users\MAX\WhaleStream\`.
+
+## v46.75 — 2026-06-28 — FIX: 2h signal duplicate runs + FEAT: rich Daily Checklist details
+
+### Bug Fixed: Bot firing every ~2h instead of every 4h (CRITICAL)
+- **Root cause**: A legacy Task Scheduler task (unknown name, not in SETUP_ALL_TASKS.bat
+  deletion list) fires every 2 hours. When the 00:00 bot run takes ~2h to finish, the 02:00
+  "missed" trigger starts immediately at 02:08. Pattern repeats back-to-back.
+- **Silent masking**: Hour 6 → `(6//4)*4 = 4` → writes `sigbot_04`, silently overwriting the
+  real 04:00 run key. So `daily_status.json` never showed 3 runs.
+- **Fix**: Added **Cycle Guard** at the very start of `main()` in `whale_stream_bot.py`.
+  Reads `daily_status.json` at startup; if `sigbot_{cycle}` is already `True` for today,
+  prints `[CYCLE GUARD] sigbot_04 already completed today — skipping duplicate run.` and returns.
+  Prevents duplicate runs regardless of how many Task Scheduler entries exist.
+- **Action required**: Open Task Scheduler and look for any legacy "WhaleStream" / "Whale" tasks
+  beyond those in SETUP_ALL_TASKS.bat — delete any 2h-interval tasks found (belt-and-suspenders).
+
+### Feature: Rich details on Daily Checklist hint lines
+- Extended `_mark_done(agent_name)` → `_mark_done(agent_name, details=None)` in ALL 7 agent files
+  (bot, strategist, trader, watchdog, tracker, monitor, morning_briefing).
+- Details stored as `{key}_details` dict in `daily_status.json` / `daily_status.js` / HTML.
+- Each agent now passes actual results:
+  - **SigBot**: `{"longs": ["AAVE","EIGEN","JUP"], "shorts": ["H","DOT","MNT"]}`
+  - **Strategist**: `{"approved": ["AAVE","EIGEN"], "vetoed": ["JUP","H"]}`
+  - **Trader**: `{"placed": ["AAVE"], "skipped": ["EIGEN (REPAIR MODE)"]}`
+  - **Watchdog**: `{"health": "GREEN"}` / `"AMBER"` / `"CRITICAL"`
+- Daily Checklist.html `applyStatus()` updated: reads `{key}_details`, renders formatted hint text:
+  - SigBot: `🟢 AAVE, EIGEN, JUP  |  🔴 H, DOT, MNT`
+  - Strategist: `✅ AAVE, EIGEN  |  ❌ JUP, H`
+  - Trader: `🟢 AAVE  |  ⏸ —`
+  - Watchdog: `🟢 All healthy`
+- Added `formatAgentDetails()` and `updateHint()` helpers to HTML.
+
+### Fix: _mark_done() missing on early-exit paths (Daily Checklist gaps)
+- Strategist: added `_mark_done("strategist", details=...)` before no-signals early return.
+- Trader: added `_mark_done("trader", details=...)` before circuit-breaker early return.
+
+### Fix: Daily Checklist hint text invisible when item is ticked (CSS bug)
+- `Daily Checklist.html`: `.item.done .item-hint` had `color:#d1d5db; text-decoration:line-through`
+  which rendered the rich detail text nearly invisible and struck through after an agent tick.
+- Fix: changed to `color:#6b7280; text-decoration:none` — hint stays readable when done.
+
+### Fix: Daily Checklist WS_EMBEDDED race condition — Trader/Watchdog items not ticking
+- Root cause: Each agent tried to update the HTML WS_EMBEDDED blob individually. Monitor runs every
+  2 min and collides with Trader's :20 write → both HTML writes fail silently (try/except).
+  Result: Trader and Watchdog items never appeared ticked in the checklist.
+- JS polling fallback also fails in Cowork/Electron (script-tag CSP restrictions).
+- Fix: Watchdog is now the **sole HTML writer** via new `_write_html_snapshot()` function.
+  At :30 (last agent in cycle), Watchdog reads the complete `daily_status.json` and writes
+  the full authoritative WS_EMBEDDED blob to HTML in one atomic operation. No race possible.
+- CHANGE_TO_2H.bat deleted (dangerous file — caused the 2h bug we spent days fixing).
 
 ## v46.74 — 2026-06-27 — FIX: RUN_FULL_CYCLE_NOW.bat wrong Python + stale version strings
 

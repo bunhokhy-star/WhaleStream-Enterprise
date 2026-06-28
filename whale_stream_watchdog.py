@@ -53,8 +53,30 @@ PAUSED_FLAG     = os.path.join(BASE_DIR, "paused.flag")
 BKK = timezone(timedelta(hours=7))
 
 
+# ── HTML snapshot writer (Watchdog is sole HTML writer — no race conditions) ──
+def _write_html_snapshot():
+    """Read full daily_status.json and write complete WS_EMBEDDED blob to Daily Checklist.html.
+    Called once at the end of each Watchdog run (:30), after all 4 cycle agents have finished.
+    This eliminates the race condition where earlier agents' HTML writes collide with monitor."""
+    import re as _re
+    try:
+        _status_path = os.path.join(BASE_DIR, "daily_status.json")
+        _html_path   = os.path.join(BASE_DIR, "To do list", "Daily Checklist.html")
+        with open(_status_path, encoding="utf-8") as _sf:
+            _data = json.load(_sf)
+        with open(_html_path, encoding="utf-8") as _hf:
+            _html = _hf.read()
+        _inject = "var WS_EMBEDDED=" + json.dumps(_data, separators=(',', ':'), ensure_ascii=False) + ";"
+        _html = _re.sub(r'var WS_EMBEDDED=\{[^;]*\};', _inject, _html)
+        with open(_html_path, "w", encoding="utf-8") as _hf:
+            _hf.write(_html)
+        print("   ✓ Daily Checklist.html WS_EMBEDDED updated with full cycle snapshot.")
+    except Exception as _e:
+        print(f"   ⚠ HTML snapshot write failed: {_e}")
+
+
 # ── Self-tick helper (writes completion to daily_status.json) ────
-def _mark_done(agent_name):
+def _mark_done(agent_name, details=None):
     """Mark this agent done for the current cycle in daily_status.json."""
     _path  = os.path.join(BASE_DIR, "daily_status.json")
     _today = __import__("datetime").date.today().isoformat()
@@ -69,8 +91,24 @@ def _mark_done(agent_name):
     except Exception:
         _data = {"date": _today}
     _data[_key] = True
+    if details:
+        _data[f"{_key}_details"] = details
     with open(_path, "w", encoding="utf-8") as _f:
         json.dump(_data, _f, indent=2)
+    try:
+        _jspath = _path.replace("daily_status.json", "daily_status.js")
+        with open(_jspath, "w", encoding="utf-8") as _f:
+            _f.write("window.WHALE_STATUS=" + json.dumps(_data) + ";")
+        import re as _re
+        _html_path = os.path.join(os.path.dirname(_path), "To do list", "Daily Checklist.html")
+        with open(_html_path, encoding="utf-8") as _hf:
+            _html = _hf.read()
+        _inject = "var WS_EMBEDDED=" + json.dumps(_data, separators=(',', ':')) + ";"
+        _html = _re.sub(r'var WS_EMBEDDED=\{[^;]*\};', _inject, _html)
+        with open(_html_path, "w", encoding="utf-8") as _hf:
+            _hf.write(_html)
+    except Exception:
+        pass
     print(f"   ✓ Status logged → {_key}")
 
 
@@ -383,5 +421,7 @@ if __name__ == "__main__":
         print(msg)
         send_telegram(msg)
 
-    _mark_done("watchdog")
+    _watchdog_health = "CRITICAL" if trader_critical else ("AMBER" if issues_with_fixes else "GREEN")
+    _mark_done("watchdog", details={"health": _watchdog_health})
+    _write_html_snapshot()   # <-- write definitive WS_EMBEDDED blob after all agents done
     print(f"\n[{now_str}] Watchdog complete.")

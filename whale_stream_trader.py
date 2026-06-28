@@ -50,7 +50,7 @@ if hasattr(sys.stderr, "buffer"):
 
 
 # ── Self-tick helper (writes completion to daily_status.json) ────
-def _mark_done(agent_name):
+def _mark_done(agent_name, details=None):
     """Mark this agent done for the current cycle in daily_status.json."""
     import json, datetime
     _path  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "daily_status.json")
@@ -66,9 +66,22 @@ def _mark_done(agent_name):
     except Exception:
         _data = {"date": _today}
     _data[_key] = True
+    if details:
+        _data[f"{_key}_details"] = details
     try:
         with open(_path, "w", encoding="utf-8") as _f:
             json.dump(_data, _f, indent=2)
+        _jspath = _path.replace("daily_status.json", "daily_status.js")
+        with open(_jspath, "w", encoding="utf-8") as _f:
+            _f.write("window.WHALE_STATUS=" + json.dumps(_data) + ";")
+        import re as _re
+        _html_path = os.path.join(os.path.dirname(_path), "To do list", "Daily Checklist.html")
+        with open(_html_path, encoding="utf-8") as _hf:
+            _html = _hf.read()
+        _inject = "var WS_EMBEDDED=" + json.dumps(_data, separators=(',', ':')) + ";"
+        _html = _re.sub(r'var WS_EMBEDDED=\{[^;]*\};', _inject, _html)
+        with open(_html_path, "w", encoding="utf-8") as _hf:
+            _hf.write(_html)
     except Exception:
         pass
 
@@ -770,6 +783,22 @@ def main():
     # ── Calibrate clock against Bybit server time ─────────────
     _calibrate_clock()
 
+    # ── Cycle guard: skip if already done this 4h slot ──────────────
+    import json as _jcg, datetime as _dcg
+    _cg_path  = os.path.join(SCRIPT_DIR, "daily_status.json")
+    _cg_hour  = _dcg.datetime.now().hour
+    _cg_cycle = str((_cg_hour // 4) * 4).zfill(2)
+    _cg_key   = f"trader_{_cg_cycle}"
+    try:
+        with open(_cg_path, encoding="utf-8") as _cgf:
+            _cg_data = _jcg.load(_cgf)
+        if _cg_data.get("date") == _dcg.date.today().isoformat() and _cg_data.get(_cg_key):
+            print(f"[CYCLE GUARD] {_cg_key} already completed today — skipping duplicate run.")
+            return
+    except Exception:
+        pass  # status missing → proceed normally
+    # ── End cycle guard ─────────────────────────────────────────────
+
     # ── Check wallet balance (runs even when paused — keeps balance file fresh) ──
     print("💳 Checking Bybit demo wallet...")
     balance, total_balance, _bal_err = get_wallet_balance()
@@ -809,7 +838,7 @@ def main():
         print("   → Delete 'paused.flag' or run CLEAR_PAUSE.bat to resume.")
         send_telegram_alert(msg)
         log("PAUSED — circuit breaker flag present, skipping all orders")
-        _mark_done("trader")
+        _mark_done("trader", details={"placed": [], "skipped": ["PAUSED — circuit breaker active"]})
         return
 
     # ── Low balance warning ────────────────────────────────────
@@ -1120,6 +1149,7 @@ def main():
     # ── Place orders ───────────────────────────────────────────
     print("\n🚀 Placing orders...\n")
     placed = 0
+    placed_coins = []          # coin names successfully ordered this run
     sheet_order_writes = []   # (sheet_row_idx, order_id) — batch-written at end
     unreachable_rows   = []   # rows to mark UNREACHABLE in Sheets
     skip_counts = load_skip_counts()
@@ -1388,6 +1418,7 @@ def main():
         if ok:
             order_id = result
             placed  += 1
+            placed_coins.append(coin)
             sheet_order_writes.append((sheet_row_idx, order_id))
             skip_counts.pop(f"row_{sheet_row_idx}", None)
 
@@ -1656,7 +1687,7 @@ def main():
             print("\n✅ No stale entry orders detected (all open orders have active sheet signals)")
     except Exception as _se:
         print(f"   ⚠ Stale order check failed: {_se}")
-    _mark_done("trader")
+    _mark_done("trader", details={"placed": placed_coins, "skipped": skipped_shorts})
 
 
 if __name__ == "__main__":

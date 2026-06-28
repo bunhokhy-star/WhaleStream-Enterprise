@@ -51,7 +51,7 @@ if hasattr(sys.stderr, "buffer"):
 
 
 # ── Self-tick helper (writes completion to daily_status.json) ────
-def _mark_done(agent_name):
+def _mark_done(agent_name, details=None):
     """Mark this agent done for the current cycle in daily_status.json."""
     import json, datetime
     _path  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "daily_status.json")
@@ -67,9 +67,22 @@ def _mark_done(agent_name):
     except Exception:
         _data = {"date": _today}
     _data[_key] = True
+    if details:
+        _data[f"{_key}_details"] = details
     try:
         with open(_path, "w", encoding="utf-8") as _f:
             json.dump(_data, _f, indent=2)
+        _jspath = _path.replace("daily_status.json", "daily_status.js")
+        with open(_jspath, "w", encoding="utf-8") as _f:
+            _f.write("window.WHALE_STATUS=" + json.dumps(_data) + ";")
+        import re as _re
+        _html_path = os.path.join(os.path.dirname(_path), "To do list", "Daily Checklist.html")
+        with open(_html_path, encoding="utf-8") as _hf:
+            _html = _hf.read()
+        _inject = "var WS_EMBEDDED=" + json.dumps(_data, separators=(',', ':')) + ";"
+        _html = _re.sub(r'var WS_EMBEDDED=\{[^;]*\};', _inject, _html)
+        with open(_html_path, "w", encoding="utf-8") as _hf:
+            _hf.write(_html)
     except Exception:
         pass
 
@@ -719,6 +732,22 @@ def main():
     print_mission_banner()
     log(f"=== Strategist run started {bkk_str} ===")
 
+    # ── Cycle guard: skip if already done this 4h slot ──────────────
+    import json as _jcg, datetime as _dcg
+    _cg_path  = os.path.join(SCRIPT_DIR, "daily_status.json")
+    _cg_hour  = _dcg.datetime.now().hour
+    _cg_cycle = str((_cg_hour // 4) * 4).zfill(2)
+    _cg_key   = f"strategist_{_cg_cycle}"
+    try:
+        with open(_cg_path, encoding="utf-8") as _cgf:
+            _cg_data = _jcg.load(_cgf)
+        if _cg_data.get("date") == _dcg.date.today().isoformat() and _cg_data.get(_cg_key):
+            print(f"[CYCLE GUARD] {_cg_key} already completed today — skipping duplicate run.")
+            return
+    except Exception:
+        pass  # status missing → proceed normally
+    # ── End cycle guard ─────────────────────────────────────────────
+
     # ── Note if circuit breaker is active (don't block the run — just log it) ──
     if os.path.exists(PAUSED_FILE):
         log("⚠ Circuit breaker ACTIVE — decisions will still be written but Trader is paused")
@@ -758,7 +787,7 @@ def main():
             "reduced_count":  0,
         }
         write_decisions(empty)
-        _mark_done("strategist")
+        _mark_done("strategist", details={"approved": [], "vetoed": []})
         return
 
     # ── Build per-coin trade history ─────────────────────────────
@@ -931,7 +960,9 @@ def main():
     # ── Send Telegram ─────────────────────────────────────────────
     send_telegram_summary(parsed, signals)
 
-    _mark_done("strategist")
+    _approved_coins = [d.get("coin","?") for d in parsed.get("decisions",[]) if d.get("decision")=="APPROVE"]
+    _vetoed_coins   = [d.get("coin","?") for d in parsed.get("decisions",[]) if d.get("decision") != "APPROVE"]
+    _mark_done("strategist", details={"approved": _approved_coins, "vetoed": _vetoed_coins})
     print()
     print("✅ Strategist complete.")
     print()

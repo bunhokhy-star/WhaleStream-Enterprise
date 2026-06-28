@@ -47,7 +47,7 @@ if hasattr(sys.stderr, "buffer"):
 
 
 # ── Self-tick helper (writes completion to daily_status.json) ────
-def _mark_done(agent_name):
+def _mark_done(agent_name, details=None):
     """Mark this agent done for the current cycle in daily_status.json."""
     import json, datetime
     _path  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "daily_status.json")
@@ -63,9 +63,22 @@ def _mark_done(agent_name):
     except Exception:
         _data = {"date": _today}
     _data[_key] = True
+    if details:
+        _data[f"{_key}_details"] = details
     try:
         with open(_path, "w", encoding="utf-8") as _f:
             json.dump(_data, _f, indent=2)
+        _jspath = _path.replace("daily_status.json", "daily_status.js")
+        with open(_jspath, "w", encoding="utf-8") as _f:
+            _f.write("window.WHALE_STATUS=" + json.dumps(_data) + ";")
+        import re as _re
+        _html_path = os.path.join(os.path.dirname(_path), "To do list", "Daily Checklist.html")
+        with open(_html_path, encoding="utf-8") as _hf:
+            _html = _hf.read()
+        _inject = "var WS_EMBEDDED=" + json.dumps(_data, separators=(',', ':')) + ";"
+        _html = _re.sub(r'var WS_EMBEDDED=\{[^;]*\};', _inject, _html)
+        with open(_html_path, "w", encoding="utf-8") as _hf:
+            _hf.write(_html)
     except Exception:
         pass
 
