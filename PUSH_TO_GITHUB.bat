@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.84 — Audit fixes: _mark_done gaps in trader/strategist; vetoed filter; watchdog guard; CLEAR_PAUSE path"
+git commit -m "v46.85 — CRITICAL: two-tier expiry 8h unplaced/72h placed; audit fixes _mark_done/vetoed/watchdog/CLEAR_PAUSE"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...

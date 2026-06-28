@@ -1,5 +1,17 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.85 — 2026-06-28 — CRITICAL FIX: two-tier signal expiry (8h unplaced / 72h placed)
+
+### tracker.py — zombie signal pipeline unblock
+
+**Root cause:** Trader skips signals older than 4h (stale entry zones). But tracker only expired them after 72h. Result: 50–100+ zombie OPEN rows accumulated in the sheet. SigBot couldn't re-generate those coins (already OPEN), Strategist always saw an empty queue, Trader never got fresh signals.
+
+**Fix — two-tier expiry:**
+- Signals with **no Bybit Order ID** (never placed on Bybit) → expire after **8h**. After 4h Trader won't touch them anyway; the extra 4h buffer covers the next Trader run. Immediately frees the pipeline.
+- Signals **with Bybit Order ID** (placed, tracking TP2/TP3/TP4) → keep at **72h** unchanged.
+
+**Impact:** On next tracker run, all unplaced signals older than 8h will be mass-expired. Strategist will see fresh queues from the next SigBot cycle. System unblocks itself automatically.
+
 ## v46.84 — 2026-06-28 — Audit fixes: _mark_done gaps + vetoed filter + watchdog guard + CLEAR_PAUSE path
 
 ### Post-audit fixes (6 bugs found and fixed)

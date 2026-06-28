@@ -1584,28 +1584,33 @@ def main():
             continue
 
         # ── Check for timeout (EXPIRED) ────────────────────────
-        # IMPORTANT: expire ANY OPEN row older than TRADE_TIMEOUT_HOURS,
-        # regardless of whether COL_BYBIT_ID is set.  Unfilled signals
-        # (no Bybit order ever placed) must be caught here too — without
-        # this they accumulate as permanent zombie rows.
+        # Two-tier expiry:
+        #   • No Bybit Order ID (never placed) → expire after 8h.
+        #     Trader skips signals >4h old, so after 8h they will NEVER
+        #     be traded. Keeping them blocks SigBot from re-generating
+        #     the coin and keeps Strategist's queue permanently empty.
+        #   • Has Bybit Order ID (placed, tracking TP/SL) → expire after
+        #     TRADE_TIMEOUT_HOURS (72h) to allow TP2/TP3/TP4 resolution.
         bybit_id = row[COL_BYBIT_ID].strip() if len(row) > COL_BYBIT_ID else ""
+        _timeout = 8 if not bybit_id else TRADE_TIMEOUT_HOURS
         try:
             trade_dt = datetime.strptime(ts_str, "%Y-%m-%d %H:%M")
             trade_dt = trade_dt.replace(tzinfo=timezone(timedelta(hours=7)))
             age_hours = (bkk_time - trade_dt).total_seconds() / 3600
-            if age_hours > TRADE_TIMEOUT_HOURS:
+            if age_hours > _timeout:
                 sheet_row = i + 2  # +2: 1-indexed + skip header
                 updates.append((sheet_row, COL_STATUS + 1,      "EXPIRED"))
                 updates.append((sheet_row, COL_RESOLVED_AT + 1, now_str))
                 all_parsed[-1]["status"] = "EXPIRED"
                 if not bybit_id:
-                    print(f"   ⏰ EXPIRED (no fill): {coin} {signal.split()[0] if signal else ''} — signal was {age_hours:.0f}h old, never filled on Bybit")
+                    print(f"   ⏰ EXPIRED (never placed): {coin} — {age_hours:.0f}h old, Trader won't fill signals >4h")
                 else:
                     print(f"   ⏰ {coin} EXPIRED ({age_hours:.0f}h old)")
                 # ── EXPIRED Telegram alert ─────────────────────
                 _exp_direction = "LONG" if ("LONG" in signal.upper() or "🟢" in signal) else "SHORT"
+                _exp_reason = "never placed — entry zone stale" if not bybit_id else "not resolved in 72h"
                 send_telegram_alert(
-                    f"⏰ <b>EXPIRED</b>: {coin} {_exp_direction} — signal never filled in 72h"
+                    f"⏰ <b>EXPIRED</b>: {coin} {_exp_direction} — {_exp_reason}"
                 )
                 continue
         except Exception:
