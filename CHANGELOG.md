@@ -16,6 +16,11 @@
 - 8 call sites in `weekly_summary()`, `main()`, heartbeat check, partial close block, expiry check, fast-expire block, and Bybit P&L write-back were still constructing new objects inline
 - Fixed: all 8 replaced with `BKK`; removed dead `_bkk_tz = timezone(timedelta(hours=7))` local at line 1831 and updated its downstream usage at line 1857 (`tzinfo=_bkk_tz` → `tzinfo=BKK`)
 
+**`whale_stream_bot.py` — 4 remaining inline `timezone(timedelta(hours=7))` replaced with `BKK`**
+- `bkk_time = datetime.now(timezone(timedelta(hours=7)))` in `main()` (line 2393) → `datetime.now(BKK)`
+- `_now_bkk = datetime.now(timezone(timedelta(hours=7))).strftime(...)` in `main()` (line 2558) → `datetime.now(BKK).strftime(...)`
+- 2 remaining inline calls in cycle guard previously fixed; 1 in `_mark_done()` retained (local import before BKK is defined)
+
 **`whale_stream_bot.py` — Added module-level `BKK` constant + `_parse_conf()` replacing 4 duplicate parsers**
 - `BKK = timezone(timedelta(hours=7))` added after SECTION 3 imports
 - 4 local functions (`_conf_int`, `_long_conf_int`, `_parse_conf_val`, `_top3_key`) all extracted confidence integers via `re`; collapsed to single module-level `_parse_conf(sig)` returning `int`

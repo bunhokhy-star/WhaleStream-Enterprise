@@ -2390,7 +2390,7 @@ def main():
             print(f"⚠ Claude analysis failed (batch 2): {e} — continuing with batch 1 only")
 
     # Bangkok time used across all outputs
-    bkk_time = datetime.now(timezone(timedelta(hours=7)))
+    bkk_time = datetime.now(BKK)
 
     # ── Step 5: Parse + merge JSON signals from both batches ────────────
     def _make_fallback(raw_text):
@@ -2555,7 +2555,7 @@ def main():
     except Exception as e:
         print(f"⚠ End-of-run Telegram summary failed: {e}")
 
-    _now_bkk = datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d %H:%M")
+    _now_bkk = datetime.now(BKK).strftime("%Y-%m-%d %H:%M")
     print(f"[{_now_bkk} BKK] Bot run complete")
     print()
     print("✅  WHALE-STREAM run complete!")
