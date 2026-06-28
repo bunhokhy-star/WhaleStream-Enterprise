@@ -1,5 +1,170 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.95 — 2026-06-28 — Fix WS_EMBEDDED regex in bot, strategist, trader, tracker
+
+### Root-cause fix — Daily Checklist never updating for 4 agents
+
+**`[^;]*` regex broken in `_mark_done()` of 4 agent files**
+- `whale_stream_bot.py`, `whale_stream_strategist.py`, `whale_stream_trader.py`, `whale_stream_tracker.py` all had:
+  `_re.sub(r'var WS_EMBEDDED=\{[^;]*\};', ...)` in their `_mark_done()` HTML injection
+- `daily_status.json` is written with `indent=2` → the JSON blob is multi-line
+- `[^;]*` cannot match newlines, so the substitution silently failed every time
+- `except Exception: pass` swallowed the failure — no error, no update, checklist stays stale
+- Fixed in all 4 files: `[^;]*` → `[\s\S]*?` (already correct in watchdog, monitor, morning_briefing)
+- This is the root cause of the Strategist (and Bot, Trader, Tracker) never ticking the Daily Checklist
+
+---
+
+## v46.94 — 2026-06-28 — 4-agent deep audit: 12 new fixes across 8 files
+
+### Critical fixes
+
+**whale_stream_tracker.py — WIN/LOSS resolution used spot `lastPrice` instead of perpetual `markPrice`**
+- `load_bybit_prices()` fetched `category: "spot"` and read `lastPrice` — but Bybit triggers TP/SL for linear (USDT perpetuals) on `markPrice`, not spot price
+- Spot vs perpetual price can diverge by 0.5–2% during funding-rate-heavy periods — could resolve a trade incorrectly (WIN vs LOSS)
+- Fixed: changed `category` to `"linear"` and read `t.get("markPrice") or t.get("lastPrice")` as fallback
+
+**whale_stream_trader.py — `place_quad_tp_closes()` always incremented `allocated` even on failed TP placements**
+- `allocated += leg_qty` was unconditional — ran whether `ok=True` or `ok=False`
+- If legs 1–3 all failed, the 4th leg placed too small a qty (remainder already consumed by ghost allocations)
+- Fixed: `if ok: allocated += leg_qty` — only advance on successful placement
+
+**whale_stream_monitor.py — `_mark_done()` never called in crash path**
+- `run_monitor()` crash was caught by the outer try/except, Telegram was sent, then `raise` — but `_mark_done("monitor")` was never called
+- Monitor would always show as "not seen today" in Daily Checklist after a crash
+- Fixed: added `_mark_done("monitor", details={"error": str(e)[:200]})` before `raise`
+
+**whale_stream_trader.py — cycle guard `return` had no `_mark_done()` call**
+- When the cycle guard detected a duplicate run for the same 4h slot, it printed and returned without calling `_mark_done()`
+- Daily Checklist showed Trader as "not done" even though it had already run successfully
+- Fixed: added `_mark_done("trader", details={"placed": [], "skipped": ["cycle_guard"]})` before the return
+
+### High fixes
+
+**whale_stream_trader.py — no outer try/except in `__main__` block**
+- An unhandled exception in `main()` would exit without calling `_mark_done()` and without a Telegram alert
+- Fixed: wrapped `main()` in try/except with `_mark_done("trader", details={"error": ...})` and re-raise
+
+**whale_stream_debrief.py — no `cache_control` on Strategist system prompt (cost waste)**
+- `call_debrief_claude()` sent `DEBRIEF_SYSTEM` as a plain string — no caching
+- On a 5-trade batch, the ~1,200-token system prompt was billed 5× instead of 1×
+- Fixed: added `cache_control: {"type": "ephemeral"}` to system prompt list format
+
+**morning_briefing.py — `btc_sma` None guard missing in NEUTRAL branch**
+- `f"...SMA (${btc_sma:,.0f})"` would raise `TypeError` if `btc_sma` was None while `btc_price` was set
+- Fixed: changed `if btc_price` to `if btc_price and btc_sma`
+
+**morning_briefing.py — WS_EMBEDDED regex used `[^;]*` (same bug as watchdog, fixed in v46.93)**
+- `morning_briefing.py` and `whale_stream_monitor.py` both had the old `[^;]*` pattern in their own `_mark_done()` functions
+- Fixed: both changed to `[\s\S]*?` to match watchdog's already-correct pattern
+
+### Minor fixes
+
+**morning_briefing.py — `list.index()` crash risk on duplicate log lines (dead `placed_symbols` block)**
+- `lines.index(line)` returns the FIRST occurrence — on duplicate log lines it sliced the wrong context
+- `placed_symbols` was populated but never used in the return dict or in `build_message()`
+- Fixed: removed the dead `placed_symbols = []` initialization and the entire `m2` block
+
+**RUN_FULL_CYCLE_NOW.bat — header comment still said "Bybit Demo" (confusing on go-live day)**
+- Line 10 of the header block still said `executes approved signals on Bybit Demo`
+- Fixed: changed to `executes approved signals on Bybit`
+
+**JULY1_GOLIVE_CHECKLIST.md — "15 tasks" and "v46.92" both stale**
+- Step 2 said "disable all 15 WhaleStream tasks" — actual count is 16 (10 core + 6 recheck)
+- Footer said `v46.92` — now `v46.94`
+- Fixed: both updated
+
+**SETUP_ALL_TASKS.bat — final summary didn't mention ADD_RECHECK_TASKS.bat**
+- Operator running SETUP_ALL_TASKS.bat to reset their schedule would end up with 0 recheck tasks and no warning
+- Fixed: added explicit reminder echo to run ADD_RECHECK_TASKS.bat
+
+---
+
+## v46.93 — 2026-06-28 — 12-fix audit pass: NameErrors, dead code paths, caching, UI accuracy
+
+### Critical fixes
+
+**whale_stream_bot.py — `_gate1_resolved` / `_open_count` NameError on blocked signal runs**
+- Both variables were only initialised inside the `if signals:` / `else:` branches of `log_to_google_sheets()`
+- If signals existed but were ALL dropped by dedup or blocklist before the branch was reached, the function raised `NameError` and crashed — no Sheet log, no Telegram
+- Fixed: added `_gate1_resolved = 0` and `_open_count = 0` safe defaults at the top of the function
+
+**whale_stream_strategist.py — Re-check Rule 2 (entry price deviation) was completely dead for real signals**
+- Entry price parser did not strip `$` signs — `$435-$445` could not be cast to float; the `except` silently skipped the check
+- Every signal with a dollar-prefixed entry passed Rule 2 by default, defeating the guard
+- Fixed: added `.replace("$", "")` before `.strip()` in `_entry_str` parsing
+
+**whale_stream_tracker.py — Daily Checklist always showed 0W/0L on trade resolutions**
+- `_newly_resolved` dict uses key `"outcome"`, but the counters were reading `r.get("status")`
+- Every resolved trade contributed 0 to both win and loss counts; Telegram summary was always "🏆 0W / 0L"
+- Fixed: changed both comparisons to `r.get("outcome") == "WIN"` / `"LOSS"`
+
+### Medium fixes
+
+**whale_stream_bot.py — version strings stuck at v46.78 (4 locations)**
+- Banner, WHALE_STREAM_PROMPT, Telegram alert, and startup print all still said v46.78
+- Fixed: all 4 updated to v46.93 via replace_all
+
+**whale_stream_strategist.py — no prompt caching on Strategist system prompt**
+- `call_strategist_claude()` passed `system=STRATEGIST_SYSTEM` as a plain string — no `cache_control`
+- Added `cache_control: {"type": "ephemeral"}` to system prompt; saves ~30% on Strategist API cost
+
+**whale_stream_tracker.py — fast-expire Telegram message said "72h" for a 12h expiry**
+- Fast-expire fires at 12h with no Bybit price; Telegram still said "signal never filled in 72h"
+- Fixed: message now says "no Bybit price for {age_fe:.0f}h, fast-expired" with actual age
+
+**whale_stream_trader.py — `_strat_data` NameError risk if outer try silently fails**
+- `_strat_data` was only assigned inside `if os.path.exists(DECISIONS_FILE):`; a silent outer-try exception could leave it undefined before the downstream `_strat_data.get(...)` calls
+- Fixed: added `_strat_data = {}` safe default before the `if os.path.exists` block
+
+**whale_stream_trader.py — negative drawdown logged when balance exceeds start**
+- `(_bb_start_balance - _bb_balance) / _bb_start_balance * 100` goes negative when profitable
+- Fixed: wrapped with `max(0.0, ...)` — drawdown is clamped at 0 when in profit
+
+**whale_stream_watchdog.py — WS_EMBEDDED regex breaks if any JSON value contains a semicolon**
+- `var WS_EMBEDDED=\{[^;]*\};` would stop at the first semicolon inside a string value, corrupting the HTML injection
+- Fixed: changed to `[\s\S]*?` (non-greedy, dot-matches-newline) in both regex instances
+
+**morning_briefing.py — bold tags rendered as literal `<b>text</b>` in Telegram**
+- `parse_mode` was set to `""` (empty string) — Telegram ignored HTML markup
+- Fixed: `parse_mode: "HTML"` applied
+
+**morning_briefing.py — `gate4_breach.flag` never checked in briefing**
+- Briefing checked `paused.flag`, `short_repair.flag`, `short_conservative.flag` but not `gate4_breach.flag`
+- Fixed: added flag check + alert line when flag exists but drawdown < 15% (stale flag warning)
+
+**ADD_RECHECK_TASKS.bat — version strings stuck at v46.90**
+- Comment block header and echo banner still said v46.90
+- Fixed: updated to v46.93
+
+### Minor fixes
+
+**whale_stream_debrief.py — `max_tokens=256` too low for complex pattern entries**
+- Raised to `max_tokens=320` to prevent truncation on multi-pattern trade summaries
+
+**RUN_FULL_CYCLE_NOW.bat — comment said "Bybit Demo" (confusing on go-live day)**
+- Line 57 header comment now says "Bybit" (live-neutral wording)
+
+---
+
+## v46.92 — 2026-06-28 — CRITICAL: BYBIT_BASE_URL hardcoded to demo in 3 agents + watchdog fixes
+
+### Critical fixes
+
+**whale_stream_trader.py / tracker.py / monitor.py — `BYBIT_BASE_URL` hardcoded to demo endpoint**
+- `BYBIT_BASE_URL = "https://api-demo.bybit.com"` was a plain hardcoded assignment in all 3 files
+- Consequence: live Bybit API keys pointed at the demo endpoint authenticate and return 200 OK, but ALL orders are placed on the demo exchange — real money never moves
+- Fixed in all 3 files: wrapped in `try: from local_config import BYBIT_BASE_URL except ImportError: BYBIT_BASE_URL = "https://api-demo.bybit.com"` — live override is now `BYBIT_BASE_URL = "https://api.bybit.com"` in local_config.py
+- JULY1_GOLIVE_CHECKLIST.md Step 3 updated to include `BYBIT_BASE_URL` as a mandatory line to add
+
+### Minor fixes
+
+**whale_stream_watchdog.py — banner/docstring/comment said "8h" instead of "4h"**
+- `TRADER_CRITICAL_HOURS = 4` is the actual threshold, but 3 places in the file still said "8h": banner line 9, `build_critical_alert()` docstring, and Check CRITICAL comment
+- Fixed: all 3 locations updated to "4h" to match the actual `TRADER_CRITICAL_HOURS = 4` constant
+
+---
+
 ## v46.91 — 2026-06-28 — 4 final pre-ship fixes (second audit pass)
 
 ### Fix added after v46.90

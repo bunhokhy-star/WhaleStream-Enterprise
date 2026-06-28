@@ -76,7 +76,7 @@ def _mark_done(agent_name, details=None):
         with open(_html_path, encoding="utf-8") as _hf:
             _html = _hf.read()
         _inject = "var WS_EMBEDDED=" + json.dumps(_data, separators=(',', ':')) + ";"
-        _html = _re.sub(r'var WS_EMBEDDED=\{[^;]*\};', _inject, _html)
+        _html = _re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
         with open(_html_path, "w", encoding="utf-8") as _hf:
             _hf.write(_html)
     except Exception:
@@ -121,7 +121,10 @@ except ImportError:
     import os as _os
     BYBIT_API_KEY    = _os.getenv("BYBIT_API_KEY", "")
     BYBIT_API_SECRET = _os.getenv("BYBIT_API_SECRET", "")
-BYBIT_BASE_URL   = "https://api-demo.bybit.com"
+try:
+    from local_config import BYBIT_BASE_URL             # noqa — set "https://api.bybit.com" for live
+except ImportError:
+    BYBIT_BASE_URL = "https://api-demo.bybit.com"       # default: demo; override in local_config.py for live
 
 # ── Column indices (0-based) in Google Sheet ──────────────────
 COL_COIN        = 0
@@ -212,7 +215,7 @@ def load_bybit_prices():
     try:
         resp = requests.get(
             "https://api.bybit.com/v5/market/tickers",
-            params={"category": "spot"}, timeout=15
+            params={"category": "linear"}, timeout=15
         )
         data = resp.json().get("result", {}).get("list", [])
         for t in data:
@@ -220,7 +223,7 @@ def load_bybit_prices():
             if sym.endswith("USDT"):
                 coin = sym[:-4]
                 try:
-                    _bybit_cache[coin] = float(t.get("lastPrice", 0) or 0)
+                    _bybit_cache[coin] = float(t.get("markPrice") or t.get("lastPrice") or 0)
                 except (ValueError, TypeError):
                     pass
         print(f"   ✓ Bybit: {len(_bybit_cache)} prices loaded")
@@ -1648,7 +1651,7 @@ def main():
                     # ── EXPIRED Telegram alert (fast-expire) ──
                     _fexp_direction = "LONG" if ("LONG" in signal.upper() or "🟢" in signal) else "SHORT"
                     send_telegram_alert(
-                        f"⏰ <b>EXPIRED</b>: {coin} {_fexp_direction} — signal never filled in 72h"
+                        f"⏰ <b>EXPIRED</b>: {coin} {_fexp_direction} — no Bybit price for {age_fe:.0f}h, fast-expired"
                     )
                     continue
             except Exception:
@@ -2360,8 +2363,8 @@ def main():
     # Build details for Daily Checklist live display
     _bkk_tz    = timezone(timedelta(hours=7))
     _bkk_now   = datetime.now(_bkk_tz).strftime("%H:%M")
-    _nr_wins   = sum(1 for r in _newly_resolved if r.get("status") == "WIN")
-    _nr_losses = sum(1 for r in _newly_resolved if r.get("status") == "LOSS")
+    _nr_wins   = sum(1 for r in _newly_resolved if r.get("outcome") == "WIN")
+    _nr_losses = sum(1 for r in _newly_resolved if r.get("outcome") == "LOSS")
     _open_cnt  = sum(1 for r in all_parsed if r.get("status") not in ("WIN", "LOSS", "EXPIRED"))
     _mark_done("tracker", details={
         "resolved":  len(_newly_resolved),

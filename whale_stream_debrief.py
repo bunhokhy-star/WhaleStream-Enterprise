@@ -372,8 +372,8 @@ def call_debrief_claude(prompt):
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     msg = client.messages.create(
         model=DEBRIEF_MODEL,
-        max_tokens=256,
-        system=DEBRIEF_SYSTEM,
+        max_tokens=320,
+        system=[{"type": "text", "text": DEBRIEF_SYSTEM, "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": prompt}],
     )
     raw = msg.content[0].text.strip()

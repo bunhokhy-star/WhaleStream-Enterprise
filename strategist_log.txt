@@ -53,3 +53,5 @@
 [2026-06-28 12:10 BKK] No signals to review — no OPEN signals found in last 26h
 [2026-06-28 14:10 BKK] === Strategist run started 2026-06-28 14:10 BKK ===
 [2026-06-28 14:10 BKK] Strategist re-check started
+[2026-06-28 15:10 BKK] === Strategist run started 2026-06-28 15:10 BKK ===
+[2026-06-28 15:10 BKK] Strategist re-check started

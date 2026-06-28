@@ -6,7 +6,7 @@
 ║  Runs at :30 of every 4h cycle. Confirms all agents ran.     ║
 ║  Sends GREEN confirmation when healthy.                      ║
 ║  Sends AMBER alert with EXACT fix steps when something fails.║
-║  Sends RED CRITICAL when Trader has been down 8h+.           ║
+║  Sends RED CRITICAL when Trader has been down 4h+.           ║
 ║                                                              ║
 ║  Schedule: 00:30 04:30 08:30 12:30 16:30 20:30 BKK          ║
 ║                                                              ║
@@ -67,7 +67,7 @@ def _write_html_snapshot():
         with open(_html_path, encoding="utf-8") as _hf:
             _html = _hf.read()
         _inject = "var WS_EMBEDDED=" + json.dumps(_data, separators=(',', ':'), ensure_ascii=False) + ";"
-        _html = _re.sub(r'var WS_EMBEDDED=\{[^;]*\};', _inject, _html)
+        _html = _re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
         with open(_html_path, "w", encoding="utf-8") as _hf:
             _hf.write(_html)
         print("   ✓ Daily Checklist.html WS_EMBEDDED updated with full cycle snapshot.")
@@ -107,7 +107,7 @@ def _mark_done(agent_name, details=None):
         with open(_html_path, encoding="utf-8") as _hf:
             _html = _hf.read()
         _inject = "var WS_EMBEDDED=" + json.dumps(_data, separators=(',', ':')) + ";"
-        _html = _re.sub(r'var WS_EMBEDDED=\{[^;]*\};', _inject, _html)
+        _html = _re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
         with open(_html_path, "w", encoding="utf-8") as _hf:
             _hf.write(_html)
     except Exception:
@@ -314,7 +314,7 @@ def build_amber_alert(now_str, issues_with_fixes, bot_line, strat_line, trade_li
 
 
 def build_critical_alert(now_str, trade_last, trade_ago, bal_str):
-    """CRITICAL: Trader has been down >8h — maximum urgency (Principle 4+6)."""
+    """CRITICAL: Trader has been down >4h — maximum urgency (Principle 4+6)."""
     return (
         f"🔴🔴🔴 <b>CRITICAL — TRADER HAS BEEN OFFLINE {trade_ago//60}h {trade_ago%60}m</b> 🔴🔴🔴\n"
         f"🕐 {now_str}\n"
@@ -365,7 +365,7 @@ if __name__ == "__main__":
     print(strat_line)
     print(trade_line)
 
-    # ── Check CRITICAL: Trader down >8h ──────────────────────
+    # ── Check CRITICAL: Trader down >4h (1 missed cycle) ────────
     trader_critical = (
         not trade_ok
         and trade_ago is not None

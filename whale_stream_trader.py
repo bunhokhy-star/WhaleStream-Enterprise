@@ -79,7 +79,7 @@ def _mark_done(agent_name, details=None):
         with open(_html_path, encoding="utf-8") as _hf:
             _html = _hf.read()
         _inject = "var WS_EMBEDDED=" + json.dumps(_data, separators=(',', ':')) + ";"
-        _html = _re.sub(r'var WS_EMBEDDED=\{[^;]*\};', _inject, _html)
+        _html = _re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
         with open(_html_path, "w", encoding="utf-8") as _hf:
             _hf.write(_html)
     except Exception:
@@ -120,7 +120,10 @@ GOOGLE_SHEET_ID         = "1R21mkduSpbki2HmlNJMHM95-LkGS0q-AKHE1HVIfMmI"
 GOOGLE_CREDENTIALS_FILE = "google_credentials.json"
 
 # Bybit API
-BYBIT_BASE_URL   = "https://api-demo.bybit.com"
+try:
+    from local_config import BYBIT_BASE_URL             # noqa — set "https://api.bybit.com" for live
+except ImportError:
+    BYBIT_BASE_URL = "https://api-demo.bybit.com"       # default: demo; override in local_config.py for live
 BYBIT_PUBLIC_URL = "https://api.bybit.com"   # public market data (no auth)
 BYBIT_CATEGORY   = "linear"   # USDT Perpetual
 
@@ -969,7 +972,8 @@ def place_quad_tp_closes(symbol, entry_side, qty, tp_prices, info):
         oid = r["result"].get("orderId", "") if ok else r.get("retMsg", "?")
         results.append({"tp_label": label, "price": tp_price,
                         "qty": leg_qty, "ok": ok, "order_id": oid})
-        allocated += leg_qty  # always advance — keeps last-leg remainder correct even on partial failures
+        if ok:
+            allocated += leg_qty  # only advance on successful placement — keeps last-leg remainder correct
 
     return results
 
@@ -1041,6 +1045,7 @@ def main():
                 _cg_data = _jcg.load(_cgf)
             if _cg_data.get("date") == _dcg.date.today().isoformat() and _cg_data.get(_cg_key):
                 print(f"[CYCLE GUARD] {_cg_key} already completed today — skipping duplicate run.")
+                _mark_done("trader", details={"placed": [], "skipped": ["cycle_guard"]})
                 return
         except Exception:
             pass  # status missing → proceed normally
@@ -1316,7 +1321,7 @@ def main():
     except Exception:
         pass   # use live values as fallback
 
-    _drawdown_pct = (_bb_start_balance - _bb_balance) / _bb_start_balance * 100 if _bb_start_balance > 0 else 0.0
+    _drawdown_pct = max(0.0, (_bb_start_balance - _bb_balance) / _bb_start_balance * 100) if _bb_start_balance > 0 else 0.0
     if _drawdown_pct < 8:
         _size_mult = 1.0      # full size
     elif _drawdown_pct < 12:
@@ -1381,6 +1386,7 @@ def main():
     _strat_vetoes  = set()    # set of (coin, direction) pairs to skip
     _strat_reduces = set()    # set of (coin, direction) pairs to trade at 50% size
     _strat_loaded  = False
+    _strat_data    = {}    # safe default — prevents NameError if outer try silently fails
     if os.path.exists(DECISIONS_FILE):
         try:
             with open(DECISIONS_FILE, "r", encoding="utf-8") as _sf:
@@ -1994,4 +2000,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as _e:
+        print(f"💀 FATAL unhandled exception: {_e}")
+        _mark_done("trader", details={"error": str(_e)})
+        raise

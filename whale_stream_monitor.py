@@ -80,7 +80,7 @@ def _mark_done(agent_name, details=None):
         with open(_html_path, encoding="utf-8") as _hf:
             _html = _hf.read()
         _inject = "var WS_EMBEDDED=" + json.dumps(_data, separators=(',', ':')) + ";"
-        _html = _re.sub(r'var WS_EMBEDDED=\{[^;]*\};', _inject, _html)
+        _html = _re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
         with open(_html_path, "w", encoding="utf-8") as _hf:
             _hf.write(_html)
     except Exception:
@@ -97,7 +97,10 @@ except ImportError:
     import os as _os
     BYBIT_API_KEY    = _os.getenv("BYBIT_API_KEY", "")
     BYBIT_API_SECRET = _os.getenv("BYBIT_API_SECRET", "")
-BYBIT_BASE_URL   = "https://api-demo.bybit.com"
+try:
+    from local_config import BYBIT_BASE_URL             # noqa — set "https://api.bybit.com" for live
+except ImportError:
+    BYBIT_BASE_URL = "https://api-demo.bybit.com"       # default: demo; override in local_config.py for live
 BYBIT_CATEGORY   = "linear"
 
 try:
@@ -406,6 +409,7 @@ if __name__ == "__main__":
         run_monitor()
     except Exception as e:
         log(f"❌ Monitor crashed: {e}")
+        _mark_done("monitor", details={"error": str(e)[:200]})
         send_alert(
             f"❌ <b>WHALE-STREAM MONITOR CRASHED</b>\n"
             f"Error: {str(e)[:300]}\n"

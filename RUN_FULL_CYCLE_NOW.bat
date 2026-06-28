@@ -7,7 +7,7 @@
 ::   1. Clears the circuit breaker (deletes paused.flag)
 ::   2. Runs Bot      — scans 200 coins, picks top signals
 ::   3. Runs Strategist — Claude reviews + approves / vetoes
-::   4. Runs Trader   — executes approved signals on Bybit Demo
+::   4. Runs Trader   — executes approved signals on Bybit
 ::
 :: Watch your Telegram for live updates from each agent.
 :: ════════════════════════════════════════════════════════════════════
@@ -54,7 +54,7 @@ echo     [Strategist complete]
 echo.
 
 :: ── Step 3: Trader ────────────────────────────────────
-echo [3] Running Trader ^(placing approved orders on Bybit Demo^)...
+echo [3] Running Trader ^(placing approved orders on Bybit^)...
 echo     Watch Telegram for order placement alerts.
 echo.
 "C:\Users\MAX\AppData\Local\Python\bin\python.exe" "%DIR%\whale_stream_trader.py"

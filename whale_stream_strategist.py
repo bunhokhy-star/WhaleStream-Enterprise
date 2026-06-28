@@ -80,7 +80,7 @@ def _mark_done(agent_name, details=None):
         with open(_html_path, encoding="utf-8") as _hf:
             _html = _hf.read()
         _inject = "var WS_EMBEDDED=" + json.dumps(_data, separators=(',', ':')) + ";"
-        _html = _re.sub(r'var WS_EMBEDDED=\{[^;]*\};', _inject, _html)
+        _html = _re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
         with open(_html_path, "w", encoding="utf-8") as _hf:
             _hf.write(_html)
     except Exception:
@@ -619,7 +619,7 @@ def call_strategist_claude(user_message):
     message = client.messages.create(
         model=STRATEGIST_MODEL,
         max_tokens=2048,
-        system=STRATEGIST_SYSTEM,
+        system=[{"type": "text", "text": STRATEGIST_SYSTEM, "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": user_message}],
     )
     return message.content[0].text
@@ -854,7 +854,7 @@ def main():
             # Rule 2 — Entry-zone staleness (>5% past entry high/low)
             if _new_dec != "VETO":
                 _px = _current_prices.get(_coin, 0)
-                _entry_str = str(_sig.get("entry", "")).replace(",", "").strip()
+                _entry_str = str(_sig.get("entry", "")).replace(",", "").replace("$", "").strip()
                 if _px and _entry_str:
                     try:
                         if " - " in _entry_str:

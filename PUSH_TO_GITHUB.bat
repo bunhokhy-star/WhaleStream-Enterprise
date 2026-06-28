@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.91 — 4 final pre-ship fixes: TRADE_MARGIN_USDT try/except import, Gate 4 n_positions mid-loop, ADD_RECHECK comment stale, debrief.py _mark_done missing (Daily Checklist never ticked)"
+git commit -m "v46.95 — Fix WS_EMBEDDED regex [^;]* → [\s\S]*? in bot+strategist+trader+tracker _mark_done(); root cause of Daily Checklist never ticking for 4 agents"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...

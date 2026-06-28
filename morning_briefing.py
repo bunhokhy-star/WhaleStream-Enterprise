@@ -76,7 +76,7 @@ def _mark_done(agent_name, details=None):
         with open(_html_path, encoding="utf-8") as _hf:
             _html = _hf.read()
         _inject = "var WS_EMBEDDED=" + json.dumps(_data, separators=(',', ':')) + ";"
-        _html = _re.sub(r'var WS_EMBEDDED=\{[^;]*\};', _inject, _html)
+        _html = _re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
         with open(_html_path, "w", encoding="utf-8") as _hf:
             _hf.write(_html)
     except Exception:
@@ -403,8 +403,6 @@ def parse_trader_activity():
     skipped       = 0
     last_run_str  = None
     last_run_dt   = None
-    placed_symbols = []
-
     for line in lines:
         if "✅ Order placed!" in line:
             orders_placed += 1
@@ -422,10 +420,6 @@ def parse_trader_activity():
             except Exception:
                 pass
 
-        # Collect symbol names from placed orders
-        m2 = re.search(r"── ([A-Z0-9]+) (LONG|SHORT)", line)
-        if m2 and "✅ Order placed!" in "".join(lines[max(0, lines.index(line)-3):lines.index(line)+1]):
-            placed_symbols.append(m2.group(1))
 
     # Estimate next run (~4h interval is typical for the scheduler)
     next_run_str = "unknown"
@@ -605,7 +599,7 @@ def build_message():
         bias_emoji   = "😐"
         bias_action  = "NEUTRAL — both directions allowed"
         bias_detail  = (f"BTC ${btc_price:,.0f} within ±2% of 4h SMA (${btc_sma:,.0f})"
-                        if btc_price else "BTC SMA unavailable (Bybit offline?)")
+                        if btc_price and btc_sma else "BTC SMA unavailable (Bybit offline?)")
 
     # ── Data ──
     bal      = parse_balance()
@@ -640,6 +634,7 @@ def build_message():
     paused_flag       = os.path.exists(os.path.join(BASE_DIR, "paused.flag"))
     repair_flag       = os.path.exists(os.path.join(BASE_DIR, "short_repair.flag"))
     conservative_flag = os.path.exists(os.path.join(BASE_DIR, "short_conservative.flag"))
+    gate4_flag        = os.path.exists(os.path.join(BASE_DIR, "gate4_breach.flag"))
 
     # ── Size scaling (v46.42) ──
     if drawdown_pct >= 12:
@@ -657,6 +652,8 @@ def build_message():
         alert_lines.append(f"🔴 GATE 4 BREACHED — {drawdown_pct:.1f}% drawdown exceeds 15% limit!")
     elif drawdown_pct >= 12:
         alert_lines.append(f"⚠️ DRAWDOWN WARNING — {drawdown_pct:.1f}% (approaching Gate 4 limit of 15%)")
+    if gate4_flag and drawdown_pct < 15:
+        alert_lines.append("⚠️ gate4_breach.flag exists but drawdown < 15% — confirm flag is cleared!")
     if paused_flag:
         alert_lines.append(f"⚠️ Balance shown may be STALE (written at {bal_updated}, trader paused)")
 
@@ -828,7 +825,7 @@ def send_telegram(text):
     data = {
         "chat_id":    TELEGRAM_CHAT_ID,
         "text":       text,
-        "parse_mode": "",   # plain text — emojis pass through fine
+        "parse_mode": "HTML",   # HTML mode — supports <b> bold tags in message
     }
     try:
         resp = requests.post(url, data=data, timeout=15)

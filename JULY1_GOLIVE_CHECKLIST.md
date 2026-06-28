@@ -31,7 +31,7 @@ Then manually pause it while you edit:
 - This stops Trader from placing orders while you're mid-edit
 
 ### Step 2 — Open Task Scheduler
-- Temporarily **disable** all 15 WhaleStream tasks so nothing fires mid-switch:
+- Temporarily **disable** all 16 WhaleStream tasks so nothing fires mid-switch:
   - WhaleStream-Bot, Strategist, Trader, Watchdog, Tracker, Monitor, Briefing, OrphanCheck, LogAnalyzer
   - WhaleStream-Recheck-A/B/C, WhaleStream-Reactive-A/B/C
 
@@ -39,12 +39,17 @@ Then manually pause it while you edit:
 ```
 Notepad C:\Users\MAX\WhaleStream\local_config.py
 ```
-Change these two lines:
+Change these three lines:
 ```python
 BYBIT_API_KEY    = "your_LIVE_key_here"
 BYBIT_API_SECRET = "your_LIVE_secret_here"
+BYBIT_BASE_URL   = "https://api.bybit.com"
 ```
 ⚠️ Do NOT change anything else. Telegram keys, Google keys — leave them.
+
+> **Why `BYBIT_BASE_URL` matters:** Without it, the default is `https://api-demo.bybit.com`.
+> Live API keys pointed at the demo URL will authenticate but place all orders on the demo exchange.
+> Real money will never move. **This line is mandatory for go-live.**
 Save and close.
 
 ### Step 4 — Verify connection (before re-enabling tasks)
@@ -131,4 +136,4 @@ No code changes needed to roll back.
 
 ---
 
-*Generated: 2026-06-28 | WHALE-STREAM v46.89*
+*Generated: 2026-06-28 | WHALE-STREAM v46.94*

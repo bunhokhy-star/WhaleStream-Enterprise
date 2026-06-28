@@ -195,7 +195,10 @@ schtasks /query /TN "WhaleStream-Briefing"  /fo LIST | findstr /i "Task Name\|Ne
 echo ─────────────────────────────────────────────────────────────────
 echo.
 echo ══════════════════════════════════════════════════════════════════
-echo    ALL DONE — 9 tasks registered correctly.
+echo    ALL DONE — core tasks registered.
+echo.
+echo    !! ALSO run ADD_RECHECK_TASKS.bat (as Admin) to register !!
+echo    !! the 6 intra-cycle Strategist/Trader re-check tasks    !!
 echo.
 echo    4-hour cycle (BKK):
 echo      00:00  Bot        — signal generation

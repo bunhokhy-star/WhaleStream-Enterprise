@@ -1,7 +1,7 @@
 @echo off
 :: ════════════════════════════════════════════════════════════════════
 :: ADD_RECHECK_TASKS.bat
-:: Registers 6 Task Scheduler entries for the v46.90 continuous
+:: Registers 6 Task Scheduler entries for the v46.93 continuous
 :: decision loop:
 ::
 ::   Strategist re-checks  (rules-only, no Claude)
@@ -23,7 +23,7 @@ SET PYTHON=%SCRIPT_DIR%\run_strategist_recheck.bat
 SET TRADER=%SCRIPT_DIR%\run_trader_reactive.bat
 
 echo ══════════════════════════════════════════════════════
-echo   WHALE-STREAM v46.90 — Continuous Decision Loop
+echo   WHALE-STREAM v46.93 — Continuous Decision Loop
 echo   Task Scheduler Installer
 echo ══════════════════════════════════════════════════════
 echo.

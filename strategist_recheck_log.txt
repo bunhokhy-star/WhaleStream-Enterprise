@@ -18,3 +18,23 @@
 [2026-06-28 14:10 BKK] Strategist re-check started
    ✓ Loaded 0 previous decision(s)  [cycle ]
    ℹ No current signals — nothing to re-check
+
+╔══════════════════════════════════════════════════════╗
+║   🧠  WHALE-STREAM STRATEGIST v1.3                  ║
+║   Signal Quality Council — APPROVE / VETO / REDUCE  ║
+╚══════════════════════════════════════════════════════╝
+
+
+┌─────────────────────────────────────────────────────┐
+│  🐋 WHALE-STREAM MISSION                            │
+│  Build trust through discipline. Earn live capital. │
+│  This system belongs to the whole team.             │
+└─────────────────────────────────────────────────────┘
+   Balance: $329.92  |  2d to Go-Live  |  Target: $425 (Gate 4)
+
+[2026-06-28 15:10 BKK] === Strategist run started 2026-06-28 15:10 BKK ===
+
+🔄 STRATEGIST RE-CHECK MODE — rules-based (no Claude API)
+[2026-06-28 15:10 BKK] Strategist re-check started
+   ✓ Loaded 0 previous decision(s)  [cycle ]
+   ℹ No current signals — nothing to re-check
