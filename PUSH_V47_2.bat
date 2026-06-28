@@ -1,8 +1,8 @@
 @echo off
 cd /d C:\Users\MAX\WhaleStream
 git add -A
-git commit -m "v47.2 — full code audit: BKK constants, remove redundant imports, dead code, /ru SYSTEM in all schtasks (+ 2 missed BKK replacements in bot.py main)"
+git commit -m "v47.3 — Signal Scorer + Trade Logger: pre-Claude quality gate (5-dimension scoring), persistent WIN/LOSS log with stats engine, MASTER_PLAN.md"
 git push
 echo.
-echo Done — v47.2 pushed to GitHub.
+echo Done — v47.3 pushed to GitHub.
 pause

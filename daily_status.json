@@ -41,14 +41,14 @@
   "monitor_details": {
     "positions": 7,
     "alerts": 0,
-    "last_run": "19:26 BKK"
+    "last_run": "20:18 BKK"
   },
   "tracker_details": {
     "resolved": 0,
     "wins": 0,
     "losses": 0,
-    "open": 15,
-    "last_run": "19:19 BKK"
+    "open": 13,
+    "last_run": "20:19 BKK"
   },
   "sigbot_12": true,
   "sigbot_12_details": {
@@ -126,5 +126,34 @@
   "watchdog_16_details": {
     "health": "GREEN",
     "cycle_summary": "Bot:\ud83d\udfe2AAVE, LIT, NEAR | \ud83d\udd34H, SPX, MNT  Strat:\u2705SPX, EIGEN, ENS, H, MNT, LIT | \u274cAAVE, XPL, JUP, FF, TIA, FF, AAVE, JUP, FF  Trader:\u2014 none"
+  },
+  "sigbot_20": true,
+  "sigbot_20_details": {
+    "longs": [
+      "AAVE",
+      "TIA",
+      "LIT"
+    ],
+    "shorts": [
+      "H",
+      "MNT"
+    ]
+  },
+  "strategist_20": true,
+  "strategist_20_details": {
+    "approved": [
+      "H",
+      "MNT"
+    ],
+    "vetoed": [
+      "AAVE",
+      "XPL",
+      "JUP",
+      "SPX",
+      "FF",
+      "TIA",
+      "NEAR",
+      "LIT"
+    ]
   }
 }

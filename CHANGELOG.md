@@ -1,5 +1,36 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.3 — 2026-06-28 — Signal Scorer + Trade Logger (Strategist intelligence upgrade)
+
+### NEW: `signal_scorer.py` — Pre-Claude signal quality gate
+- Scores every signal 0–10 across 5 dimensions BEFORE sending to Claude:
+  1. Bot confidence alignment (0–2): ≥85%=+2, ≥70%=+1, <70%=+0
+  2. Market regime match (0–2): direction WITH BTC bias=+2, neutral=+1, against=+0
+  3. Coin historical win rate (0–2): ≥65%WR=+2, ≥50%=+1, <50%=+0, <3 samples=+1
+  4. Portfolio correlation (0–2): no duplicate position=+2, hedge=+1, duplicate=+0
+  5. Pattern strength (0–2): strong pattern=+2, moderate=+1, unknown=+0
+- Verdicts: STRONG (≥7) → Claude, REVIEW (4–6) → Claude flagged, SKIP (<4) → auto-veto
+- Saves Anthropic API tokens by auto-rejecting low-quality signals before Claude call
+- Integrated into `whale_stream_strategist.py` with full prompt annotation
+
+### NEW: `trade_logger.py` — Persistent WIN/LOSS trade log
+- Syncs all resolved trades from Google Sheets → `trade_log.json` + `trade_log.csv`
+- Trade categories: FULL_WIN (TP3/TP4), PARTIAL_WIN (TP1/TP2), LOSS (SL hit)
+- Query functions for other agents: get_win_rate(), get_daily_summary(),
+  get_performance_by_coin(), get_performance_by_pattern(), get_performance_by_hour(), get_streak()
+- Standalone: `python trade_logger.py [--sync] [--stats]`
+
+### NEW: `MASTER_PLAN.md` — Unified $1M strategy document
+- 5-phase position scaling ladder: $20 → $50 → $150 → $500 → $1,500/trade
+- 184-day compounding model (July 1 → Dec 31)
+- 5 pillars: intelligent system, 24/7 uptime, quality over quantity, scaling, full compounding
+
+### `whale_stream_strategist.py` — Scorer integration
+- Imports signal_scorer.py; falls back gracefully if unavailable
+- Score printed per signal before Claude call
+- Auto-vetoed SKIP signals merged into final decisions JSON + counted in Telegram summary
+- Score annotation injected into Claude prompt for each signal
+
 ## v47.2 — 2026-06-28 — Full code audit: BKK constant, redundant imports eliminated, dead code removed
 
 ### P0 — Critical (headless operation)

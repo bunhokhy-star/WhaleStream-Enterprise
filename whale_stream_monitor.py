@@ -124,7 +124,7 @@ PARTIAL_CLOSE_RATIO = 0.85   # Quad-TP 25% close leaves 75%; fire on any ≥15% 
 # LOGGING
 # ─────────────────────────────────────────────────────────────
 def log(msg):
-    bkk = datetime.now(timezone(timedelta(hours=7)))
+    bkk = datetime.now(BKK)
     ts  = bkk.strftime("%Y-%m-%d %H:%M:%S BKK")
     line = f"[{ts}] {msg}"
     print(line)
@@ -291,7 +291,7 @@ def save_state(state):
 # MAIN MONITOR LOGIC
 # ─────────────────────────────────────────────────────────────
 def run_monitor():
-    bkk = datetime.now(timezone(timedelta(hours=7)))
+    bkk = datetime.now(BKK)
     log(f"🔍 Monitor run — {bkk.strftime('%Y-%m-%d %H:%M BKK')}")
 
     # Load last known state

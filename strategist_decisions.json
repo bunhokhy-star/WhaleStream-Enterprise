@@ -5,110 +5,81 @@
       "direction": "LONG",
       "decision": "VETO",
       "grade": "D",
-      "reason": "Duplicate AAVE LONG; already open position blocks additional entry on same coin+direction"
+      "reason": "Already holding AAVE LONG with -$4.23 P&L; last trade unresolved on this coin+direction violates re-entry discipline"
     },
     {
       "coin": "XPL",
       "direction": "LONG",
       "decision": "VETO",
       "grade": "D",
-      "reason": "Already open LONG position with -1.64 pnl; same coin+direction stacks losses instead of cutting"
+      "reason": "Already holding XPL LONG with -$3.09 P&L; adding to unresolved losing position violates capital protection gate 4"
     },
     {
       "coin": "JUP",
       "direction": "LONG",
       "decision": "VETO",
       "grade": "D",
-      "reason": "Duplicate JUP LONG; already open position blocks additional size on same coin+direction"
+      "reason": "Already holding JUP LONG with -$1.15 P&L; multiple JUP signals competing while position unresolved violates discipline"
     },
     {
       "coin": "SPX",
       "direction": "SHORT",
-      "decision": "APPROVE",
-      "grade": "A",
-      "reason": "Stage 5 distribution, 2W/0L record, dead-cat bounce entry at resistance, meme sector weakness confirmed"
+      "decision": "VETO",
+      "grade": "D",
+      "reason": "Already holding SPX SHORT with -$0.58 P&L; adding to unresolved losing position violates capital protection"
     },
     {
       "coin": "FF",
       "direction": "SHORT",
       "decision": "VETO",
       "grade": "D",
-      "reason": "Third FF SHORT duplicate; consolidate signals and respect open position +0.75 pnl"
+      "reason": "Already holding FF SHORT with +$1.07 P&L (single winner); multiple new FF SHORT signals compete with open position"
     },
     {
       "coin": "TIA",
       "direction": "LONG",
       "decision": "VETO",
       "grade": "D",
-      "reason": "Already open LONG position with -0.38 pnl; adding same coin+direction violates capital protection rule"
-    },
-    {
-      "coin": "AAVE",
-      "direction": "LONG",
-      "decision": "VETO",
-      "grade": "D",
-      "reason": "Duplicate AAVE LONG; already open position blocks additional entry on same coin+direction"
+      "reason": "Already holding TIA LONG with -$1.12 P&L; star coin status cannot override unresolved drawdown on same direction"
     },
     {
       "coin": "NEAR",
       "direction": "LONG",
-      "decision": "REDUCE_SIZE",
+      "decision": "VETO",
       "grade": "C",
-      "reason": "90% confidence at borderline threshold; negative funding is good but confidence too low for full size\u201450% trade"
+      "reason": "Portfolio already 7/7 long-heavy in drawdown; adding 8th long position violates concentration risk during 34% recovery"
     },
     {
-      "coin": "JUP",
+      "coin": "LIT",
       "direction": "LONG",
       "decision": "VETO",
-      "grade": "D",
-      "reason": "Duplicate JUP LONG; already open position blocks additional size on same coin+direction"
+      "grade": "C",
+      "reason": "Portfolio already severely long-biased with -$18.24 net long exposure; adding LIT LONG deepens drawdown concentration"
     },
     {
       "coin": "H",
       "direction": "SHORT",
-      "decision": "VETO",
+      "decision": "APPROVE",
       "grade": "A+",
-      "reason": "Re-check R2: SHORT entry zone missed (price fell through) \u2014 price 0.05755 < entry low 0.096 -5%"
-    },
-    {
-      "coin": "FF",
-      "direction": "SHORT",
-      "decision": "VETO",
-      "grade": "D",
-      "reason": "Third FF SHORT duplicate; consolidate signals and respect open position +0.75 pnl"
+      "reason": "Stage 5 catastrophic distribution with proven 19W/0L graveyard dominance; no conflict with open positions; SHORT flows with neutral regime"
     },
     {
       "coin": "MNT",
       "direction": "SHORT",
       "decision": "APPROVE",
       "grade": "A",
-      "reason": "Stage 5 catastrophic distribution, 95% confidence, -18.79% 7d structural breakdown, dead-cat bounce entry at resistance"
-    },
-    {
-      "coin": "LIT",
-      "direction": "LONG",
-      "decision": "APPROVE",
-      "grade": "B",
-      "reason": "Stage 2 breakout, 90% confidence, +14.90% 7d outperformance, strong negative funding, no history yet"
-    },
-    {
-      "coin": "SPX",
-      "direction": "SHORT",
-      "decision": "APPROVE",
-      "grade": "A",
-      "reason": "Stage 5 distribution, 2W/0L record, dead-cat bounce entry at resistance, meme sector weakness confirmed"
+      "reason": "Stage 5 catastrophic distribution with -20% 7d structural breakdown and proven graveyard WIN; SHORT aligns with market regime"
     }
   ],
-  "regime_note": "Neutral regime (BTC -5.66% 7d). Bias toward STRONG Stage 5 SHORTs and proven LDO/AAVE/TIA LONGs; avoid stacking same coin.",
-  "approved_count": 4,
-  "vetoed_count": 9,
-  "reduced_count": 1,
-  "run_at": "2026-06-28 16:10 BKK",
-  "signal_count": 19,
-  "btc_7d_pct": -5.662686093082732,
+  "regime_note": "BTC -6.51% 7d = neutral regime; portfolio drowning in 7 long positions (-$18.24 net) during drawdown; SHORT the proven stage 5 coins (H, MNT) to hedge and recover; stop adding LONGs until winners materialize",
+  "approved_count": 2,
+  "vetoed_count": 8,
+  "reduced_count": 0,
+  "run_at": "2026-06-28 20:10 BKK",
+  "signal_count": 18,
+  "btc_7d_pct": -6.511126587505305,
   "market_bias": "NEUTRAL",
-  "cycle_id": "2026-06-28_1600",
-  "recheck_count": 3,
-  "recheck_changes": [],
-  "recheck_at": "2026-06-28 19:10 BKK"
+  "cycle_id": "2026-06-28_2000",
+  "recheck_count": 0,
+  "recheck_changes": []
 }

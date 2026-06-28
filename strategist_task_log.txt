@@ -376,3 +376,73 @@ SyntaxError: unexpected character after line continuation character
 
 ✅ Strategist complete.
 
+
+╔══════════════════════════════════════════════════════╗
+║   🧠  WHALE-STREAM STRATEGIST v1.3                  ║
+║   Signal Quality Council — APPROVE / VETO / REDUCE  ║
+╚══════════════════════════════════════════════════════╝
+
+
+┌─────────────────────────────────────────────────────┐
+│  🐋 WHALE-STREAM MISSION                            │
+│  Build trust through discipline. Earn live capital. │
+│  This system belongs to the whole team.             │
+└─────────────────────────────────────────────────────┘
+   Balance: $329.91  |  2d to Go-Live  |  Target: $425 (Gate 4)
+
+[2026-06-28 20:10 BKK] === Strategist run started 2026-06-28 20:10 BKK ===
+[2026-06-28 20:10 BKK] ⚠ Circuit breaker ACTIVE — decisions will still be written but Trader is paused
+   ⚠ Note: paused.flag exists — Trader is paused but Strategist will still run
+📊 Loading portfolio state...
+   Balance: $329.91  Drawdown: 34.0%
+   Open positions: 7
+
+📋 Loading signals from Google Sheets...
+   ✓ Found 18 OPEN signal(s) from last bot run (within 26h)
+
+📚 Analysing trade history per coin...
+   NEAR LONG: 0W / 0L (0 samples)
+   JUP LONG: 0W / 0L (0 samples)
+   XPL LONG: 0W / 0L (0 samples)
+   LIT LONG: 0W / 0L (0 samples)
+   FF SHORT: 0W / 0L (0 samples)
+   SPX SHORT: 0W / 0L (0 samples)
+   AAVE LONG: 0W / 0L (0 samples)
+   TIA LONG: 0W / 0L (0 samples)
+   MNT SHORT: 0W / 0L (0 samples)
+   H SHORT: 0W / 0L (0 samples)
+
+📈 Fetching BTC 7-day change...
+   BTC 7d: -6.51%  (Neutral regime)
+
+📊 BTC Market Regime Filter...
+   BTC price: $59,988  |  20-period 4h SMA: $60,224  |  -0.4% from SMA
+   😐 MARKET BIAS: NEUTRAL
+[2026-06-28 20:10 BKK] Market bias: NEUTRAL  BTC $59,988  SMA $60,224  (-0.4%)
+
+📚 Loading pattern memory...
+
+🧠 Calling Strategist Claude...
+   🧠 Model: claude-haiku-4-5-20251001
+   ✓ Response received (2777 chars)
+
+   Results: 2 APPROVED  8 VETOED  0 REDUCE_SIZE
+
+   ⛔  AAVE LONG [D]  Already holding AAVE LONG with -$4.23 P&L; last trade unresolved on this coin+direction violates re-entry discipline
+   ⛔  XPL LONG [D]  Already holding XPL LONG with -$3.09 P&L; adding to unresolved losing position violates capital protection gate 4
+   ⛔  JUP LONG [D]  Already holding JUP LONG with -$1.15 P&L; multiple JUP signals competing while position unresolved violates discipline
+   ⛔  SPX SHORT [D]  Already holding SPX SHORT with -$0.58 P&L; adding to unresolved losing position violates capital protection
+   ⛔  FF SHORT [D]  Already holding FF SHORT with +$1.07 P&L (single winner); multiple new FF SHORT signals compete with open position
+   ⛔  TIA LONG [D]  Already holding TIA LONG with -$1.12 P&L; star coin status cannot override unresolved drawdown on same direction
+   ⛔  NEAR LONG [C]  Portfolio already 7/7 long-heavy in drawdown; adding 8th long position violates concentration risk during 34% recovery
+   ⛔  LIT LONG [C]  Portfolio already severely long-biased with -$18.24 net long exposure; adding LIT LONG deepens drawdown concentration
+   ✅  H SHORT [A+]  Stage 5 catastrophic distribution with proven 19W/0L graveyard dominance; no conflict with open positions; SHORT flows with neutral regime
+   ✅  MNT SHORT [A]  Stage 5 catastrophic distribution with -20% 7d structural breakdown and proven graveyard WIN; SHORT aligns with market regime
+
+   Regime: BTC -6.51% 7d = neutral regime; portfolio drowning in 7 long positions (-$18.24 net) during drawdown; SHORT the proven stage 5 coins (H, MNT) to hedge and recover; stop adding LONGs until winners materialize
+
+   ✓ Decisions written → strategist_decisions.json
+[2026-06-28 20:10 BKK] Decisions: 2 APPROVED, 8 VETOED, 0 REDUCE_SIZE — signals reviewed: 18
+
+✅ Strategist complete.
+

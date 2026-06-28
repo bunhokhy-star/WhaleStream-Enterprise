@@ -67,3 +67,7 @@
 [2026-06-28 19:10 BKK] === Strategist run started 2026-06-28 19:10 BKK ===
 [2026-06-28 19:10 BKK] Strategist re-check started
 [2026-06-28 19:10 BKK] Re-check #3 complete — 0 change(s)
+[2026-06-28 20:10 BKK] === Strategist run started 2026-06-28 20:10 BKK ===
+[2026-06-28 20:10 BKK] ⚠ Circuit breaker ACTIVE — decisions will still be written but Trader is paused
+[2026-06-28 20:10 BKK] Market bias: NEUTRAL  BTC $59,988  SMA $60,224  (-0.4%)
+[2026-06-28 20:10 BKK] Decisions: 2 APPROVED, 8 VETOED, 0 REDUCE_SIZE — signals reviewed: 18

@@ -109,9 +109,7 @@ MONITOR_LOG      = os.path.join(BASE_DIR, "monitor_log.txt")
 TRADER_LOG       = os.path.join(BASE_DIR, "trader_log.txt")
 
 # ── Go-Live target ────────────────────────────────────────────
-GO_LIVE_DATE = datetime(2026, 7, 1, tzinfo=timezone(timedelta(hours=7)))
-
-BKK = timezone(timedelta(hours=7))
+GO_LIVE_DATE = datetime(2026, 7, 1, tzinfo=BKK)
 
 
 # ─────────────────────────────────────────────────────────────

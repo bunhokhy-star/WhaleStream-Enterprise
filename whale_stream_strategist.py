@@ -43,6 +43,8 @@ import subprocess
 import requests
 from datetime import datetime, timezone, timedelta
 
+BKK = timezone(timedelta(hours=7))   # Bangkok timezone (UTC+7) — used everywhere
+
 # ── Force UTF-8 output (prevents crash in Task Scheduler) ─────
 if hasattr(sys.stdout, "buffer"):
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
@@ -165,7 +167,7 @@ COL_BYBIT_ID    = 17
 # ═══════════════════════════════════════════════════════════════
 
 def log(msg):
-    bkk = datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d %H:%M BKK")
+    bkk = datetime.now(BKK).strftime("%Y-%m-%d %H:%M BKK")
     line = f"[{bkk}] {msg}"
     print(line)
     try:
@@ -206,7 +208,7 @@ def connect_sheet():
 
 
 def bkk_now():
-    return datetime.now(timezone(timedelta(hours=7)))
+    return datetime.now(BKK)
 
 
 def parse_bkk_timestamp(ts_str):
@@ -214,7 +216,7 @@ def parse_bkk_timestamp(ts_str):
     try:
         clean = ts_str.replace(" BKK", "").strip()
         dt    = datetime.strptime(clean, "%Y-%m-%d %H:%M")
-        return dt.replace(tzinfo=timezone(timedelta(hours=7)))
+        return dt.replace(tzinfo=BKK)
     except Exception:
         return None
 
@@ -439,6 +441,17 @@ except ImportError:
     MISSION_PROMPT = ""
     def print_mission_banner(): pass
 
+# ── Signal Scorer (pre-Claude quality gate) ────────────────────
+try:
+    from signal_scorer import score_all_signals, format_score_for_prompt
+    _SCORER_AVAILABLE = True
+except ImportError:
+    _SCORER_AVAILABLE = False
+    def score_all_signals(signals, bias, history, positions):
+        return signals, [], []
+    def format_score_for_prompt(signal):
+        return "Score: N/A (scorer unavailable)"
+
 STRATEGIST_SYSTEM = (MISSION_PROMPT + """You are the WHALE-STREAM Trading Strategist — the second layer of review between signal generation and execution.
 
 The Bot (Scout) already ran market analysis and selected the best technical setups.
@@ -554,6 +567,8 @@ def build_strategist_user_message(signals, history, positions, balance, drawdown
         lines.append(f"  Confidence : {s['confidence']:.0f}%")
         lines.append(f"  Pattern    : {s['pattern']}")
         lines.append(f"  Entry zone : {s['entry']}")
+        if s.get("score") is not None:
+            lines.append(f"  {format_score_for_prompt(s)}")
 
         if not trades:
             lines.append(f"  History    : No resolved trades yet on this coin+direction")
@@ -1102,6 +1117,71 @@ def main():
         })
         return
 
+    # ── Signal Scorer — pre-Claude quality gate ──────────────────
+    print("\n🎯 Scoring signals (pre-Claude quality gate)...")
+    if _SCORER_AVAILABLE:
+        strong_sigs, review_sigs, skipped_sigs = score_all_signals(
+            signals, market_bias, history, positions
+        )
+        for s in signals:
+            score_line = format_score_for_prompt(s)
+            verdict    = s.get("score_verdict", "?")
+            icon       = "✅" if verdict == "STRONG" else ("⚠️" if verdict == "REVIEW" else "⛔")
+            print(f"   {icon} {s['coin']} {s['direction']} — {score_line}")
+
+        # Auto-veto SKIP signals (score < 4) — save Claude tokens
+        auto_vetoed = []
+        if skipped_sigs:
+            for s in skipped_sigs:
+                reason = (f"Scorer AUTO-SKIP score {s.get('score', 0)}/10 — "
+                          f"insufficient quality ({s.get('score_summary', '')})")
+                auto_vetoed.append({
+                    "coin":      s["coin"],
+                    "direction": s["direction"],
+                    "decision":  "VETO",
+                    "grade":     "D",
+                    "reason":    reason,
+                })
+                log(f"Scorer SKIP: {s['coin']} {s['direction']} (score={s.get('score', 0)}/10)")
+                print(f"   ⛔ AUTO-SKIP: {s['coin']} {s['direction']} score {s.get('score', 0)}/10")
+            # Remove skipped from signals that go to Claude
+            signals = strong_sigs + review_sigs
+        else:
+            auto_vetoed = []
+
+        print(f"   → Sending {len(signals)} signal(s) to Claude "
+              f"({len(strong_sigs)} STRONG + {len(review_sigs)} REVIEW, "
+              f"{len(skipped_sigs)} auto-skipped)")
+    else:
+        print("   ⚠ signal_scorer.py not found — all signals sent to Claude unscored")
+        auto_vetoed = []
+
+    # If scorer auto-vetoed everything, short-circuit
+    if not signals and auto_vetoed:
+        log("No signals remain after scorer filter — all auto-skipped")
+        print("\n   No signals remain after scorer gate.")
+        empty = {
+            "run_at":          bkk_str,
+            "cycle_id":        _get_cycle_id(),
+            "recheck_count":   0,
+            "recheck_changes": [],
+            "decisions":       regime_vetoed + auto_vetoed,
+            "regime_note":     "All signals auto-skipped by scorer (low quality)",
+            "approved_count":  0,
+            "vetoed_count":    len(regime_vetoed) + len(auto_vetoed),
+            "reduced_count":   0,
+            "market_bias":     market_bias,
+        }
+        write_decisions(empty)
+        send_telegram(
+            f"🎯 <b>STRATEGIST SCORER</b> — {bkk_str}\n"
+            f"  All signals scored <4/10 — none sent to Claude.\n"
+            f"  {', '.join(v['coin'] + ' ' + v['direction'] for v in auto_vetoed)} auto-vetoed.\n"
+            f"  Next cycle: Bot will generate fresh signals."
+        )
+        _mark_done("strategist", details={"approved": [], "vetoed": [v["coin"] for v in auto_vetoed]})
+        return
+
     # ── Load Pattern Memory ──────────────────────────────────────
     print("\n📚 Loading pattern memory...")
     memory = load_pattern_memory()
@@ -1174,10 +1254,10 @@ def main():
         _mark_done("strategist", details={"approved": [], "vetoed": _vetoed_coins, "error": "parse_failed"})
         return
 
-    # ── Merge regime pre-vetoes into decisions ────────────────────
-    # regime_vetoed contains any signals dropped before Claude saw them.
-    # Append them so the full picture is visible in the decisions file + Telegram.
-    all_decisions = regime_vetoed + parsed.get("decisions", [])
+    # ── Merge regime + scorer pre-vetoes into decisions ─────────────
+    # regime_vetoed and auto_vetoed contain signals dropped before Claude saw them.
+    # Append so the full picture is visible in the decisions file + Telegram.
+    all_decisions = regime_vetoed + auto_vetoed + parsed.get("decisions", [])
     parsed["decisions"] = all_decisions
 
     # ── Enrich and tally ─────────────────────────────────────────

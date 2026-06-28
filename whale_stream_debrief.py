@@ -111,7 +111,7 @@ def _mark_done(agent_name="debrief", details=None):
 
 
 def log(msg):
-    bkk = datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d %H:%M BKK")
+    bkk = datetime.now(BKK).strftime("%Y-%m-%d %H:%M BKK")
     line = f"[{bkk}] {msg}"
     print(line)
     try:
@@ -122,7 +122,7 @@ def log(msg):
 
 
 def bkk_now_str():
-    return datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d %H:%M BKK")
+    return datetime.now(BKK).strftime("%Y-%m-%d %H:%M BKK")
 
 
 def send_telegram(msg):
