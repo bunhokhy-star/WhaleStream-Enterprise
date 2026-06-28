@@ -29,12 +29,14 @@ import re
 import os
 import sys
 import io
+import json
 import hmac
 import hashlib
 import time as _btime
 import requests
 import subprocess
-from datetime import datetime, timezone, timedelta
+from collections import defaultdict
+from datetime import date, datetime, timezone, timedelta
 from urllib.parse import urlencode as _burlencode
 
 # Force UTF-8 output (prevents UnicodeEncodeError on Windows CP1252 consoles)
@@ -49,10 +51,8 @@ if hasattr(sys.stderr, 'buffer'):
 # ── Self-tick helper (writes completion to daily_status.json) ────
 def _mark_done(agent_name, details=None):
     """Mark this agent done for the current cycle in daily_status.json."""
-    import json, datetime
     _path  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "daily_status.json")
-    _bkk   = datetime.timezone(datetime.timedelta(hours=7))
-    _now   = datetime.datetime.now(_bkk)
+    _now   = datetime.now(BKK)
     _today = _now.date().isoformat()
     _h     = _now.hour
     _cycle = str((_h // 4) * 4).zfill(2)
@@ -73,16 +73,15 @@ def _mark_done(agent_name, details=None):
         _jspath = _path.replace("daily_status.json", "daily_status.js")
         with open(_jspath, "w", encoding="utf-8") as _f:
             _f.write("window.WHALE_STATUS=" + json.dumps(_data) + ";")
-        import re as _re
         _html_path = os.path.join(os.path.dirname(_path), "To do list", "Daily Checklist.html")
         with open(_html_path, encoding="utf-8") as _hf:
             _html = _hf.read()
         _inject = "var WS_EMBEDDED=" + json.dumps(_data, separators=(',', ':')) + ";"
-        _html = _re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
+        _html = re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
         with open(_html_path, "w", encoding="utf-8") as _hf:
             _hf.write(_html)
-    except Exception:
-        pass
+    except Exception as _me:
+        print(f"   ⚠ _mark_done write failed: {_me}")
 
 
 # ── Auto-install missing libraries ────────────────────────────
@@ -92,6 +91,11 @@ for mod, pkg in REQUIRED.items():
         __import__(mod)
     except ImportError:
         subprocess.check_call([sys.executable, "-m", "pip", "install", pkg, "--quiet"])
+
+import gspread
+from gspread.utils import rowcol_to_a1   # safe: gspread guaranteed installed by REQUIRED loop above
+
+BKK = timezone(timedelta(hours=7))   # Bangkok timezone (UTC+7) — used everywhere
 
 # ─────────────────────────────────────────────────────────────
 # CONFIGURATION  ← must match whale_stream_bot.py
@@ -157,8 +161,8 @@ def send_telegram_alert(msg):
             json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML"},
             timeout=10,
         )
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"   ⚠ Telegram alert send failed: {e}")
 
 
 def _parse_pnl(pnl_str):
@@ -420,8 +424,8 @@ def print_stats(all_rows):
             max_dd = dd
 
     # Consecutive win/loss streak (current and max)
-    cur_streak = 0; max_win_streak = 0; max_loss_streak = 0
-    cur_win = 0;    cur_loss = 0
+    max_win_streak = 0; max_loss_streak = 0
+    cur_win = 0;        cur_loss = 0
     for r in resolved:
         if r["status"] == "WIN":
             cur_win += 1; cur_loss = 0
@@ -512,8 +516,6 @@ def write_dashboard_html(all_rows):
     """Generate a fully self-contained dashboard.html with embedded data.
     No external requests, no auth required — works from file:// protocol.
     """
-    import json
-
     # ── Read real Bybit Demo balance (written by whale_stream_trader.py) ──
     bybit_balance    = None
     bybit_updated_at = ""
@@ -593,9 +595,7 @@ def write_dashboard_html(all_rows):
     gate3_color      = "win-color" if true_short_wr >= 50 else "loss-color"
 
     # Gate 6 — 3 consecutive profitable calendar weeks (computed inline)
-    from collections import defaultdict as _defaultdict
-    _bkk_tz = timezone(timedelta(hours=7))
-    _week_pnl = _defaultdict(float)
+    _week_pnl = defaultdict(float)
     for r in resolved:
         if not _is_real_pnl(r.get("pnl")):
             continue
@@ -603,7 +603,7 @@ def write_dashboard_html(all_rows):
         if not _ra:
             continue
         try:
-            _dt = datetime.strptime(_ra[:10], "%Y-%m-%d").replace(tzinfo=_bkk_tz)
+            _dt = datetime.strptime(_ra[:10], "%Y-%m-%d").replace(tzinfo=BKK)
             _iso = _dt.isocalendar()
             _wk  = f"{_iso[0]}-W{_iso[1]:02d}"   # ISO week — avoids %W year-boundary bugs
             _week_pnl[_wk] += r["pnl"]
@@ -716,9 +716,8 @@ def write_dashboard_html(all_rows):
     _cons_flag_path = os.path.join(SCRIPT_DIR, "short_conservative.flag")
     if not short_repair_active and os.path.exists(_cons_flag_path):
         try:
-            import json as _consjson
             with open(_cons_flag_path, "r") as _consf:
-                _cons_info = _consjson.load(_consf)
+                _cons_info = json.load(_consf)
             _cons_created = _cons_info.get("created_at", "")
             _cons_hff_dash = [
                 r for r in resolved
@@ -741,7 +740,7 @@ def write_dashboard_html(all_rows):
         cons_html = ""
 
     # Generated timestamp
-    bkk_time = datetime.now(timezone(timedelta(hours=7)))
+    bkk_time = datetime.now(BKK)
     gen_time = bkk_time.strftime("%Y-%m-%d %H:%M BKK")
 
     # Build JSON data blobs for JS
@@ -855,9 +854,8 @@ def write_dashboard_html(all_rows):
 
     # ── Go-Live milestone card ─────────────────────────────────
     # Shows countdown until July 1, then switches to "LIVE" days-since card.
-    from datetime import date as _date, datetime as _dt_cls, timezone as _tz, timedelta as _td
-    _go_live_date = _date(2026, 7, 1)
-    _today = _dt_cls.now(_tz(_td(hours=7))).date()
+    _go_live_date = date(2026, 7, 1)
+    _today = datetime.now(BKK).date()
     _days_to_live = (_go_live_date - _today).days
     if _days_to_live > 0:
         _countdown_color = "#ff4d4d" if _days_to_live <= 3 else "#ffc107" if _days_to_live <= 7 else "#00d4a8"
@@ -1214,10 +1212,7 @@ def _update_gate_checklist(all_rows):
     to the GATE REVIEW LOG in GATE5_REAL_CAPITAL_CHECKLIST.md.
     Replaces the '| _next review_ |' placeholder row with today's results.
     """
-    import json as _json
-
-    bkk = timezone(timedelta(hours=7))
-    today_str = datetime.now(bkk).strftime("%Y-%m-%d")
+    today_str = datetime.now(BKK).strftime("%Y-%m-%d")
 
     resolved = [r for r in all_rows if r.get("status") in ("WIN", "LOSS")]
     wins     = [r for r in resolved if r["status"] == "WIN"]
@@ -1255,7 +1250,7 @@ def _update_gate_checklist(all_rows):
     g4_str    = "❓ no data"
     try:
         with open(BYBIT_BALANCE_FILE, "r", encoding="utf-8") as _bf:
-            _bd     = _json.load(_bf)
+            _bd     = json.load(_bf)
             _bal    = float(_bd.get("balance", 0))
             _start  = float(_bd.get("start_balance", 500))
             _dd_pct = (_start - _bal) / _start * 100
@@ -1269,8 +1264,7 @@ def _update_gate_checklist(all_rows):
     g5_str = f"{'✅' if g5_ok else '❌'} {'No trigger' if g5_ok else 'TRIGGERED'}"
 
     # ── Gate 6: 3 consecutive profitable calendar weeks ──────────
-    from collections import defaultdict as _dd
-    week_pnl = _dd(float)
+    week_pnl = defaultdict(float)
     for r in resolved:
         if not _is_real_pnl(r.get("pnl")):
             continue
@@ -1278,7 +1272,7 @@ def _update_gate_checklist(all_rows):
             _ra  = r.get("resolved_at", "")  # use resolve date (when money was made)
             if not _ra:
                 continue
-            _dt  = datetime.strptime(_ra[:10], "%Y-%m-%d").replace(tzinfo=bkk)
+            _dt  = datetime.strptime(_ra[:10], "%Y-%m-%d").replace(tzinfo=BKK)
             _iso = _dt.isocalendar()
             _wk  = f"{_iso[0]}-W{_iso[1]:02d}"   # ISO week — avoids %W year-boundary bugs
             week_pnl[_wk] += r["pnl"]
@@ -1330,8 +1324,7 @@ def _update_gate_checklist(all_rows):
 # ─────────────────────────────────────────────────────────────
 def weekly_summary(all_rows):
     """Send weekly P&L digest to Telegram. Called every Sunday by tracker."""
-    _bkk = timezone(timedelta(hours=7))
-    today = datetime.now(_bkk).date()
+    today = datetime.now(BKK).date()
 
     # Build resolved trades with real P&L only
     resolved = []
@@ -1452,14 +1445,14 @@ def main():
     print("╚══════════════════════════════════════════════════╝")
     print()
 
-    bkk_time = datetime.now(timezone(timedelta(hours=7)))
+    bkk_time = datetime.now(BKK)
     now_str  = bkk_time.strftime("%Y-%m-%d %H:%M")
 
     # ── Heartbeat: alert if bot missed a scheduled run ─────────
     _bot_log = os.path.join(SCRIPT_DIR, "bot_log.txt")
     try:
         _bot_mtime = os.path.getmtime(_bot_log)
-        _bot_last  = datetime.fromtimestamp(_bot_mtime, tz=timezone(timedelta(hours=7)))
+        _bot_last  = datetime.fromtimestamp(_bot_mtime, tz=BKK)
         _bot_age_h = (bkk_time - _bot_last).total_seconds() / 3600
         # Bot runs every 4h. >5h = missed at least one run.
         # Alert any time of day — new schedule starts at 00:00 so suppression
@@ -1549,7 +1542,7 @@ def main():
             if _pc_res_str:
                 try:
                     _pc_res_dt = datetime.strptime(_pc_res_str[:16], "%Y-%m-%d %H:%M").replace(
-                        tzinfo=timezone(timedelta(hours=7))
+                        tzinfo=BKK
                     )
                     _pc_age_h = (bkk_time - _pc_res_dt).total_seconds() / 3600
                     if _pc_age_h <= 72:
@@ -1623,7 +1616,7 @@ def main():
         _timeout = 8 if not bybit_id else TRADE_TIMEOUT_HOURS
         try:
             trade_dt = datetime.strptime(ts_str, "%Y-%m-%d %H:%M")
-            trade_dt = trade_dt.replace(tzinfo=timezone(timedelta(hours=7)))
+            trade_dt = trade_dt.replace(tzinfo=BKK)
             age_hours = (bkk_time - trade_dt).total_seconds() / 3600
             if age_hours > _timeout:
                 sheet_row = i + 2  # +2: 1-indexed + skip header
@@ -1651,7 +1644,7 @@ def main():
             # Prevents ZEC/TAO/AKT/DEXE/XMR stacking up for 72h before expiring.
             try:
                 trade_dt_fe = datetime.strptime(ts_str, "%Y-%m-%d %H:%M")
-                trade_dt_fe = trade_dt_fe.replace(tzinfo=timezone(timedelta(hours=7)))
+                trade_dt_fe = trade_dt_fe.replace(tzinfo=BKK)
                 age_fe = (bkk_time - trade_dt_fe).total_seconds() / 3600
                 if age_fe > 12:
                     sheet_row = i + 2
@@ -1798,7 +1791,6 @@ def main():
     # ── Apply all updates to sheet in ONE batch call ──────────
     if updates:
         print(f"\n📝 Writing {len(updates)} cell updates to Google Sheets (1 batch call)...")
-        from gspread.utils import rowcol_to_a1
         batch_data = [
             {"range": rowcol_to_a1(r, c), "values": [[v]]}
             for r, c, v in updates
@@ -1835,7 +1827,6 @@ def main():
     # _parse_pnl() uses regex and handles this suffix transparently.
     try:
         print("\n📊 Fetching Bybit closed P&L for write-back...")
-        _bkk_tz  = timezone(timedelta(hours=7))
         _cpnl    = fetch_bybit_closed_pnl()
         print(f"   ✓ {len(_cpnl)} closed P&L record(s) fetched from Bybit Demo")
 
@@ -1863,7 +1854,7 @@ def main():
                 continue
             try:
                 _wres_dt = datetime.strptime(_wres_str[:16], "%Y-%m-%d %H:%M").replace(
-                    tzinfo=_bkk_tz
+                    tzinfo=BKK
                 )
                 _wres_ms = _wres_dt.timestamp() * 1000
             except Exception:
@@ -1955,7 +1946,6 @@ def main():
                             )
 
         if _pnl_wb_updates:
-            from gspread.utils import rowcol_to_a1
             _wb_batch = [
                 {"range": rowcol_to_a1(_r, _c), "values": [[_v]]}
                 for _r, _c, _v in _pnl_wb_updates
@@ -2020,7 +2010,7 @@ def main():
 
     # ── Post-run Telegram pipeline summary ───────────────────────
     try:
-        _bkk_now   = datetime.now(timezone(timedelta(hours=7)))
+        _bkk_now   = datetime.now(BKK)
         _open      = [r for r in all_parsed if r.get("status") == "OPEN"]
         _resolved  = [r for r in all_parsed if r.get("status") in ("WIN", "LOSS")]
         _gate1_n   = len(_resolved)
@@ -2034,9 +2024,7 @@ def main():
         for _r in _open:
             _ts_str = _r.get("ts", "")
             try:
-                _trade_dt = datetime.strptime(_ts_str, "%Y-%m-%d %H:%M").replace(
-                    tzinfo=timezone(timedelta(hours=7))
-                )
+                _trade_dt = datetime.strptime(_ts_str, "%Y-%m-%d %H:%M").replace(tzinfo=BKK)
                 _age_h = (_bkk_now - _trade_dt).total_seconds() / 3600
                 if _age_h >= 60:
                     _critical_close.append((_r.get("coin", "?"), _r.get("signal", "?"), _age_h))
@@ -2055,9 +2043,7 @@ def main():
                 continue
             _ts = _r.get("resolved_at", "") or _r.get("ts", "")  # use resolve date for accurate ETA
             try:
-                _dt = datetime.strptime(_ts[:16], "%Y-%m-%d %H:%M").replace(
-                    tzinfo=timezone(timedelta(hours=7))
-                )
+                _dt = datetime.strptime(_ts[:16], "%Y-%m-%d %H:%M").replace(tzinfo=BKK)
                 if _dt >= _seven_days_ago:
                     _recent_resolved.append(_dt)
             except Exception:
@@ -2080,6 +2066,7 @@ def main():
         _long_recent   = _long_resolved[-20:] if len(_long_resolved) >= 20 else []
         _long_overall  = [r for r in _long_resolved if r.get("status") == "WIN"]
         _overall_long_wr = len(_long_overall) / len(_long_resolved) * 100 if _long_resolved else 0
+        _lr_wr = 0.0   # defensive init — used in decay-alert below (line: if _long_recent and _lr_wr < 50)
 
         if _long_recent:
             _lr_wins = sum(1 for r in _long_recent if r["status"] == "WIN")
@@ -2123,9 +2110,8 @@ def main():
                     try:
                         os.remove(_repair_flag)
                         _cons_flag = os.path.join(SCRIPT_DIR, "short_conservative.flag")
-                        import json as _json
                         with open(_cons_flag, "w") as _cf:
-                            _json.dump({"created_at": datetime.now(timezone(timedelta(hours=7))).isoformat(), "trades_target": 10}, _cf)
+                            json.dump({"created_at": datetime.now(BKK).isoformat(), "trades_target": 10}, _cf)
                         send_telegram_alert(
                             f"🎉 <b>SHORT REPAIR MODE LIFTED</b>\n"
                             f"  H/FF combined WR: {_rc_exit_wr:.0f}%"
@@ -2167,9 +2153,8 @@ def main():
         _cons_flag_path = os.path.join(SCRIPT_DIR, "short_conservative.flag")
         if not _in_repair and os.path.exists(_cons_flag_path):
             try:
-                import json as _cjson
                 with open(_cons_flag_path, "r") as _cff:
-                    _cons_data = _cjson.load(_cff)
+                    _cons_data = json.load(_cff)
                 _cons_created_at = _cons_data.get("created_at", "")
                 _cons_target     = _cons_data.get("trades_target", 10)
                 # Count H/FF SHORTs resolved AFTER the flag's created_at
@@ -2195,7 +2180,7 @@ def main():
                 elif _cons_count >= _cons_target and _cons_wr < 50:
                     _new_target = _cons_count + 10
                     with open(_cons_flag_path, "w") as _cfw:
-                        _cjson.dump({"created_at": _cons_created_at, "trades_target": _new_target}, _cfw)
+                        json.dump({"created_at": _cons_created_at, "trades_target": _new_target}, _cfw)
                     send_telegram_alert(
                         f"⚠️ SHORT CONSERVATIVE extended — {_cons_count} trades but only {_cons_wr:.0f}% WR."
                         f" Need ≥50% to unlock. Continuing 10 more trades."
@@ -2245,11 +2230,10 @@ def main():
     # 50 / 75 / 100 / 125 / 150. State persisted in milestone_state.json
     # so each milestone fires exactly once, even across restarts.
     try:
-        import json as _msj
         _ms_file = os.path.join(SCRIPT_DIR, "milestone_state.json")
         try:
             with open(_ms_file, "r") as _msfh:
-                _ms_state = _msj.load(_msfh)
+                _ms_state = json.load(_msfh)
         except Exception:
             _ms_state = {"fired": []}
 
@@ -2296,20 +2280,18 @@ def main():
 
         if _ms_fired_any:
             with open(_ms_file, "w") as _msfh2:
-                _msj.dump(_ms_state, _msfh2)
+                json.dump(_ms_state, _msfh2)
     except Exception as _mse:
         print(f"   ⚠ Milestone burst failed: {_mse}")
 
     # ── Weekly summary + short analysis (fires on Sundays only) ──
-    _bkk = timezone(timedelta(hours=7))
-    if datetime.now(_bkk).weekday() == 6:  # 6 = Sunday
+    if _bkk_now.weekday() == 6:  # 6 = Sunday
         weekly_summary(all_parsed)
         # Auto-run analyze_shorts.py so SHORT recovery detection fires weekly
         try:
-            import subprocess as _sp
             _shorts_script = os.path.join(SCRIPT_DIR, "analyze_shorts.py")
             print("📊 Sunday: Running analyze_shorts.py for SHORT recovery check...")
-            _sp.run([sys.executable, _shorts_script], timeout=120)
+            subprocess.run([sys.executable, _shorts_script], timeout=120)
             print("   ✓ analyze_shorts.py completed")
         except Exception as _e:
             print(f"   ⚠ analyze_shorts.py auto-run failed: {_e}")
@@ -2321,7 +2303,7 @@ def main():
             print(f"   ⚠ Gate checklist update failed: {_ge}")
 
     # ── Monday Gate 1 progress snapshot ──────────────────────────────────────
-    if datetime.now(_bkk).weekday() == 0:  # 0 = Monday
+    if _bkk_now.weekday() == 0:  # 0 = Monday
         try:
             _ml = [r for r in all_parsed
                    if ("LONG" in r.get("signal", "").upper() or "🟢" in r.get("signal", ""))
@@ -2355,18 +2337,19 @@ def main():
         except Exception as _me:
             print(f"   ⚠ Monday Gate snapshot failed: {_me}")
     # Build details for Daily Checklist live display
-    _bkk_tz    = timezone(timedelta(hours=7))
-    _bkk_now   = datetime.now(_bkk_tz).strftime("%H:%M")
-    _nr_wins   = sum(1 for r in _newly_resolved if r.get("outcome") == "WIN")
-    _nr_losses = sum(1 for r in _newly_resolved if r.get("outcome") == "LOSS")
-    _open_cnt  = sum(1 for r in all_parsed if r.get("status") not in ("WIN", "LOSS", "EXPIRED"))
+    _bkk_finish = datetime.now(BKK)
+    _nr_wins    = sum(1 for r in _newly_resolved if r.get("outcome") == "WIN")
+    _nr_losses  = sum(1 for r in _newly_resolved if r.get("outcome") == "LOSS")
+    _open_cnt   = sum(1 for r in all_parsed if r.get("status") == "OPEN")
     _mark_done("tracker", details={
         "resolved":  len(_newly_resolved),
         "wins":      _nr_wins,
         "losses":    _nr_losses,
         "open":      _open_cnt,
-        "last_run":  f"{_bkk_now} BKK"
+        "last_run":  f"{_bkk_finish.strftime('%H:%M')} BKK"
     })
+    # Completion log — enables watchdog check_tracker() primary path
+    print(f"[{_bkk_finish.strftime('%Y-%m-%d %H:%M')} BKK] Tracker run complete")
 
 
 if __name__ == "__main__":

@@ -23,7 +23,7 @@ SET PYTHON=%SCRIPT_DIR%\run_strategist_recheck.bat
 SET TRADER=%SCRIPT_DIR%\run_trader_reactive.bat
 
 echo ══════════════════════════════════════════════════════
-echo   WHALE-STREAM v47.0 — Continuous Decision Loop
+echo   WHALE-STREAM v47.2 — Continuous Decision Loop
 echo   Task Scheduler Installer
 echo ══════════════════════════════════════════════════════
 echo.
@@ -33,6 +33,7 @@ schtasks /create ^
   /tn "WhaleStream-Strategist-Recheck-A" ^
   /tr "\"%PYTHON%\"" ^
   /sc HOURLY /mo 4 /st 01:10 ^
+  /ru SYSTEM ^
   /rl HIGHEST ^
   /f
 echo [A] Strategist re-check A registered (01:10 +4h)
@@ -42,6 +43,7 @@ schtasks /create ^
   /tn "WhaleStream-Strategist-Recheck-B" ^
   /tr "\"%PYTHON%\"" ^
   /sc HOURLY /mo 4 /st 02:10 ^
+  /ru SYSTEM ^
   /rl HIGHEST ^
   /f
 echo [B] Strategist re-check B registered (02:10 +4h)
@@ -51,6 +53,7 @@ schtasks /create ^
   /tn "WhaleStream-Strategist-Recheck-C" ^
   /tr "\"%PYTHON%\"" ^
   /sc HOURLY /mo 4 /st 03:10 ^
+  /ru SYSTEM ^
   /rl HIGHEST ^
   /f
 echo [C] Strategist re-check C registered (03:10 +4h)
@@ -62,6 +65,7 @@ schtasks /create ^
   /tn "WhaleStream-Trader-Reactive-A" ^
   /tr "\"%TRADER%\"" ^
   /sc HOURLY /mo 4 /st 01:15 ^
+  /ru SYSTEM ^
   /rl HIGHEST ^
   /f
 echo [D] Trader reactive A registered (01:15 +4h)
@@ -71,6 +75,7 @@ schtasks /create ^
   /tn "WhaleStream-Trader-Reactive-B" ^
   /tr "\"%TRADER%\"" ^
   /sc HOURLY /mo 4 /st 02:15 ^
+  /ru SYSTEM ^
   /rl HIGHEST ^
   /f
 echo [E] Trader reactive B registered (02:15 +4h)
@@ -80,6 +85,7 @@ schtasks /create ^
   /tn "WhaleStream-Trader-Reactive-C" ^
   /tr "\"%TRADER%\"" ^
   /sc HOURLY /mo 4 /st 03:15 ^
+  /ru SYSTEM ^
   /rl HIGHEST ^
   /f
 echo [F] Trader reactive C registered (03:15 +4h)

@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v47.0   —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v47.2   —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 coins from CoinGecko (free, no key)     ║
@@ -35,6 +35,9 @@
 import subprocess
 import sys
 import io
+import os
+import json
+import re
 
 # Force UTF-8 output — prevents UnicodeEncodeError on Windows CP1252 consoles / Task Scheduler.
 # reconfigure() can silently fail in Python 3.14 when stdout is redirected to a file;
@@ -48,10 +51,9 @@ if hasattr(sys.stderr, "buffer"):
 # ── Self-tick helper (writes completion to daily_status.json) ────
 def _mark_done(agent_name, details=None):
     """Mark this agent done for the current cycle in daily_status.json."""
-    import json, datetime
+    from datetime import datetime, timezone, timedelta
     _path  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "daily_status.json")
-    _bkk   = datetime.timezone(datetime.timedelta(hours=7))
-    _now   = datetime.datetime.now(_bkk)
+    _now   = datetime.now(timezone(timedelta(hours=7)))
     _today = _now.date().isoformat()
     _h     = _now.hour
     _cycle = str((_h // 4) * 4).zfill(2)
@@ -72,16 +74,15 @@ def _mark_done(agent_name, details=None):
         _jspath = _path.replace("daily_status.json", "daily_status.js")
         with open(_jspath, "w", encoding="utf-8") as _f:
             _f.write("window.WHALE_STATUS=" + json.dumps(_data) + ";")
-        import re as _re
         _html_path = os.path.join(os.path.dirname(_path), "To do list", "Daily Checklist.html")
         with open(_html_path, encoding="utf-8") as _hf:
             _html = _hf.read()
         _inject = "var WS_EMBEDDED=" + json.dumps(_data, separators=(',', ':')) + ";"
-        _html = _re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
+        _html = re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
         with open(_html_path, "w", encoding="utf-8") as _hf:
             _hf.write(_html)
-    except Exception:
-        pass
+    except Exception as _me:
+        print(f"   ⚠ _mark_done write failed: {_me}")
 
 
 REQUIRED_PACKAGES = {
@@ -256,7 +257,7 @@ except ImportError:
     MISSION_PROMPT = ""
     def print_mission_banner(): pass
 
-WHALE_STREAM_PROMPT = """WHALE-STREAM v47.0 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
+WHALE_STREAM_PROMPT = """WHALE-STREAM v47.2 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
 ROLE:
 You are an Institutional Multi-Agent Trading Committee composed of:
 • Market Regime Analyst • Smart Money Concepts Specialist • Quantitative Momentum Analyst • Liquidity & Stop-Hunt Analyst • Wyckoff Structure Analyst • Relative Strength Analyst • Breakout Probability Engine • Reversal Probability Engine • Continuation Probability Engine • Risk Management Committee
@@ -292,7 +293,7 @@ The trend is not your enemy — fighting it is.
 
 LIVE REGIME: injected in MARKET REGIME section of user message below.
 ════════════════════════════════════════════════════════════
-ANALYSIS ENGINE (v47.0)
+ANALYSIS ENGINE (v47.2)
 Each call provides ONE self-contained batch of market data (up to 100 coins).
 Analyze ALL coins in the provided batch.
 TOURNAMENT PROCESS (per batch):
@@ -566,11 +567,6 @@ RULES FOR THE JSON BLOCK:
 TIMEZONE: Bangkok, Hanoi, Jakarta (GMT+7)
 DATE/TIME: [REAL SYSTEM TIME]
 
-DATASET:
-Batch 1 Coins: XXX  (Rank #1–100)
-Batch 2 Coins: XXX  (Rank #101–200)
-Total Coins: XXX
-
 MARKET REGIME:
 BTC Bias:
 ETH Bias:
@@ -725,11 +721,20 @@ DATA TO ANALYZE:
 
 import requests
 import time
-import re
-import os
 from datetime import datetime, timezone, timedelta
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+
+BKK = timezone(timedelta(hours=7))   # Bangkok timezone (UTC+7) — used everywhere
+
+
+def _parse_conf(sig):
+    """Parse confidence value from a signal dict. Returns int (0 if unparseable)."""
+    try:
+        return int(str(sig.get("conf", "0")).replace("%", "").strip())
+    except (ValueError, TypeError):
+        return 0
+
 
 def check_macro_event_risk(window_high_h: float = 4, window_medium_h: float = 12) -> list:
     """
@@ -1754,8 +1759,6 @@ def parse_json_signals(analysis_text):
     scanning to extract ONLY the first complete JSON object, ignoring anything
     after its closing brace.
     """
-    import json
-
     # Primary: custom delimiters — extract text between markers, then parse
     # only the first complete JSON object (handles concatenated double-JSON).
     start_marker = analysis_text.find('##JSON_START##')
@@ -1806,7 +1809,7 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     shorts = data.get("shorts", [])
 
     lines = []
-    lines.append(f"🐳 WHALE-STREAM v47.0")
+    lines.append(f"🐳 WHALE-STREAM v47.2")
     lines.append(f"📅 {ts}")
 
     # ── Market regime summary ─────────────────────────────────
@@ -2037,9 +2040,8 @@ def log_to_google_sheets(data, bkk_time):
     # Fewer trades = higher quality = better capital preservation.
     def _parse_conf_val(s):
         """Parse confidence as float: '92%' → 92.0, '91' → 91.0"""
-        import re as _re
         raw = str(s.get("conf", s.get("confidence", "0")))
-        nums = _re.findall(r'[\d]+\.?[\d]*', raw)
+        nums = re.findall(r'[\d]+\.?[\d]*', raw)
         return float(nums[0]) if nums else 0.0
 
     _longs_all  = [s for s in all_signals if s["direction"] == "LONG"]
@@ -2059,8 +2061,7 @@ def log_to_google_sheets(data, bkk_time):
         # ── Dedup: skip same coin+direction already OPEN in last 4h ──
         # Using 4h window (not "today") so stale signals from earlier cycles
         # don't block fresh entry zones from new bot runs.
-        from datetime import timedelta as _td
-        _cutoff_str = (bkk_time - _td(hours=4)).strftime("%Y-%m-%d %H:%M")
+        _cutoff_str = (bkk_time - timedelta(hours=4)).strftime("%Y-%m-%d %H:%M")
         existing_rows = sheet.get_all_values()[1:]  # skip header
         # Count resolved trades for Gate 1 progress
         _gate1_resolved = sum(
@@ -2084,8 +2085,7 @@ def log_to_google_sheets(data, bkk_time):
         # ─────────────────────────────────────────────────────────
         def _parse_entry_mid(entry_zone):
             """Return midpoint of a range like '$435-$445', or single value."""
-            import re as _re
-            nums = _re.findall(r'[\d]+\.?[\d]*', str(entry_zone).replace(",", ""))
+            nums = re.findall(r'[\d]+\.?[\d]*', str(entry_zone).replace(",", ""))
             if len(nums) >= 2:
                 return (float(nums[0]) + float(nums[1])) / 2
             elif len(nums) == 1:
@@ -2094,8 +2094,7 @@ def log_to_google_sheets(data, bkk_time):
 
         def _parse_price_val(price_str):
             """Strip $ signs and convert to float."""
-            import re as _re
-            nums = _re.findall(r'[\d]+\.?[\d]*', str(price_str).replace(",", ""))
+            nums = re.findall(r'[\d]+\.?[\d]*', str(price_str).replace(",", ""))
             return float(nums[0]) if nums else None
 
         rows = []
@@ -2255,15 +2254,14 @@ def log_to_google_sheets(data, bkk_time):
 
 def main():
     # ── Cycle guard: skip if already done this 4h slot ──────────────
-    import json as _jcg, datetime as _dcg
     _cg_path  = os.path.join(SCRIPT_DIR, "daily_status.json")
-    _cg_hour  = _dcg.datetime.now(_dcg.timezone(_dcg.timedelta(hours=7))).hour
-    _cg_cycle = str((_cg_hour // 4) * 4).zfill(2)
+    _cg_now   = datetime.now(BKK)
+    _cg_cycle = str((_cg_now.hour // 4) * 4).zfill(2)
     _cg_key   = f"sigbot_{_cg_cycle}"
     try:
         with open(_cg_path, encoding="utf-8") as _cgf:
-            _cg_data = _jcg.load(_cgf)
-        if _cg_data.get("date") == _dcg.datetime.now(_dcg.timezone(_dcg.timedelta(hours=7))).date().isoformat() and _cg_data.get(_cg_key):
+            _cg_data = json.load(_cgf)
+        if _cg_data.get("date") == _cg_now.date().isoformat() and _cg_data.get(_cg_key):
             print(f"[CYCLE GUARD] {_cg_key} already completed today — skipping duplicate run.")
             return
     except Exception:
@@ -2272,7 +2270,7 @@ def main():
 
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🐳  WHALE-STREAM v47.0  — AUTO BOT STARTING    ║")
+    print("║   🐳  WHALE-STREAM v47.2  — AUTO BOT STARTING    ║")
     print("╚══════════════════════════════════════════════════╝")
     # Check conservative flag early so we can show it in the startup banner
     _short_conservative_early = os.path.exists(os.path.join(SCRIPT_DIR, "short_conservative.flag"))
@@ -2447,37 +2445,19 @@ def main():
     # ── Programmatic SHORT confidence filter (belt + suspenders) ──────────────
     # If SHORT WR is critical, strip any shorts Claude emitted below the threshold,
     # even if Claude didn't obey the graveyard instruction.
-    if short_wr_recent < 40:
-        min_short_conf = 95
-    elif short_wr_recent < 45:
-        min_short_conf = 93
-    else:
-        min_short_conf = 93  # data-driven floor: 88-92% band has 36-37% WR (v46.53)
-
-    if min_short_conf > 0:
-        before = len(merged_shorts)
-        def _conf_int(sig):
-            try:
-                return int(str(sig.get("conf", "0")).replace("%", "").strip())
-            except (ValueError, TypeError):
-                return 0
-
-        merged_shorts = [s for s in merged_shorts if _conf_int(s) >= min_short_conf]
-        dropped = before - len(merged_shorts)
-        if dropped:
-            print(f"   🛡  SHORT WR {short_wr_recent:.0f}% → AUTO-DROPPED {dropped} short(s) below {min_short_conf}% confidence")
+    min_short_conf = 95 if short_wr_recent < 40 else 93  # data-driven floor (v46.53)
+    before = len(merged_shorts)
+    merged_shorts = [s for s in merged_shorts if _parse_conf(s) >= min_short_conf]
+    dropped = before - len(merged_shorts)
+    if dropped:
+        print(f"   🛡  SHORT WR {short_wr_recent:.0f}% → AUTO-DROPPED {dropped} short(s) below {min_short_conf}% confidence")
 
     # ── Programmatic LONG confidence filter (code-level floor) ──────────────
     # 85-87% LONG band: 39.1% WR, avg -12.5% P&L — confirmed loser tier (v46.62).
     # This strips any LONG Claude emitted below 88% even if prompt was ignored.
     LONG_MIN_CONF = 88
     before_long = len(merged_longs)
-    def _long_conf_int(sig):
-        try:
-            return int(str(sig.get("conf", "0")).replace("%", "").strip())
-        except (ValueError, TypeError):
-            return 0
-    merged_longs = [s for s in merged_longs if _long_conf_int(s) >= LONG_MIN_CONF]
+    merged_longs = [s for s in merged_longs if _parse_conf(s) >= LONG_MIN_CONF]
     dropped_long = before_long - len(merged_longs)
     if dropped_long:
         print(f"   🛡  LONG floor {LONG_MIN_CONF}% — AUTO-DROPPED {dropped_long} long(s) below threshold")
@@ -2498,9 +2478,8 @@ def main():
     # is a safety backstop only. signal_data is the single source of truth for
     # Telegram, Sheets, and the trader. All three must see only top 3+3.
     def _top3_key(sig):
-        import re as _re
         raw = str(sig.get("conf", sig.get("confidence", "0")))
-        nums = _re.findall(r'[\d]+\.?[\d]*', raw)
+        nums = re.findall(r'[\d]+\.?[\d]*', raw)
         return float(nums[0]) if nums else 0.0
     _raw_n_long  = len(signal_data["longs"])
     _raw_n_short = len(signal_data["shorts"])

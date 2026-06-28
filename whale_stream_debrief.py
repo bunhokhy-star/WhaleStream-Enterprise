@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM DEBRIEF AGENT v47.0 — POST-TRADE LEARNING    ║
+║   WHALE-STREAM DEBRIEF AGENT v47.2 — POST-TRADE LEARNING    ║
 ║                                                              ║
 ║  Called automatically by whale_stream_tracker.py after      ║
 ║  each WIN or LOSS resolution.                                ║
@@ -39,10 +39,12 @@ Each trade dict must have:
 
 import os
 import io
+import re
 import sys
 import json
 import subprocess
 import requests
+import anthropic
 from datetime import datetime, timezone, timedelta
 
 # ── Force UTF-8 ────────────────────────────────────────────────
@@ -80,19 +82,20 @@ MAX_MEMORY_ITEMS    = 200   # keep last 200 debriefs in memory file
 # HELPERS
 # ═══════════════════════════════════════════════════════════════
 
+BKK = timezone(timedelta(hours=7))
+
+
 def _mark_done(agent_name="debrief", details=None):
     """Mark this agent done for the current cycle in daily_status.json."""
-    import json as _json, datetime as _dt
     _path  = os.path.join(SCRIPT_DIR, "daily_status.json")
-    _bkk   = _dt.timezone(_dt.timedelta(hours=7))
-    _now   = _dt.datetime.now(_bkk)
+    _now   = datetime.now(BKK)
     _today = _now.date().isoformat()
     _h     = _now.hour
     _cycle = str((_h // 4) * 4).zfill(2)
     _key   = f"{agent_name}_{_cycle}"
     try:
         with open(_path, encoding="utf-8") as _f:
-            _data = _json.load(_f)
+            _data = json.load(_f)
         if _data.get("date") != _today:
             _data = {"date": _today}
     except Exception:
@@ -102,9 +105,9 @@ def _mark_done(agent_name="debrief", details=None):
         _data[f"{_key}_details"] = details
     try:
         with open(_path, "w", encoding="utf-8") as _f:
-            _json.dump(_data, _f, indent=2)
-    except Exception:
-        pass
+            json.dump(_data, _f, indent=2)
+    except Exception as _de:
+        print(f"   ⚠ _mark_done write failed: {_de}")
 
 
 def log(msg):
@@ -129,8 +132,8 @@ def send_telegram(msg):
             json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML"},
             timeout=10,
         )
-    except Exception:
-        pass
+    except Exception as e:
+        log(f"   ⚠ Telegram debrief send failed: {e}")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -333,7 +336,7 @@ def build_debrief_prompt(trade):
     direction = trade.get("direction", "?")
     outcome   = trade.get("outcome", "?")
     tp_hit    = trade.get("tp_hit", "")
-    pnl       = trade.get("pnl", 0)
+    pnl       = float(trade.get("pnl", 0) or 0)           # sheet may send as string; cast to float
     pattern   = trade.get("pattern", "unknown")
     confidence= float(trade.get("confidence", 0) or 0)   # tracker sends as string; cast to float
     entry     = trade.get("entry", 0)
@@ -384,8 +387,6 @@ Analyse this trade including the Strategist consensus. Return JSON only."""
 
 def call_debrief_claude(prompt):
     """Call Claude Haiku for a single trade debrief. Returns parsed dict or None."""
-    import anthropic
-    import re
 
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     msg = client.messages.create(
@@ -477,7 +478,7 @@ def run_debrief(trades):
             "direction":     direction,
             "outcome":       outcome,
             "tp_hit":        trade.get("tp_hit", ""),
-            "pnl":           trade.get("pnl", 0),
+            "pnl":           float(trade.get("pnl", 0) or 0),
             "pattern":       trade.get("pattern", ""),
             "confidence":    trade.get("confidence", 0),
             "entry_quality": result.get("entry_quality", "?"),
@@ -526,7 +527,7 @@ def main():
     """
     print()
     print("╔══════════════════════════════════════════════════════╗")
-    print("║   🧠  WHALE-STREAM DEBRIEF AGENT v1.0               ║")
+    print("║   🧠  WHALE-STREAM DEBRIEF AGENT v47.2              ║")
     print("║   Post-Trade Learning — every loss teaches us        ║")
     print("╚══════════════════════════════════════════════════════╝")
     print()

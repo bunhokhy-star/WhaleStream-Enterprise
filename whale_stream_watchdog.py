@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM WATCHDOG v47.0                                ║
+║   WHALE-STREAM WATCHDOG v47.2                                ║
 ║                                                              ║
 ║  ROLE (Principle 1): System health guardian.                 ║
 ║  Runs at :30 of every 4h cycle. Confirms all agents ran.     ║
@@ -80,9 +80,7 @@ def _write_html_snapshot():
 def _mark_done(agent_name, details=None):
     """Mark this agent done for the current cycle in daily_status.json."""
     _path  = os.path.join(BASE_DIR, "daily_status.json")
-    _dt    = __import__("datetime")
-    _bkk   = _dt.timezone(_dt.timedelta(hours=7))
-    _now   = _dt.datetime.now(_bkk)
+    _now   = datetime.now(BKK)
     _today = _now.date().isoformat()
     _h     = _now.hour
     _cycle = str((_h // 4) * 4).zfill(2)
@@ -106,15 +104,9 @@ def _mark_done(agent_name, details=None):
         _jspath = _path.replace("daily_status.json", "daily_status.js")
         with open(_jspath, "w", encoding="utf-8") as _f:
             _f.write("window.WHALE_STATUS=" + json.dumps(_data) + ";")
-        _html_path = os.path.join(os.path.dirname(_path), "To do list", "Daily Checklist.html")
-        with open(_html_path, encoding="utf-8") as _hf:
-            _html = _hf.read()
-        _inject = "var WS_EMBEDDED=" + json.dumps(_data, separators=(',', ':')) + ";"
-        _html = re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
-        with open(_html_path, "w", encoding="utf-8") as _hf:
-            _hf.write(_html)
-    except Exception:
-        pass
+        # HTML is written by _write_html_snapshot() at end of main — no duplicate write here
+    except Exception as _we2:
+        print(f"   ⚠ Status JS write failed: {_we2}")
     print(f"   ✓ Status logged → {_key}")
 
 
@@ -214,10 +206,23 @@ def check_trader():
 
 
 def check_tracker():
-    """Tracker runs every 30 min — flag if last log > 45 min ago."""
+    """Tracker runs every 30 min — flag if last log > 45 min ago.
+    Primary: look for BKK-bracketed completion line (requires tracker to emit it).
+    Fallback: use daily_status.json 'tracker' key + log mtime."""
     dt = last_log_timestamp(TRACKER_LOG, r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}) BKK\].*?Tracker run complete")
     if dt is None:
         dt = last_log_timestamp(TRACKER_LOG, r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}) BKK\]")
+    # Fallback: tracker uses _mark_done("tracker") → check daily_status.json + log mtime
+    if dt is None:
+        try:
+            _sp = os.path.join(BASE_DIR, "daily_status.json")
+            _sd = json.load(open(_sp, encoding="utf-8"))
+            if _sd.get("tracker") and _sd.get("date") == datetime.now(BKK).date().isoformat():
+                # Use tracker_log.txt mtime as proxy for last run time
+                _mt = os.path.getmtime(TRACKER_LOG)
+                dt = datetime.fromtimestamp(_mt, tz=BKK)
+        except Exception:
+            pass
     ago = minutes_ago(dt)
     last_str = dt.strftime("%H:%M BKK") if dt else "never"
     ok = (ago is not None and ago <= 45)
@@ -225,10 +230,13 @@ def check_tracker():
 
 
 def check_monitor():
-    """Monitor runs every 2 min — flag if last log > 10 min ago."""
-    dt = last_log_timestamp(MONITOR_LOG, r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}) BKK\].*?Monitor run complete")
+    """Monitor runs every 2 min — flag if last log > 10 min ago.
+    Monitor logs timestamps as [YYYY-MM-DD HH:MM:SS BKK] (with seconds)."""
+    # Primary: completion marker with seconds format
+    dt = last_log_timestamp(MONITOR_LOG, r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}):\d{2} BKK\].*?Monitor run complete")
     if dt is None:
-        dt = last_log_timestamp(MONITOR_LOG, r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}) BKK\]")
+        # Fallback: any BKK timestamp (HH:MM:SS format — capture HH:MM only)
+        dt = last_log_timestamp(MONITOR_LOG, r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}):\d{2} BKK\]")
     ago = minutes_ago(dt)
     last_str = dt.strftime("%H:%M BKK") if dt else "never"
     ok = (ago is not None and ago <= 10)
@@ -424,7 +432,19 @@ if __name__ == "__main__":
         hrs = f"{bal_hours}h" if bal_hours is not None else "unknown"
         issues_with_fixes.append(
             f"⚠️ <b>Balance stale</b> — last updated {hrs} ago ({bal_updated})\n"
-            f"→ This is normal if Trader is down. Fix Trader first."
+            f"→ Normal if Trader is down. Fix Trader first."
+        )
+    if not tracker_ok:
+        issues_with_fixes.append(
+            f"⚠️ <b>Tracker may be down</b> (last: {tracker_last})\n"
+            f"→ Check Task Scheduler → WhaleStream-Tracker\n"
+            f"→ Check tracker_log.txt for errors"
+        )
+    if not monitor_ok:
+        issues_with_fixes.append(
+            f"⚠️ <b>Monitor may be down</b> (last: {monitor_last})\n"
+            f"→ Check Task Scheduler → WhaleStream-Monitor\n"
+            f"→ Check monitor_log.txt for errors"
         )
 
     # ── Send appropriate Telegram message ────────────────────
@@ -433,9 +453,9 @@ if __name__ == "__main__":
         msg = build_critical_alert(now_str, trade_last, trade_ago, bal_str)
         print(f"\n🔴 CRITICAL ESCALATION: Trader down {trade_ago//60}h {trade_ago%60}m")
         send_telegram(msg)
-        # Also send amber for the other issues (if any beyond trader)
-        # Only exclude Balance issue if it's stale *because* Trader is down (same root cause)
-        other_issues = [i for i in issues_with_fixes if "Trader" not in i]
+        # Also send amber for the other issues (if any beyond trader + its side-effects)
+        other_issues = [i for i in issues_with_fixes
+                        if "Trader missed :20 slot" not in i and "CIRCUIT BREAKER" not in i]
         if other_issues:
             amber = build_amber_alert(now_str, other_issues, bot_line, strat_line, trade_line, bal_str)
             send_telegram(amber)
@@ -460,8 +480,7 @@ if __name__ == "__main__":
 
     # Build per-agent cycle summary for Daily Checklist hint
     try:
-        import datetime as _wdt
-        _wh   = _wdt.datetime.now(_wdt.timezone(_wdt.timedelta(hours=7))).hour
+        _wh   = datetime.now(BKK).hour
         _whh  = str((_wh // 4) * 4).zfill(2)
         _wsp  = os.path.join(BASE_DIR, "daily_status.json")
         with open(_wsp, encoding="utf-8") as _wsf:

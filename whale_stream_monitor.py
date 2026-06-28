@@ -33,6 +33,7 @@
 
 import os
 import io
+import re
 import sys
 import hmac
 import json
@@ -51,12 +52,13 @@ if hasattr(sys.stderr, "buffer"):
 
 
 # ── Self-tick helper (writes completion to daily_status.json) ────
+BKK = timezone(timedelta(hours=7))
+
+
 def _mark_done(agent_name, details=None):
     """Mark this agent done for the current cycle in daily_status.json."""
-    import json, datetime
     _path  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "daily_status.json")
-    _bkk   = datetime.timezone(datetime.timedelta(hours=7))
-    _now   = datetime.datetime.now(_bkk)
+    _now   = datetime.now(BKK)
     _today = _now.date().isoformat()
     _h     = _now.hour
     _cycle = str((_h // 4) * 4).zfill(2)
@@ -77,16 +79,15 @@ def _mark_done(agent_name, details=None):
         _jspath = _path.replace("daily_status.json", "daily_status.js")
         with open(_jspath, "w", encoding="utf-8") as _f:
             _f.write("window.WHALE_STATUS=" + json.dumps(_data) + ";")
-        import re as _re
         _html_path = os.path.join(os.path.dirname(_path), "To do list", "Daily Checklist.html")
         with open(_html_path, encoding="utf-8") as _hf:
             _html = _hf.read()
         _inject = "var WS_EMBEDDED=" + json.dumps(_data, separators=(',', ':')) + ";"
-        _html = _re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
+        _html = re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
         with open(_html_path, "w", encoding="utf-8") as _hf:
             _hf.write(_html)
-    except Exception:
-        pass
+    except Exception as _me:
+        print(f"   ⚠ Status write failed: {_me}")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -181,11 +182,13 @@ def bybit_request(method, endpoint, params=None, body=None):
 # ─────────────────────────────────────────────────────────────
 def send_alert(msg):
     try:
-        requests.post(
+        resp = requests.post(
             f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
             json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML"},
             timeout=10,
         )
+        if not (resp.status_code == 200 and resp.json().get("ok")):
+            log(f"   ⚠ Telegram send failed: {resp.status_code} {resp.text[:100]}")
     except Exception as e:
         log(f"   ⚠ Telegram send failed: {e}")
 
@@ -420,7 +423,7 @@ def run_monitor():
         "alerts":    alerts_fired,
         "last_run":  f"{_bkk_now_str} BKK"
     })
-    log("✅ Monitor run complete\n")
+    log("✅ Monitor run complete")
 
 
 # ─────────────────────────────────────────────────────────────

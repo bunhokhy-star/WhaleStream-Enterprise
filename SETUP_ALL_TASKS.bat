@@ -58,6 +58,7 @@ schtasks /Create ^
   /SC HOURLY ^
   /MO 4 ^
   /ST 00:00 ^
+  /ru SYSTEM ^
   /F ^
   /RL HIGHEST
 if %ERRORLEVEL% NEQ 0 goto :error_bot
@@ -72,6 +73,7 @@ schtasks /Create ^
   /SC HOURLY ^
   /MO 4 ^
   /ST 00:10 ^
+  /ru SYSTEM ^
   /F ^
   /RL HIGHEST
 if %ERRORLEVEL% NEQ 0 goto :error_strategist
@@ -86,6 +88,7 @@ schtasks /Create ^
   /SC HOURLY ^
   /MO 4 ^
   /ST 00:20 ^
+  /ru SYSTEM ^
   /F ^
   /RL HIGHEST
 if %ERRORLEVEL% NEQ 0 goto :error_trader
@@ -100,6 +103,7 @@ schtasks /Create ^
   /SC HOURLY ^
   /MO 4 ^
   /ST 00:30 ^
+  /ru SYSTEM ^
   /F ^
   /RL HIGHEST
 if %ERRORLEVEL% NEQ 0 goto :error_watchdog
@@ -114,6 +118,7 @@ schtasks /Create ^
   /SC MINUTE ^
   /MO 30 ^
   /ST 00:00 ^
+  /ru SYSTEM ^
   /F ^
   /RL HIGHEST
 if %ERRORLEVEL% NEQ 0 goto :error_tracker
@@ -127,6 +132,7 @@ schtasks /Create ^
   /TR "cmd.exe /c \"C:\Users\MAX\WhaleStream\run_monitor.bat\"" ^
   /SC MINUTE ^
   /MO 2 ^
+  /ru SYSTEM ^
   /F ^
   /RL HIGHEST
 if %ERRORLEVEL% NEQ 0 goto :error_monitor
@@ -140,6 +146,7 @@ schtasks /Create ^
   /TR "cmd.exe /c \"C:\Users\MAX\WhaleStream\run_briefing.bat\"" ^
   /SC DAILY ^
   /ST 07:00 ^
+  /ru SYSTEM ^
   /F ^
   /RL HIGHEST
 if %ERRORLEVEL% NEQ 0 goto :error_briefing
@@ -153,6 +160,7 @@ schtasks /Create ^
   /TR "cmd.exe /c \"C:\Users\MAX\WhaleStream\run_orphan_check.bat\"" ^
   /SC DAILY ^
   /ST 06:00 ^
+  /ru SYSTEM ^
   /F ^
   /RL HIGHEST
 if %ERRORLEVEL% NEQ 0 echo    WARNING: OrphanCheck failed. Run as administrator!
@@ -166,6 +174,7 @@ schtasks /Create ^
   /TR "cmd.exe /c \"C:\Users\MAX\WhaleStream\run_log_analyzer.bat\"" ^
   /SC DAILY ^
   /ST 07:00 ^
+  /ru SYSTEM ^
   /F ^
   /RL HIGHEST
 if %ERRORLEVEL% NEQ 0 echo    WARNING: LogAnalyzer failed. Run as administrator!
@@ -179,6 +188,7 @@ schtasks /Create ^
   /TR "cmd.exe /c \"C:\Users\MAX\WhaleStream\run_status_server.bat\"" ^
   /SC ONLOGON ^
   /DELAY 0000:30 ^
+  /ru SYSTEM ^
   /RL HIGHEST ^
   /F
 if %ERRORLEVEL% NEQ 0 echo    WARNING: StatusServer failed. Run as administrator!

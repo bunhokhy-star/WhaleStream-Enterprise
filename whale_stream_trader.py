@@ -42,6 +42,8 @@ import subprocess
 from datetime import datetime, timezone, timedelta
 from urllib.parse import urlencode
 
+BKK = timezone(timedelta(hours=7))   # Bangkok timezone (UTC+7) — used everywhere
+
 # Force UTF-8 output — prevents UnicodeEncodeError on Windows CP1252 consoles / Task Scheduler.
 if hasattr(sys.stdout, "buffer"):
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
@@ -52,10 +54,8 @@ if hasattr(sys.stderr, "buffer"):
 # ── Self-tick helper (writes completion to daily_status.json) ────
 def _mark_done(agent_name, details=None):
     """Mark this agent done for the current cycle in daily_status.json."""
-    import json, datetime
     _path  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "daily_status.json")
-    _bkk   = datetime.timezone(datetime.timedelta(hours=7))
-    _now   = datetime.datetime.now(_bkk)
+    _now   = datetime.now(BKK)
     _today = _now.date().isoformat()
     _h     = _now.hour
     _cycle = str((_h // 4) * 4).zfill(2)
@@ -76,16 +76,15 @@ def _mark_done(agent_name, details=None):
         _jspath = _path.replace("daily_status.json", "daily_status.js")
         with open(_jspath, "w", encoding="utf-8") as _f:
             _f.write("window.WHALE_STATUS=" + json.dumps(_data) + ";")
-        import re as _re
         _html_path = os.path.join(os.path.dirname(_path), "To do list", "Daily Checklist.html")
         with open(_html_path, encoding="utf-8") as _hf:
             _html = _hf.read()
         _inject = "var WS_EMBEDDED=" + json.dumps(_data, separators=(',', ':')) + ";"
-        _html = _re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
+        _html = re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
         with open(_html_path, "w", encoding="utf-8") as _hf:
             _hf.write(_html)
-    except Exception:
-        pass
+    except Exception as _me:
+        print(f"   ⚠ _mark_done write failed: {_me}")
 
 
 # ── Auto-install missing libraries ────────────────────────────
@@ -95,6 +94,8 @@ for mod, pkg in REQUIRED.items():
         __import__(mod)
     except ImportError:
         subprocess.check_call([sys.executable, "-m", "pip", "install", pkg, "--quiet"])
+
+from gspread.utils import rowcol_to_a1   # safe: gspread guaranteed installed by REQUIRED loop above
 
 # ─────────────────────────────────────────────────────────────
 # SECTION 1: CONFIGURATION  ← Fill in your keys here
@@ -184,7 +185,7 @@ LONG_COIN_AVOID_LIST = ["COMP", "HYPE", "ZRO", "QNT", "WIF"]   # must match LONG
 
 def log(msg):
     """Write to console and trader_log.txt with timestamp."""
-    bkk = datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d %H:%M BKK")
+    bkk = datetime.now(BKK).strftime("%Y-%m-%d %H:%M BKK")
     line = f"[{bkk}] {msg}"
     print(line)
     try:
@@ -255,8 +256,6 @@ def send_telegram_alert(msg):
 
 def write_balance_file(balance, open_positions=0):
     """Write Bybit Demo balance to JSON for the dashboard to display."""
-    import json
-
     # ── Gate 4 recovery detection — read old balance before overwriting ────────
     _GATE4_RECOVERY_THRESHOLD = BYBIT_START_BALANCE * 0.85
     _old_balance = None
@@ -269,7 +268,7 @@ def write_balance_file(balance, open_positions=0):
         pass
     # ── end Gate 4 recovery read ───────────────────────────────────────────────
 
-    bkk = datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d %H:%M BKK")
+    bkk = datetime.now(BKK).strftime("%Y-%m-%d %H:%M BKK")
     try:
         with open(BYBIT_BALANCE_FILE, "w", encoding="utf-8") as f:
             json.dump({
@@ -548,7 +547,7 @@ def get_stale_entry_orders(sheet_open_coins, min_age_hours=72):
     if result.get("retCode") != 0:
         return stale
 
-    bkk_now = datetime.now(timezone(timedelta(hours=7)))
+    bkk_now = datetime.now(BKK)
     for order in result["result"].get("list", []):
         # Skip reduce-only orders — these are partial close orders, keep them alive
         if order.get("reduceOnly") is True or str(order.get("reduceOnly", "")).lower() == "true":
@@ -582,7 +581,6 @@ def cancel_order(symbol, order_id, _max_retries=3):
     Retries up to _max_retries times on transient failures with exponential backoff.
     Returns True on success. Returns False immediately if order is already gone (retCode 20001).
     """
-    import time as _time
     for _attempt in range(_max_retries):
         result = bybit_request("POST", "/v5/order/cancel", body={
             "category": BYBIT_CATEGORY,
@@ -598,7 +596,7 @@ def cancel_order(symbol, order_id, _max_retries=3):
         if _attempt < _max_retries - 1:
             _sleep = 2 ** _attempt   # 1s, 2s, 4s
             log(f"cancel_order {symbol} attempt {_attempt+1} failed (retCode={ret_code}) — retrying in {_sleep}s")
-            _time.sleep(_sleep)
+            time.sleep(_sleep)
     log(f"cancel_order {symbol} failed after {_max_retries} attempts")
     return False
 
@@ -633,8 +631,6 @@ def close_position_at_market_for_veto(symbol, bybit_order_id):
 
     Returns (action, success) where action is 'cancelled' | 'closed' | 'failed'.
     """
-    import time as _time
-
     # Step 1: attempt cancel (with built-in retries)
     cancelled = cancel_order(symbol, bybit_order_id)
     if cancelled:
@@ -651,7 +647,7 @@ def close_position_at_market_for_veto(symbol, bybit_order_id):
             break
         if _retry < 2:
             log(f"REACTIVE VETO: position not yet visible for {symbol} — waiting 3s (attempt {_retry+1}/3)")
-            _time.sleep(3)
+            time.sleep(3)
 
     if pos is None:
         # Position genuinely not found after retries — send urgent Telegram
@@ -997,8 +993,7 @@ def connect_sheet():
     try:
         from gspread.client import Client as _GClient
     except ImportError:
-        import subprocess as _sp
-        _sp.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "gspread", "--quiet"])
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "gspread", "--quiet"])
         from gspread.client import Client as _GClient
     _SCOPES = [
         "https://www.googleapis.com/auth/spreadsheets",
@@ -1036,20 +1031,18 @@ def main():
     _calibrate_clock()
 
     # ── Detect reactive mode (--reactive flag from Strategist re-check) ──
-    import sys as _sys
-    _is_reactive = "--reactive" in _sys.argv
+    _is_reactive = "--reactive" in sys.argv
 
     # ── Cycle guard: skip if already done this 4h slot ──────────────
-    import json as _jcg, datetime as _dcg
     _cg_path  = os.path.join(SCRIPT_DIR, "daily_status.json")
-    _cg_hour  = _dcg.datetime.now(_dcg.timezone(_dcg.timedelta(hours=7))).hour
+    _cg_hour  = datetime.now(BKK).hour
     _cg_cycle = str((_cg_hour // 4) * 4).zfill(2)
     _cg_key   = f"trader_{_cg_cycle}"
     if not _is_reactive:   # reactive mode always bypasses the guard
         try:
             with open(_cg_path, encoding="utf-8") as _cgf:
-                _cg_data = _jcg.load(_cgf)
-            if _cg_data.get("date") == _dcg.datetime.now(_dcg.timezone(_dcg.timedelta(hours=7))).date().isoformat() and _cg_data.get(_cg_key):
+                _cg_data = json.load(_cgf)
+            if _cg_data.get("date") == datetime.now(BKK).date().isoformat() and _cg_data.get(_cg_key):
                 print(f"[CYCLE GUARD] {_cg_key} already completed today — skipping duplicate run.")
                 _mark_done("trader", details={"placed": [], "skipped": ["cycle_guard"]})
                 return
@@ -1159,9 +1152,8 @@ def main():
     _cb_grace_file   = os.path.join(SCRIPT_DIR, "cb_grace.txt")
     try:
         if os.path.exists(_cb_grace_file):
-            import json as _cbgj
             with open(_cb_grace_file, "r") as _cbgf:
-                _grace_data = _cbgj.load(_cbgf)
+                _grace_data = json.load(_cbgf)
             _grace_ts = datetime.fromisoformat(_grace_data.get("cleared_at", ""))
             # fromisoformat returns UTC-aware if string ends with +00:00
             _now_utc  = datetime.now(timezone.utc)
@@ -1191,7 +1183,7 @@ def main():
         else:
             # Standard CB behavior — write flag and pause
             try:
-                bkk_now_flag = datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d %H:%M BKK")
+                bkk_now_flag = datetime.now(BKK).strftime("%Y-%m-%d %H:%M BKK")
                 with open(PAUSED_FILE, "w", encoding="utf-8") as f:
                     f.write(f"PAUSED by circuit breaker at {bkk_now_flag}\n"
                             f"Last {_cb_threshold} resolved trades were all LOSS.\n"
@@ -1213,7 +1205,7 @@ def main():
             return
 
     # BKK time now (UTC+7)
-    bkk_now = datetime.now(timezone(timedelta(hours=7)))
+    bkk_now = datetime.now(BKK)
 
     # Maximum signal age before the trader stops trying to fill it.
     # Both the bot AND the trader run every 4 hours.  Signals are written by
@@ -1247,7 +1239,7 @@ def main():
         if ts_str:
             try:
                 sig_dt = datetime.strptime(ts_str, "%Y-%m-%d %H:%M")
-                sig_dt = sig_dt.replace(tzinfo=timezone(timedelta(hours=7)))
+                sig_dt = sig_dt.replace(tzinfo=BKK)
                 age_hours = (bkk_now - sig_dt).total_seconds() / 3600
                 if age_hours > MAX_SIGNAL_AGE_HOURS:
                     skipped_stale += 1
@@ -1361,7 +1353,7 @@ def main():
             send_telegram_alert(_g4_msg)
             print(_g4_msg)
             try:
-                bkk_g4 = datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d %H:%M BKK")
+                bkk_g4 = datetime.now(BKK).strftime("%Y-%m-%d %H:%M BKK")
                 with open(GATE4_BREACH_FILE, "w", encoding="utf-8") as _g4f:
                     _g4f.write(f"Gate 4 breach entered at {bkk_g4}\n"
                                f"Balance: ${_bb_balance:.2f}  Drawdown: {_drawdown_pct:.1f}%\n"
@@ -1737,7 +1729,7 @@ def main():
                 "symbol":    symbol,
                 "side":      side,
                 "btc_price": _btc_at_placement,
-                "placed_at": datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d %H:%M BKK"),
+                "placed_at": datetime.now(BKK).strftime("%Y-%m-%d %H:%M BKK"),
             }
             save_order_context(_ctx)
 
@@ -1807,7 +1799,6 @@ def main():
     # ── Write Order IDs + UNREACHABLE status to Google Sheets ─────────────────────
     if sheet_order_writes or unreachable_rows:
         try:
-            from gspread.utils import rowcol_to_a1
             batch_data = []
             if sheet_order_writes:
                 print(f"\n📝 Writing {len(sheet_order_writes)} Bybit Order ID(s) to Google Sheets...")
@@ -1866,7 +1857,7 @@ def main():
     print()
 
     # ── Summary Telegram ──────────────────────────────────────
-    bkk_now_str = datetime.now(timezone(timedelta(hours=7))).strftime("%H:%M BKK")
+    bkk_now_str = datetime.now(BKK).strftime("%H:%M BKK")
     if placed > 0:
         send_telegram_alert(
             f"🤖 <b>TRADER RUN COMPLETE</b> [{bkk_now_str}]\n"
@@ -1881,7 +1872,7 @@ def main():
 
     # ── SL-to-breakeven after TP1 (partial-close protection) ────────────────
     # When a partial-close trade resolves TP1 (STATUS=WIN, TP_HIT=TP1 in sheet),
-    # the remaining 50% Bybit position still carries the original SL.
+    # the remaining 75% Bybit position still carries the original SL.
     # A reversal past entry would turn the blended P&L negative despite the TP1 win.
     # Fix: move stopLoss to avgPrice (breakeven) so the worst-case blended P&L ≥ 0%.
     # Runs every trader cycle — skips symbols already at/beyond breakeven.
@@ -1894,14 +1885,12 @@ def main():
         _slbe_tp1_syms = set()
         _slbe_all_rows = data_rows  # reuse already-fetched rows (avoid 2nd get_all_values() call)
 
-        _COL_TP_HIT     = 14   # not yet defined as a constant in trader.py
-        _COL_ENTRY_PRICE = 12
         for _sbr in _slbe_all_rows:
             while len(_sbr) < 18:
                 _sbr.append("")
             if _sbr[COL_STATUS].strip() != "WIN":
                 continue
-            if _sbr[_COL_TP_HIT].strip() != "TP1":
+            if _sbr[COL_TP_HIT].strip() != "TP1":
                 continue
             if not _sbr[COL_BYBIT_ID].strip():
                 continue  # no Bybit order logged → wasn't auto-traded
@@ -1983,7 +1972,7 @@ def main():
         except Exception as _be_save_e:
             print(f"   ⚠ Could not save sl_be_applied.json: {_be_save_e}")
     except Exception as _slbe_e:
-        print(f"   ⚠ SL-to-breakeven check failed: {_slbe_e}")
+        log(f"⚠ SL-to-breakeven check failed: {_slbe_e}")
 
     # ── Stale entry order check ───────────────────────────────────────────────
     # Run every trader cycle to catch unfilled entry orders whose sheet signals

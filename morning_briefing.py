@@ -39,6 +39,8 @@ import subprocess
 import requests
 from datetime import datetime, timezone, timedelta
 
+BKK = timezone(timedelta(hours=7))   # Bangkok timezone (UTC+7) — used everywhere
+
 # ── Force UTF-8 output (prevents UnicodeEncodeError on Windows CP1252 / Task Scheduler) ──
 if hasattr(sys.stdout, "buffer"):
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
@@ -49,10 +51,8 @@ if hasattr(sys.stderr, "buffer"):
 # ── Self-tick helper (writes completion to daily_status.json) ────
 def _mark_done(agent_name, details=None):
     """Mark this agent done for the current cycle in daily_status.json."""
-    import json, datetime
     _path  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "daily_status.json")
-    _bkk   = datetime.timezone(datetime.timedelta(hours=7))
-    _now   = datetime.datetime.now(_bkk)
+    _now   = datetime.now(BKK)
     _today = _now.date().isoformat()
     _h     = _now.hour
     _cycle = str((_h // 4) * 4).zfill(2)
@@ -73,16 +73,15 @@ def _mark_done(agent_name, details=None):
         _jspath = _path.replace("daily_status.json", "daily_status.js")
         with open(_jspath, "w", encoding="utf-8") as _f:
             _f.write("window.WHALE_STATUS=" + json.dumps(_data) + ";")
-        import re as _re
         _html_path = os.path.join(os.path.dirname(_path), "To do list", "Daily Checklist.html")
         with open(_html_path, encoding="utf-8") as _hf:
             _html = _hf.read()
         _inject = "var WS_EMBEDDED=" + json.dumps(_data, separators=(',', ':')) + ";"
-        _html = _re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
+        _html = re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
         with open(_html_path, "w", encoding="utf-8") as _hf:
             _hf.write(_html)
-    except Exception:
-        pass
+    except Exception as _me:
+        print(f"   ⚠ _mark_done write failed: {_me}")
 
 
 # ── Credentials ───────────────────────────────────────────────

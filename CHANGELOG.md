@@ -1,5 +1,47 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.2 — 2026-06-28 — Full code audit: BKK constant, redundant imports eliminated, dead code removed
+
+### P0 — Critical (headless operation)
+
+**`SETUP_ALL_TASKS.bat` + `ADD_RECHECK_TASKS.bat` — All 16 `schtasks /create` blocks missing `/ru SYSTEM`**
+- Without `/ru SYSTEM`, every scheduled task requires an active user session
+- Tasks fail silently when user is logged off — 24/7 headless operation impossible
+- Fixed: added `/ru SYSTEM ^` to all 10 blocks in SETUP_ALL_TASKS.bat and all 6 blocks in ADD_RECHECK_TASKS.bat
+
+### P1 — High (correctness / token cost)
+
+**`whale_stream_tracker.py` — 8 inline `timezone(timedelta(hours=7))` replaced with `BKK`**
+- `BKK = timezone(timedelta(hours=7))` module-level constant already defined
+- 8 call sites in `weekly_summary()`, `main()`, heartbeat check, partial close block, expiry check, fast-expire block, and Bybit P&L write-back were still constructing new objects inline
+- Fixed: all 8 replaced with `BKK`; removed dead `_bkk_tz = timezone(timedelta(hours=7))` local at line 1831 and updated its downstream usage at line 1857 (`tzinfo=_bkk_tz` → `tzinfo=BKK`)
+
+**`whale_stream_bot.py` — Added module-level `BKK` constant + `_parse_conf()` replacing 4 duplicate parsers**
+- `BKK = timezone(timedelta(hours=7))` added after SECTION 3 imports
+- 4 local functions (`_conf_int`, `_long_conf_int`, `_parse_conf_val`, `_top3_key`) all extracted confidence integers via `re`; collapsed to single module-level `_parse_conf(sig)` returning `int`
+- Dead `elif short_wr_recent < 45: min_short_conf = 93` (identical to `else` branch) collapsed to ternary
+- Always-True `if min_short_conf > 0:` guard removed
+- DATASET placeholder (`Batch 1 Coins: XXX` etc.) removed from `WHALE_STREAM_PROMPT`
+- Cycle guard in `main()` cleaned: removed `import json as _jcg, datetime as _dcg` and 3× inline `_dcg.timezone(_dcg.timedelta(hours=7))` constructions; now uses module-level `json`, `datetime`, `BKK`
+
+**`whale_stream_bot.py` — Redundant inner imports eliminated**
+- Removed `import re as _re` from `_parse_conf_val()`, `_parse_entry_mid()`, `_parse_price_val()`, `_top3_key()` (module-level `re` already imported)
+- Removed `from datetime import timedelta as _td` from `log_to_google_sheets()` (module-level `timedelta` already imported)
+- Removed `import json` from `parse_json_signals()` function body (module-level `json` already imported)
+
+**`whale_stream_bot.py` — `_mark_done()` inner imports removed**
+- Previous implementation imported `json`, `re`, `datetime` inside function body every call
+- Rewrote to use module-level `json`, `re`; `from datetime import datetime, timezone, timedelta` kept as local import only because `_mark_done` is defined before SECTION 3 module-level imports
+
+**`morning_briefing.py` — `BKK` constant + `_mark_done()` rewritten**
+- `BKK = timezone(timedelta(hours=7))` added after `from datetime import`
+- `_mark_done()` rewritten: removed inner `import json, datetime` and `import re as _re`; uses module-level `json`, `re`, `datetime`, `BKK`; added `except Exception as _me: print(...)` error logging
+
+### P2 — Low (version strings)
+
+**`ADD_RECHECK_TASKS.bat` — stale v47.0 banner**
+- Echo banner still said `WHALE-STREAM v47.0`; updated to v47.2
+
 ## v47.1 — 2026-06-28 — Sixth audit pass: 17 fixes across 5 files (Watchdog autonomy gap, dead code, Gate fixes, NameError, token waste)
 
 ### P0 — Critical (autonomy + silent failures)
