@@ -187,7 +187,7 @@ def check_bot():
 
 
 def check_strategist():
-    dt = last_log_timestamp(STRATEGIST_LOG, r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}) BKK\].*?Strategist run started")
+    dt = last_log_timestamp(STRATEGIST_LOG, r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}) BKK\].*?Strategist run complete")
     if dt is None:
         dt = last_log_timestamp(STRATEGIST_LOG, r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}) BKK\]")
     ago = minutes_ago(dt)

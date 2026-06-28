@@ -1,5 +1,84 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.98 — 2026-06-28 — Third full audit pass: 19 fixes across 8 files (learning loop, go-live blockers, scheduling, hardening)
+
+### P0 — Critical bugs fixed
+
+**`strategist.py` — `build_coin_history` emoji direction key — entire learning loop broken**
+- `direction = row[COL_SIGNAL].strip().upper()` produced `"🟢 LONG"` — never matched canonical key `("BTC", "LONG")` in `targets`
+- `history` always returned empty → Strategist saw blank coin history on every run → learning loop from Debrief was completely silenced
+- Fixed: `_dir_raw = row[COL_SIGNAL].strip().upper(); direction = "LONG" if "LONG" in _dir_raw else ("SHORT" if "SHORT" in _dir_raw else _dir_raw)`
+
+**`bot.py` — Verdict fallback `"TRADE"` instead of `"GO"`**
+- `data1.get("verdict", "TRADE")` — if batch 1 returned no explicit verdict, bot used invalid sentinel; `"TRADE"` is not a valid verdict value
+- Fixed: default changed to `"GO"` (the canonical pass-through value)
+
+**`bot.py` — LONG TP1 minimum floor 2.5% instead of 3.0%**
+- LONG used `_tp1_dist < 2.5` while SHORT already used `_tp1_dist < 3.0` — asymmetric gate allowed LONG TP1s within 2.5–2.9% that underperform
+- Fixed: `if _tp1_dist < 3.0` — both LONG and SHORT now require minimum 3.0% TP1 distance
+
+**`tracker.py` — `X-BAPI-DEMO-TRADING: "1"` hardcoded in `bybit_request_auth()` (go-live blocker)**
+- Tracker's authenticated endpoint (closed P&L, balance) unconditionally sent demo header — live account would be invisible to Tracker on July 1
+- Fixed: conditional `if "demo" in BYBIT_BASE_URL: headers["X-BAPI-DEMO-TRADING"] = "1"`
+- Also: auth timestamp changed from `-1000ms` to `-3000ms` (connection reliability)
+
+**`ADD_RECHECK_TASKS.bat` — All 6 recheck/reactive tasks used broken scheduling**
+- All 6 tasks: `/sc DAILY /st XX:XX /ri 240 /du 9999:59` — DAILY+RI repeats are unreliable on Windows 10; tasks stop firing after 9999h
+- Also missing `/RL HIGHEST` — tasks ran at normal priority, could be preempted
+- Fixed: all 6 now use `/sc HOURLY /mo 4 /st XX:XX /rl HIGHEST`
+
+**`debrief.py` — `if pnl:` falsy trap (two locations)**
+- `if pnl:` treats `0.0` P&L as falsy → trades that broke even (0% P&L) silently omitted from debrief output and Telegram
+- Fixed: `if pnl is not None` at L327 (outcome_detail) and L493 (Telegram pnl_str)
+
+**`debrief.py` — `load_memory()` silently reset on corrupt JSON**
+- `except Exception: pass` swallowed any corruption error — memory was reset to empty with no log entry
+- Fixed: `except Exception as e: print(f"✗ pattern_memory.json corrupt: {e} — starting fresh")`
+
+**`debrief.py` — `save_memory()` non-atomic write**
+- Direct `open(MEMORY_FILE, "w")` — if process dies mid-write, pattern_memory.json is corrupted (partial JSON)
+- Fixed: atomic write via temp file + `os.replace()` (crash-safe)
+
+**`morning_briefing.py` — `safe_read(MONITOR_LOG)` reads entire log into RAM (two functions)**
+- `parse_monitor_heartbeat()` and `parse_last_fills_24h()` both called `safe_read(MONITOR_LOG)` — reads the full log file (can grow to 100MB+) into memory every morning
+- Fixed: both now use `read_last_lines(MONITOR_LOG, 500/2000)` — O(tail) not O(file)
+
+### P1 — High severity bugs fixed
+
+**`SETUP_ALL_TASKS.bat` — Tracker and Monitor missing `/RL HIGHEST`**
+- Tracker (every 30min) and Monitor (every 2min) registered without `/RL HIGHEST` — could be preempted by other processes during critical TP/SL detection
+- Fixed: both now include `/RL HIGHEST`
+
+**`run_strategist_recheck.bat` + `run_trader_reactive.bat` — Missing `PYTHONIOENCODING`**
+- UTF-8 encoding env vars not set — emoji prints crash with `UnicodeEncodeError` in Task Scheduler (cp1252 default)
+- Fixed: added `set PYTHONIOENCODING=utf-8` and `set PYTHONUTF8=1` to both BAT files
+
+**`strategist.py` — SHORT recheck missing "price rallied above zone" veto**
+- Recheck R2 only vetoed SHORT when `price < entry_low * 0.95` (price fell through) — missing the case where SHORT entry zone was missed because price rallied up through it
+- Fixed: added `elif _px > _eh * 1.05: _new_dec = "VETO"` branch for price-rallied-above case
+
+**`strategist.py` — Recheck mode missing `reduced_count` in output**
+- `_updated` dict written by recheck mode had `approved_count` and `vetoed_count` but no `reduced_count` — Trader reactive mode couldn't see how many REDUCE_SIZE decisions existed
+- Fixed: `_rc_reduced = [d["coin"] for d in _new_decisions if d["decision"] == "REDUCE_SIZE"]; _updated["reduced_count"] = len(_rc_reduced)`
+
+**`trader.py` — `_GATE4_RECOVERY_THRESHOLD = 425.0` hardcoded**
+- If `BYBIT_START_BALANCE` changes (e.g. capital injection), recovery threshold stays at $425 — Gate 4 never releases
+- Fixed: `_GATE4_RECOVERY_THRESHOLD = BYBIT_START_BALANCE * 0.85` (dynamic)
+
+**`watchdog.py` — Strategist health check matched "run started" not "run complete"**
+- `check_strategist()` looked for `"Strategist run started"` pattern — a Strategist that crashed mid-run appeared healthy to Watchdog
+- Fixed: pattern changed to `"Strategist run complete"` — only fully-finished runs count as healthy
+
+**`morning_briefing.py` — GO_LIVE_DATE countdown off by one**
+- `(GO_LIVE_DATE - now_bkk).days` uses full datetime difference — returns 0 the day before go-live due to time-of-day subtraction
+- Fixed: `(GO_LIVE_DATE.date() - now_bkk.date()).days` — pure calendar-day comparison
+
+**`tracker.py` — `weekly_summary()` empty week breaks streak**
+- `if not week_trades: break` — if the bot was paused for a week (drawdown protection, Gate 4), the streak count resets to 0 even for valid prior profitable weeks
+- Fixed: advance `_prev_week()` first, then `continue` on empty weeks — streaks survive bot-pause weeks
+
+---
+
 ## v46.97 — 2026-06-28 — Second full audit pass: 15 fixes across 5 files (trader, monitor, tracker, debrief, briefing)
 
 ### P0 — Go-live blocker fixed

@@ -142,8 +142,8 @@ def load_memory():
         try:
             with open(MEMORY_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"✗ pattern_memory.json corrupt or unreadable: {e} — starting fresh")
     return {"last_updated": "", "debriefs": []}
 
 
@@ -213,8 +213,10 @@ def save_memory(memory):
     memory["prefer_patterns"] = sorted(prefer_patterns)
 
     try:
-        with open(MEMORY_FILE, "w", encoding="utf-8") as f:
+        _tmp = MEMORY_FILE + ".tmp"
+        with open(_tmp, "w", encoding="utf-8") as f:
             json.dump(memory, f, indent=2, ensure_ascii=False)
+        os.replace(_tmp, MEMORY_FILE)
     except Exception as e:
         log(f"✗ Failed to save memory: {e}")
 
@@ -324,7 +326,7 @@ def build_debrief_prompt(trade):
     outcome_detail = f"{outcome}"
     if tp_hit:
         outcome_detail += f" — {tp_hit} hit"
-    if pnl:
+    if pnl is not None:
         outcome_detail += f" — P&L: {pnl:+.1f}%"
 
     # ── Multi-agent consensus layer (Principle 5) ─────────────
@@ -490,7 +492,7 @@ def run_debrief(trades):
     for d in debriefs_written:
         icon      = "✅" if d["outcome"] == "WIN" else "❌"
         flag_icon = "🔁" if d["flag"] == "REINFORCE" else ("🚫" if d["flag"] == "AVOID" else "➡️")
-        pnl_str   = f"{d['pnl']:+.1f}%" if d.get("pnl") else ""
+        pnl_str   = f"{d['pnl']:+.1f}%" if d.get("pnl") is not None else ""
         consensus = d.get("consensus", "")
         lines.append(
             f"  {icon} <b>{d['coin']} {d['direction']}</b> [{d['entry_quality']}] {pnl_str}\n"

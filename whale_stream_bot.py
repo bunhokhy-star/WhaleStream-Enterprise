@@ -2277,8 +2277,8 @@ def log_to_google_sheets(data, bkk_time):
                         malformed_reason = f"LONG TP1 ({tp1_val}) <= entry ({entry_mid:.4f}) — TP1 must be above entry"
                     else:
                         _tp1_dist = (tp1_val - entry_mid) / entry_mid * 100
-                        if _tp1_dist < 2.5:
-                            malformed_reason = f"LONG TP1 only {_tp1_dist:.2f}% from entry — minimum 2.5% required"
+                        if _tp1_dist < 3.0:
+                            malformed_reason = f"LONG TP1 only {_tp1_dist:.2f}% from entry — minimum 3.0% required"
                 elif direction == "SHORT":
                     if sl_val <= entry_mid:
                         malformed_reason = f"SHORT SL ({sl_val}) <= entry ({entry_mid:.4f}) — SL must be above entry"
@@ -2583,7 +2583,7 @@ def main():
         print(f"   🛡  LONG floor {LONG_MIN_CONF}% — AUTO-DROPPED {dropped_long} long(s) below threshold")
 
     signal_data = {
-        "verdict":  data1.get("verdict",  "TRADE"),
+        "verdict":  data1.get("verdict",  "GO"),
         "regime":   data1.get("regime",   ""),
         "btc_bias": data1.get("btc_bias", ""),
         "eth_bias": data1.get("eth_bias", ""),

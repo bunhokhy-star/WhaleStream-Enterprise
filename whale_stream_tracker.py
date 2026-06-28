@@ -245,7 +245,7 @@ def bybit_request_auth(method, endpoint, params=None):
     Used only for private endpoints (closed P&L, account data).
     Public market data uses the unauthenticated load_bybit_prices() path.
     """
-    timestamp   = str(int(_btime.time() * 1000) - 1000)
+    timestamp   = str(int(_btime.time() * 1000) - 3000)
     recv_window = "20000"
     query_str   = _burlencode(params) if params else ""
     sign_str    = f"{timestamp}{BYBIT_API_KEY}{recv_window}{query_str}"
@@ -259,8 +259,9 @@ def bybit_request_auth(method, endpoint, params=None):
         "X-BAPI-SIGN":         signature,
         "X-BAPI-TIMESTAMP":    timestamp,
         "X-BAPI-RECV-WINDOW":  recv_window,
-        "X-BAPI-DEMO-TRADING": "1",
     }
+    if "demo" in BYBIT_BASE_URL:
+        headers["X-BAPI-DEMO-TRADING"] = "1"
     url = f"{BYBIT_BASE_URL}{endpoint}"
     try:
         resp = requests.get(url, params=params, headers=headers, timeout=15)
@@ -1389,14 +1390,14 @@ def weekly_summary(all_rows):
     check_year, check_week = cur_year, cur_week
     for _ in range(52):  # safety cap
         week_trades = [t for t in resolved if t["year"] == check_year and t["week"] == check_week]
+        check_year, check_week = _prev_week(check_year, check_week, 1)  # advance before possible continue
         if not week_trades:
-            break  # no data — streak ends
+            continue  # skip empty weeks — don't break streak (drawdown protection weeks)
         net = sum(t["pnl"] for t in week_trades)
         if net > 0:
             consecutive_profitable += 1
         else:
             break
-        check_year, check_week = _prev_week(check_year, check_week, 1)
 
     # Build message lines
     lines = []

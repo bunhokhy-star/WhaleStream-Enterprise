@@ -257,7 +257,7 @@ def write_balance_file(balance, open_positions=0):
     import json
 
     # ── Gate 4 recovery detection — read old balance before overwriting ────────
-    _GATE4_RECOVERY_THRESHOLD = 425.0
+    _GATE4_RECOVERY_THRESHOLD = BYBIT_START_BALANCE * 0.85
     _old_balance = None
     try:
         if os.path.exists(BYBIT_BALANCE_FILE):

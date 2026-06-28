@@ -1,7 +1,7 @@
 @echo off
 :: ════════════════════════════════════════════════════════════════════
 :: ADD_RECHECK_TASKS.bat
-:: Registers 6 Task Scheduler entries for the v46.93 continuous
+:: Registers 6 Task Scheduler entries for the v46.98 continuous
 :: decision loop:
 ::
 ::   Strategist re-checks  (rules-only, no Claude)
@@ -23,7 +23,7 @@ SET PYTHON=%SCRIPT_DIR%\run_strategist_recheck.bat
 SET TRADER=%SCRIPT_DIR%\run_trader_reactive.bat
 
 echo ══════════════════════════════════════════════════════
-echo   WHALE-STREAM v46.93 — Continuous Decision Loop
+echo   WHALE-STREAM v46.98 — Continuous Decision Loop
 echo   Task Scheduler Installer
 echo ══════════════════════════════════════════════════════
 echo.
@@ -32,7 +32,8 @@ echo.
 schtasks /create ^
   /tn "WhaleStream-Strategist-Recheck-A" ^
   /tr "\"%PYTHON%\"" ^
-  /sc DAILY /st 01:10 /ri 240 /du 9999:59 ^
+  /sc HOURLY /mo 4 /st 01:10 ^
+  /rl HIGHEST ^
   /ru "%USERNAME%" /f
 echo [A] Strategist re-check A registered (01:10 +4h)
 
@@ -40,7 +41,8 @@ echo [A] Strategist re-check A registered (01:10 +4h)
 schtasks /create ^
   /tn "WhaleStream-Strategist-Recheck-B" ^
   /tr "\"%PYTHON%\"" ^
-  /sc DAILY /st 02:10 /ri 240 /du 9999:59 ^
+  /sc HOURLY /mo 4 /st 02:10 ^
+  /rl HIGHEST ^
   /ru "%USERNAME%" /f
 echo [B] Strategist re-check B registered (02:10 +4h)
 
@@ -48,7 +50,8 @@ echo [B] Strategist re-check B registered (02:10 +4h)
 schtasks /create ^
   /tn "WhaleStream-Strategist-Recheck-C" ^
   /tr "\"%PYTHON%\"" ^
-  /sc DAILY /st 03:10 /ri 240 /du 9999:59 ^
+  /sc HOURLY /mo 4 /st 03:10 ^
+  /rl HIGHEST ^
   /ru "%USERNAME%" /f
 echo [C] Strategist re-check C registered (03:10 +4h)
 
@@ -58,7 +61,8 @@ echo.
 schtasks /create ^
   /tn "WhaleStream-Trader-Reactive-A" ^
   /tr "\"%TRADER%\"" ^
-  /sc DAILY /st 01:15 /ri 240 /du 9999:59 ^
+  /sc HOURLY /mo 4 /st 01:15 ^
+  /rl HIGHEST ^
   /ru "%USERNAME%" /f
 echo [D] Trader reactive A registered (01:15 +4h)
 
@@ -66,7 +70,8 @@ echo [D] Trader reactive A registered (01:15 +4h)
 schtasks /create ^
   /tn "WhaleStream-Trader-Reactive-B" ^
   /tr "\"%TRADER%\"" ^
-  /sc DAILY /st 02:15 /ri 240 /du 9999:59 ^
+  /sc HOURLY /mo 4 /st 02:15 ^
+  /rl HIGHEST ^
   /ru "%USERNAME%" /f
 echo [E] Trader reactive B registered (02:15 +4h)
 
@@ -74,7 +79,8 @@ echo [E] Trader reactive B registered (02:15 +4h)
 schtasks /create ^
   /tn "WhaleStream-Trader-Reactive-C" ^
   /tr "\"%TRADER%\"" ^
-  /sc DAILY /st 03:15 /ri 240 /du 9999:59 ^
+  /sc HOURLY /mo 4 /st 03:15 ^
+  /rl HIGHEST ^
   /ru "%USERNAME%" /f
 echo [F] Trader reactive C registered (03:15 +4h)
 

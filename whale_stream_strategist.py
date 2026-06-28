@@ -298,7 +298,8 @@ def build_coin_history(all_rows, signals):
         if len(row) <= COL_STATUS:
             continue
         coin      = row[COL_COIN].strip().upper()
-        direction = row[COL_SIGNAL].strip().upper()
+        _dir_raw  = row[COL_SIGNAL].strip().upper()
+        direction = "LONG" if "LONG" in _dir_raw else ("SHORT" if "SHORT" in _dir_raw else _dir_raw)
         status    = row[COL_STATUS].strip().upper()
         key       = (coin, direction)
 
@@ -876,10 +877,15 @@ def main():
                             _new_dec    = "VETO"
                             _new_reason = (f"Re-check R2: entry zone missed — "
                                            f"price {_px:.4g} > entry high {_eh:.4g} +5%")
-                        elif _direction == "SHORT" and _px < _el * 0.95:
-                            _new_dec    = "VETO"
-                            _new_reason = (f"Re-check R2: entry zone missed — "
-                                           f"price {_px:.4g} < entry low {_el:.4g} -5%")
+                        elif _direction == "SHORT":
+                            if _px < _el * 0.95:
+                                _new_dec    = "VETO"
+                                _new_reason = (f"Re-check R2: SHORT entry zone missed (price fell through) — "
+                                               f"price {_px:.4g} < entry low {_el:.4g} -5%")
+                            elif _px > _eh * 1.05:
+                                _new_dec    = "VETO"
+                                _new_reason = (f"Re-check R2: SHORT entry zone missed (price rallied above) — "
+                                               f"price {_px:.4g} > entry high {_eh:.4g} +5%")
                     except (ValueError, TypeError):
                         pass
 
@@ -922,6 +928,7 @@ def main():
         _recheck_num = _prev.get("recheck_count", 0) + 1
         _rc_approved = [d["coin"] for d in _new_decisions if d["decision"] == "APPROVE"]
         _rc_vetoed   = [d["coin"] for d in _new_decisions if d["decision"] == "VETO"]
+        _rc_reduced  = [d["coin"] for d in _new_decisions if d["decision"] == "REDUCE_SIZE"]
 
         _updated = dict(_prev)
         _updated["decisions"]       = _new_decisions
@@ -930,6 +937,7 @@ def main():
         _updated["recheck_changes"] = _changes
         _updated["approved_count"]  = len(_rc_approved)
         _updated["vetoed_count"]    = len(_rc_vetoed)
+        _updated["reduced_count"]   = len(_rc_reduced)
         write_decisions(_updated)
 
         # Telegram only when decisions changed

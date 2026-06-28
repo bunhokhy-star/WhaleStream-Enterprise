@@ -325,9 +325,10 @@ def parse_monitor_heartbeat():
     in monitor_log.txt.  Timestamps look like:
       [2026-06-22 22:55:01 BKK]
     """
-    raw = safe_read(MONITOR_LOG)
-    if not raw:
+    _lines = read_last_lines(MONITOR_LOG, 500)
+    if not _lines:
         return None, None
+    raw = "\n".join(_lines)
 
     # Find all timestamps in the log
     pattern = r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) BKK\]"
@@ -351,8 +352,8 @@ def parse_last_fills_24h():
     Lines containing "✅ Position closed" or "filled" count as fills.
     Returns count of such lines.
     """
-    raw = safe_read(MONITOR_LOG)
-    if not raw:
+    _lines = read_last_lines(MONITOR_LOG, 2000)
+    if not _lines:
         return 0
 
     now_bkk   = datetime.now(BKK)
@@ -361,7 +362,7 @@ def parse_last_fills_24h():
     ts_pat    = re.compile(r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) BKK\]")
 
     fills = 0
-    for line in raw.splitlines():
+    for line in _lines:
         m = fill_pat.search(line)
         if not m:
             continue
@@ -579,7 +580,7 @@ def build_message():
     date_str  = now_bkk.strftime("%Y-%m-%d %H:%M BKK")
 
     # Days to Go-Live
-    delta_days = (GO_LIVE_DATE - now_bkk).days
+    delta_days = (GO_LIVE_DATE.date() - now_bkk.date()).days
     if delta_days < 0:
         days_line = "🚀 GO-LIVE REACHED"
     elif delta_days == 0:

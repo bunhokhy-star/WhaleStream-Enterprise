@@ -108,7 +108,8 @@ schtasks /Create ^
   /SC MINUTE ^
   /MO 30 ^
   /ST 00:00 ^
-  /F
+  /F ^
+  /RL HIGHEST
 if %ERRORLEVEL% NEQ 0 goto :error_tracker
 echo    OK: every 30 minutes (00:00, 00:30, 01:00, 01:30, ...)
 echo.
@@ -120,7 +121,8 @@ schtasks /Create ^
   /TR "cmd.exe /c \"C:\Users\MAX\WhaleStream\run_monitor.bat\"" ^
   /SC MINUTE ^
   /MO 2 ^
-  /F
+  /F ^
+  /RL HIGHEST
 if %ERRORLEVEL% NEQ 0 goto :error_monitor
 echo    OK: every 2 minutes (real-time TP/SL fill detection)
 echo.

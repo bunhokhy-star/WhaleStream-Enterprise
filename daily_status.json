@@ -39,16 +39,16 @@
     "health": "AMBER"
   },
   "monitor_details": {
-    "positions": 0,
-    "alerts": 7,
-    "last_run": "16:32 BKK"
+    "positions": 7,
+    "alerts": 0,
+    "last_run": "17:10 BKK"
   },
   "tracker_details": {
     "resolved": 0,
     "wins": 0,
     "losses": 0,
     "open": 53,
-    "last_run": "16:30 BKK"
+    "last_run": "17:00 BKK"
   },
   "sigbot_12": true,
   "sigbot_12_details": {
@@ -98,11 +98,9 @@
   "strategist_16_details": {
     "approved": [
       "SPX",
-      "EIGEN",
-      "ENS",
-      "H",
       "MNT",
-      "LIT"
+      "LIT",
+      "SPX"
     ],
     "vetoed": [
       "AAVE",
@@ -110,11 +108,12 @@
       "JUP",
       "FF",
       "TIA",
-      "FF",
       "AAVE",
       "JUP",
+      "H",
       "FF"
-    ]
+    ],
+    "recheck": true
   },
   "trader_16": true,
   "trader_16_details": {
