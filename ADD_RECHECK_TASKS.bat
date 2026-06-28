@@ -1,7 +1,7 @@
 @echo off
 :: ════════════════════════════════════════════════════════════════════
 :: ADD_RECHECK_TASKS.bat
-:: Registers 6 Task Scheduler entries for the v46.99 continuous
+:: Registers 6 Task Scheduler entries for the v47.0 continuous
 :: decision loop:
 ::
 ::   Strategist re-checks  (rules-only, no Claude)

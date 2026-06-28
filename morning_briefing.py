@@ -644,7 +644,7 @@ def build_message():
     conservative_flag = os.path.exists(os.path.join(BASE_DIR, "short_conservative.flag"))
     gate4_flag        = os.path.exists(os.path.join(BASE_DIR, "gate4_breach.flag"))
 
-    # ── Size scaling (v46.42) ──
+    # ── Size scaling (v47.0) ──
     if drawdown_pct >= 12:
         size_scale_pct = 60
     elif drawdown_pct >= 8:
@@ -867,8 +867,9 @@ if __name__ == "__main__":
 
     send_telegram(msg)
     try:
-        _bal  = bal.get("balance", 0.0)
-        _open = bal.get("open_positions", 0)
+        _bdata = parse_balance()
+        _bal   = _bdata.get("balance", 0.0)
+        _open  = _bdata.get("open_positions", 0)
         _brief_summary = f"Balance: ${_bal:,.0f} · {_open} open"
     except Exception:
         _brief_summary = ""

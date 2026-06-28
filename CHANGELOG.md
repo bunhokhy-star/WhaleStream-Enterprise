@@ -1,5 +1,76 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.1 — 2026-06-28 — Sixth audit pass: 17 fixes across 5 files (Watchdog autonomy gap, dead code, Gate fixes, NameError, token waste)
+
+### P0 — Critical (autonomy + silent failures)
+
+**`watchdog.py` — Tracker and Monitor hardcoded as ✅ in green report**
+- `build_green_report()` unconditionally printed `✅ Tracker — every 30 min` and `✅ Monitor — every 2 min`
+- If either agent died, Watchdog falsely reported all-clear every 4h with no alert
+- Fixed: added `TRACKER_LOG` + `MONITOR_LOG` path constants, `check_tracker()` (deadline 45m) and `check_monitor()` (deadline 10m) functions, updated `build_green_report()` signature to accept `tracker_ok/last/monitor_ok/last`, updated `main()` call site
+
+**`morning_briefing.py` — `bal` NameError in `__main__`: `_brief_summary` silently always ""**
+- `bal` is a local variable inside `build_message()`; `__main__` tried to use it after `msg = build_message()` → always fell to `except` → `_mark_done(details.summary)` always blank
+- Fixed: replaced with `_bdata = parse_balance()` call directly in `__main__` scope
+
+### P1 — High (correctness bugs)
+
+**`tracker.py` — Gate 4 `_bal > _start` fails flat accounts**
+- Dashboard Gate 4 check: `bybit_ok = _dd_pct <= 25 and _bal > _start`
+- An account sitting flat (bal == start) or slightly up would fail Gate 4 despite zero drawdown
+- Fixed: `bybit_ok = _dd_pct <= 25` — pass if drawdown ≤ 25%, regardless of absolute balance
+
+**`tracker.py` — Monday Gate snapshot used wrong Gate 1 definition**
+- Monday Gate used `_ml_wr >= 60 and len(_ml20) >= 20` (WR check) and labeled it "Gate 1"
+- Actual Gate 1 = 150 resolved real LONG trades (volume gate); WR is Gate 2
+- Fixed: `_g1_ok = len(_ml) >= 150`; display string updated to "X/150 real LONGs"
+
+**`tracker.py` — WR decay threshold 5 trades → false positives**
+- `_long_recent = _long_resolved[-20:] if len(_long_resolved) >= 5 else []`
+- With only 5–19 trades, rolling WR is statistically meaningless → spurious decay alerts
+- Fixed: threshold raised from 5 → 20 trades before decay monitoring activates
+
+**`bot.py` — Graveyard Telegram blind spot (S_WR / S_AUTO_BAN)**
+- Already fixed in v47.0 round
+
+### P2 — Medium (code quality / token waste)
+
+**`watchdog.py` — `import re as _re` inside `_write_html_snapshot()` redundant**
+- `re` already imported at module level (line 28); inner alias was dead overhead
+- Fixed: removed `import re as _re` from function body
+
+**`debrief.py` — `import os as _os` in ImportError except block**
+- `os` already imported at module level; inner alias was redundant
+- Fixed: use `os.getenv()` directly
+
+**`tracker.py` — `import os as _os` in two ImportError except blocks**
+- `os` imported at module level (line 29); lines 109/123 re-imported with alias
+- Fixed: both blocks now use `os.getenv()` directly
+
+**`tracker.py` — `import subprocess as _sp, sys as _sys` inside `connect_sheet()`**
+- `subprocess` and `sys` imported at module level; inner imports were redundant
+- Fixed: use module-level `subprocess` and `sys` directly
+
+**`tracker.py` — Duplicate json alias `_cbj` / `_cbj2` in same function scope**
+- Lines 1983 and 2017: `import json as _cbj` then `import json as _cbj2` in same `main()` function
+- Fixed: both replaced with module-level `json` import
+
+**`tracker.py` — `_date.today()` not BKK-aware in go-live countdown**
+- `from datetime import date as _date; _today = _date.today()` uses local machine clock
+- Server on UTC would show wrong countdown if run near midnight BKK
+- Fixed: `_today = _dt_cls.now(_tz(_td(hours=7))).date()`
+
+**`debrief.py` — Banner still said v1.0**
+- Header box: `WHALE-STREAM DEBRIEF AGENT v1.0` → v47.0
+
+**`ADD_RECHECK_TASKS.bat` — Stale v46.99 comment**
+- Line 4: `v46.99 continuous decision loop` → v47.0
+
+**`morning_briefing.py` — Stale v46.42 size-scaling comment**
+- Already fixed in v47.0; comment bumped to v47.0
+
+---
+
 ## v47.0 — 2026-06-28 — Fifth full audit pass: 9 critical fixes across 6 files (Quad-TP detection, BKK clocks, be_set propagation, content guards)
 
 ### P0 — Critical fixes

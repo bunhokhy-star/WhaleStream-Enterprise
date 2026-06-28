@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM DEBRIEF AGENT v1.0 — POST-TRADE LEARNING     ║
+║   WHALE-STREAM DEBRIEF AGENT v47.0 — POST-TRADE LEARNING    ║
 ║                                                              ║
 ║  Called automatically by whale_stream_tracker.py after      ║
 ║  each WIN or LOSS resolution.                                ║
@@ -64,10 +64,9 @@ for mod, pkg in {"anthropic": "anthropic"}.items():
 try:
     from local_config import ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 except ImportError:
-    import os as _os
-    ANTHROPIC_API_KEY  = _os.getenv("ANTHROPIC_API_KEY", "")
-    TELEGRAM_BOT_TOKEN = _os.getenv("TELEGRAM_BOT_TOKEN", "")
-    TELEGRAM_CHAT_ID   = _os.getenv("TELEGRAM_CHAT_ID", "")
+    ANTHROPIC_API_KEY  = os.getenv("ANTHROPIC_API_KEY", "")
+    TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID", "")
 
 DEBRIEF_MODEL = "claude-haiku-4-5-20251001"   # fast + cheap for short analysis
 

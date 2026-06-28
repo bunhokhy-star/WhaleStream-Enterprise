@@ -119,9 +119,10 @@ for module, package in REQUIRED_PACKAGES.items():
         print(f"   ✓ {package}")
     except ImportError:
         print(f"   ⬇ Installing {package}...")
-        subprocess.check_call([PIP_PYTHON, "-m", "pip", "install", package, "--quiet",
-                               "--target", str(__import__("pathlib").Path(sys.executable).parent.parent / "Lib" / "site-packages")
-                               if PIP_PYTHON != sys.executable else "--quiet"])
+        _pip_cmd = [PIP_PYTHON, "-m", "pip", "install", package, "--quiet"]
+        if PIP_PYTHON != sys.executable:
+            _pip_cmd += ["--target", str(__import__("pathlib").Path(sys.executable).parent.parent / "Lib" / "site-packages")]
+        subprocess.check_call(_pip_cmd)
         print(f"   ✓ {package} installed")
 
 print("   All libraries ready.\n")
@@ -291,7 +292,7 @@ The trend is not your enemy — fighting it is.
 
 LIVE REGIME: injected in MARKET REGIME section of user message below.
 ════════════════════════════════════════════════════════════
-ANALYSIS ENGINE (v46.0)
+ANALYSIS ENGINE (v47.0)
 Each call provides ONE self-contained batch of market data (up to 100 coins).
 Analyze ALL coins in the provided batch.
 TOURNAMENT PROCESS (per batch):
@@ -427,7 +428,7 @@ Apply these tighter rules until SHORT WR recovers to ≥50%:
 It is better to miss a SHORT trade than to take a bad one. Protecting capital is the priority.
 ════════════════════════════════════════════════════════════
 CORRELATION FILTER — MANDATORY PORTFOLIO DIVERSIFICATION (v44.0)
-Before finalising your TOP 5 LONG and TOP 3 SHORT selections, enforce sector limits.
+Before finalising your TOP 3 LONG and TOP 3 SHORT selections, enforce sector limits.
 The goal: protect capital from sector-wide drawdowns (e.g. entire DeFi sector collapses).
 
 SECTOR CLASSIFICATIONS (use these categories):
@@ -445,10 +446,10 @@ SECTOR CLASSIFICATIONS (use these categories):
 CORRELATION RULES (MANDATORY):
 • MAXIMUM 2 signals from the same sector in your LONG selections
 • MAXIMUM 2 signals from the same sector in your SHORT selections
-• IDEAL: Each of the 5 LONGs should be from DIFFERENT sectors (max diversification)
+• IDEAL: Each of the 3 LONGs should be from DIFFERENT sectors (max diversification)
 • IDEAL: Each of the 3 SHORTs should be from DIFFERENT sectors (max diversification)
 • If forced to choose between 2 correlated coins in the same sector, select the one with HIGHER confidence score
-• NEVER output 5 LONGs all from Layer 1 — this is concentrated macro risk
+• NEVER output 3 LONGs all from Layer 1 — this is concentrated macro risk
 • NEVER pick more than 2 LONGs from the same narrative theme (e.g. max 2 AI tokens)
 
 ENFORCEMENT: After building your final 6-signal list, run a sector audit:
@@ -580,7 +581,7 @@ Risk Environment:
 ════════════════════════════════════════════════════════════
 🐳 FINAL EXECUTION MATRIX
 
-TOP 5 LONG SETUPS
+TOP 3 LONG SETUPS
 # | Coin | Conf | Score | Entry | SL | TP1 | TP2 | TP3 | TP4 | Pattern
 
 TOP 3 SHORT SETUPS
@@ -1821,7 +1822,7 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     # ── SHORT WR status from graveyard ───────────────────────
     if graveyard_text:
         for gline in graveyard_text.splitlines():
-            if "SHORT WR" in gline or "AUTO-BLACKLIST" in gline:
+            if "S_WR" in gline or "S_AUTO_BAN" in gline or gline.strip().startswith("GRAVEYARD ["):
                 lines.append(gline.strip())
     # ── Signal quality summary line ───────────────────────────
     def _avg_conf(signals):
@@ -1922,111 +1923,8 @@ def send_to_telegram(analysis_text, formatted_msg=None, chat_id=None):
             time.sleep(0.5)
 
 
-def parse_signals_from_analysis(analysis_text):
-    """
-    Extract trade signals (up to 5 LONG + 3 SHORT) from Claude's markdown output.
-    Handles both markdown pipe tables and box-drawing character tables.
-    """
-    signals = []
-    lines = analysis_text.split("\n")
-
-    direction = None
-
-    for i, line in enumerate(lines):
-        upper = line.upper()
-
-        # Detect section headers
-        if "TOP 5 LONG" in upper or "TOP 4 LONG" in upper or "TOP 3 LONG" in upper or "LONG SETUP" in upper:
-            direction = "LONG"
-            continue
-        if "TOP 3 SHORT" in upper or "SHORT SETUP" in upper:
-            direction = "SHORT"
-            continue
-        if "CEO VERDICT" in upper or "FINAL VERDICT" in upper:
-            direction = None
-            continue
-
-        if direction is None:
-            continue
-
-        # Skip separator/header rows (lines with only dashes, equals, pipes, spaces)
-        stripped = line.strip()
-        if not stripped:
-            continue
-        if re.match(r'^[\s\|\-\+\=\─\═\┼\┬\┴]+$', stripped):
-            continue
-        if re.match(r'^[│\|]\s*#\s*[│\|]', stripped, re.IGNORECASE):
-            continue  # header row
-
-        # Match pipe-delimited rows: | 1 | BTC | 92% | 94 | 62500 | ...
-        cells = re.split(r'[│|]', stripped)
-        cells = [c.strip() for c in cells if c.strip()]
-
-        if len(cells) >= 10:
-            try:
-                # Validate first cell is a rank number (1–5 for LONGs, 1–3 for SHORTs)
-                rank = cells[0].strip('#').strip()
-                if rank not in ('1', '2', '3', '4', '5'):
-                    continue
-
-                # Extract coin symbol — take only uppercase letters
-                coin_raw = cells[1]
-                coin = re.sub(r'[^A-Za-z0-9]', '', coin_raw).upper()
-                if not coin or len(coin) > 10:
-                    continue
-
-                def clean_num(s):
-                    return re.sub(r'[^0-9.]', '', s)
-
-                signals.append({
-                    "direction":  direction,
-                    "rank":       rank,
-                    "coin":       coin,
-                    "confidence": cells[2],
-                    "score":      clean_num(cells[3]),
-                    "entry":      clean_num(cells[4]),
-                    "sl":         clean_num(cells[5]),
-                    "tp1":        clean_num(cells[6]),
-                    "tp2":        clean_num(cells[7]) if len(cells) > 7 else "",
-                    "tp3":        clean_num(cells[8]) if len(cells) > 8 else "",
-                    "tp4":        clean_num(cells[9]) if len(cells) > 9 else "",
-                    "pattern":    cells[10] if len(cells) > 10 else "",
-                })
-            except Exception:
-                continue
-
-        # Also handle bold markdown lines like: **1. BTC** — Entry: 62500 | SL: 60000 | TP1: 65000
-        elif direction and re.search(r'\b(entry|sl|stop|tp1)\b', stripped, re.IGNORECASE):
-            try:
-                coin_m   = re.search(r'\*{0,2}#?\d[\.\s]+([A-Z]{2,10})\b', stripped)
-                entry_m  = re.search(r'entry[:\s]+\$?([\d,\.]+)', stripped, re.IGNORECASE)
-                sl_m     = re.search(r'(?:sl|stop)[:\s]+\$?([\d,\.]+)', stripped, re.IGNORECASE)
-                tp1_m    = re.search(r'tp1[:\s]+\$?([\d,\.]+)', stripped, re.IGNORECASE)
-                tp2_m    = re.search(r'tp2[:\s]+\$?([\d,\.]+)', stripped, re.IGNORECASE)
-                tp3_m    = re.search(r'tp3[:\s]+\$?([\d,\.]+)', stripped, re.IGNORECASE)
-                tp4_m    = re.search(r'tp4[:\s]+\$?([\d,\.]+)', stripped, re.IGNORECASE)
-                conf_m   = re.search(r'conf[a-z]*[:\s]+(\d+%?)', stripped, re.IGNORECASE)
-                score_m  = re.search(r'score[:\s]+(\d+)', stripped, re.IGNORECASE)
-
-                if coin_m and entry_m:
-                    signals.append({
-                        "direction":  direction,
-                        "rank":       str(len([s for s in signals if s["direction"] == direction]) + 1),
-                        "coin":       coin_m.group(1),
-                        "confidence": conf_m.group(1)  if conf_m  else "",
-                        "score":      score_m.group(1) if score_m else "",
-                        "entry":      entry_m.group(1).replace(",", ""),
-                        "sl":         sl_m.group(1).replace(",", "")  if sl_m  else "",
-                        "tp1":        tp1_m.group(1).replace(",", "") if tp1_m else "",
-                        "tp2":        tp2_m.group(1).replace(",", "") if tp2_m else "",
-                        "tp3":        tp3_m.group(1).replace(",", "") if tp3_m else "",
-                        "tp4":        tp4_m.group(1).replace(",", "") if tp4_m else "",
-                        "pattern":    "",
-                    })
-            except Exception:
-                continue
-
-    return signals
+# parse_signals_from_analysis() removed in v47.1 — dead code, never called.
+# Signals are extracted via parse_json_signals() using ##JSON_START## / ##JSON_END## markers.
 
 
 def log_to_google_sheets(data, bkk_time):
@@ -2374,7 +2272,7 @@ def main():
 
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🐳  WHALE-STREAM v46.99 — AUTO BOT STARTING    ║")
+    print("║   🐳  WHALE-STREAM v47.0  — AUTO BOT STARTING    ║")
     print("╚══════════════════════════════════════════════════╝")
     # Check conservative flag early so we can show it in the startup banner
     _short_conservative_early = os.path.exists(os.path.join(SCRIPT_DIR, "short_conservative.flag"))

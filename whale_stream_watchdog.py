@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM WATCHDOG v2.0                                 ║
+║   WHALE-STREAM WATCHDOG v47.0                                ║
 ║                                                              ║
 ║  ROLE (Principle 1): System health guardian.                 ║
 ║  Runs at :30 of every 4h cycle. Confirms all agents ran.     ║
@@ -47,6 +47,8 @@ BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
 BOT_LOG         = os.path.join(BASE_DIR, "bot_log.txt")
 STRATEGIST_LOG  = os.path.join(BASE_DIR, "strategist_log.txt")
 TRADER_LOG      = os.path.join(BASE_DIR, "trader_log.txt")
+TRACKER_LOG     = os.path.join(BASE_DIR, "tracker_log.txt")
+MONITOR_LOG     = os.path.join(BASE_DIR, "monitor_log.txt")
 BALANCE_FILE    = os.path.join(BASE_DIR, "bybit_balance.json")
 PAUSED_FLAG     = os.path.join(BASE_DIR, "paused.flag")
 
@@ -58,7 +60,6 @@ def _write_html_snapshot():
     """Read full daily_status.json and write complete WS_EMBEDDED blob to Daily Checklist.html.
     Called once at the end of each Watchdog run (:30), after all 4 cycle agents have finished.
     This eliminates the race condition where earlier agents' HTML writes collide with monitor."""
-    import re as _re
     try:
         _status_path = os.path.join(BASE_DIR, "daily_status.json")
         _html_path   = os.path.join(BASE_DIR, "To do list", "Daily Checklist.html")
@@ -67,7 +68,7 @@ def _write_html_snapshot():
         with open(_html_path, encoding="utf-8") as _hf:
             _html = _hf.read()
         _inject = "var WS_EMBEDDED=" + json.dumps(_data, separators=(',', ':'), ensure_ascii=False) + ";"
-        _html = _re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
+        _html = re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
         with open(_html_path, "w", encoding="utf-8") as _hf:
             _hf.write(_html)
         print("   ✓ Daily Checklist.html WS_EMBEDDED updated with full cycle snapshot.")
@@ -105,12 +106,11 @@ def _mark_done(agent_name, details=None):
         _jspath = _path.replace("daily_status.json", "daily_status.js")
         with open(_jspath, "w", encoding="utf-8") as _f:
             _f.write("window.WHALE_STATUS=" + json.dumps(_data) + ";")
-        import re as _re
         _html_path = os.path.join(os.path.dirname(_path), "To do list", "Daily Checklist.html")
         with open(_html_path, encoding="utf-8") as _hf:
             _html = _hf.read()
         _inject = "var WS_EMBEDDED=" + json.dumps(_data, separators=(',', ':')) + ";"
-        _html = _re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
+        _html = re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
         with open(_html_path, "w", encoding="utf-8") as _hf:
             _hf.write(_html)
     except Exception:
@@ -213,6 +213,28 @@ def check_trader():
     return ok, last_str, ago
 
 
+def check_tracker():
+    """Tracker runs every 30 min — flag if last log > 45 min ago."""
+    dt = last_log_timestamp(TRACKER_LOG, r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}) BKK\].*?Tracker run complete")
+    if dt is None:
+        dt = last_log_timestamp(TRACKER_LOG, r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}) BKK\]")
+    ago = minutes_ago(dt)
+    last_str = dt.strftime("%H:%M BKK") if dt else "never"
+    ok = (ago is not None and ago <= 45)
+    return ok, last_str, ago
+
+
+def check_monitor():
+    """Monitor runs every 2 min — flag if last log > 10 min ago."""
+    dt = last_log_timestamp(MONITOR_LOG, r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}) BKK\].*?Monitor run complete")
+    if dt is None:
+        dt = last_log_timestamp(MONITOR_LOG, r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}) BKK\]")
+    ago = minutes_ago(dt)
+    last_str = dt.strftime("%H:%M BKK") if dt else "never"
+    ok = (ago is not None and ago <= 10)
+    return ok, last_str, ago
+
+
 def check_balance():
     """Returns (stale, hours_old, balance_str, updated_at)"""
     data = load_balance()
@@ -277,9 +299,12 @@ def send_telegram(text, parse_mode="HTML"):
 # REPORT BUILDERS
 # ─────────────────────────────────────────────────────────────
 
-def build_green_report(now_str, bot_last, strat_last, trade_last, bal_str, bal_updated, paused):
+def build_green_report(now_str, bot_last, strat_last, trade_last, bal_str, bal_updated, paused,
+                       tracker_ok=True, tracker_last="unknown", monitor_ok=True, monitor_last="unknown"):
     """All-clear: full team healthy — sent every cycle (Principle 3)."""
     pause_note = "\n⚠️ NOTE: Circuit breaker ACTIVE — orders paused." if paused else ""
+    tracker_icon = "✅" if tracker_ok else "⚠️"
+    monitor_icon = "✅" if monitor_ok else "⚠️"
     return (
         f"🟢 <b>WHALE-STREAM — 4h Cycle Complete</b>\n"
         f"🕐 {now_str}\n"
@@ -288,8 +313,8 @@ def build_green_report(now_str, bot_last, strat_last, trade_last, bal_str, bal_u
         f"  ✅ SigBot       — last run {bot_last}\n"
         f"  ✅ Strategist   — last run {strat_last}\n"
         f"  ✅ Trader       — last run {trade_last}\n"
-        f"  ✅ Tracker      — every 30 min\n"
-        f"  ✅ Monitor      — every 2 min\n"
+        f"  {tracker_icon} Tracker      — last run {tracker_last}\n"
+        f"  {monitor_icon} Monitor      — last run {monitor_last}\n"
         f"\n"
         f"💰 Balance: {bal_str}  (updated {bal_updated})\n"
         f"{pause_note}\n"
@@ -353,9 +378,11 @@ if __name__ == "__main__":
     print(f"[{now_str}] === Watchdog run started ===")
 
     # ── Run all checks ────────────────────────────────────────
-    bot_ok,   bot_last,   bot_ago   = check_bot()
-    strat_ok, strat_last, strat_ago = check_strategist()
-    trade_ok, trade_last, trade_ago = check_trader()
+    bot_ok,     bot_last,     bot_ago     = check_bot()
+    strat_ok,   strat_last,   strat_ago   = check_strategist()
+    trade_ok,   trade_last,   trade_ago   = check_trader()
+    tracker_ok, tracker_last, tracker_ago = check_tracker()
+    monitor_ok, monitor_last, monitor_ago = check_monitor()
     paused    = os.path.exists(PAUSED_FLAG)
     bal_stale, bal_hours, bal_str, bal_updated = check_balance()
 
@@ -407,7 +434,8 @@ if __name__ == "__main__":
         print(f"\n🔴 CRITICAL ESCALATION: Trader down {trade_ago//60}h {trade_ago%60}m")
         send_telegram(msg)
         # Also send amber for the other issues (if any beyond trader)
-        other_issues = [i for i in issues_with_fixes if "Trader" not in i and "Balance" not in i]
+        # Only exclude Balance issue if it's stale *because* Trader is down (same root cause)
+        other_issues = [i for i in issues_with_fixes if "Trader" not in i]
         if other_issues:
             amber = build_amber_alert(now_str, other_issues, bot_line, strat_line, trade_line, bal_str)
             send_telegram(amber)
@@ -422,7 +450,8 @@ if __name__ == "__main__":
 
     else:
         # ALL GREEN — send positive confirmation (Principle 3)
-        msg = build_green_report(now_str, bot_last, strat_last, trade_last, bal_str, bal_updated, paused)
+        msg = build_green_report(now_str, bot_last, strat_last, trade_last, bal_str, bal_updated, paused,
+                                 tracker_ok, tracker_last, monitor_ok, monitor_last)
         print(f"\n✅ All agents healthy.")
         print(msg)
         send_telegram(msg)

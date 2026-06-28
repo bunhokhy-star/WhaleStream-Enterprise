@@ -106,9 +106,8 @@ SCRIPT_DIR            = os.path.dirname(os.path.abspath(__file__))
 try:
     from local_config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 except ImportError:
-    import os as _os
-    TELEGRAM_BOT_TOKEN = _os.getenv("TELEGRAM_BOT_TOKEN", "")
-    TELEGRAM_CHAT_ID   = _os.getenv("TELEGRAM_CHAT_ID", "")
+    TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID", "")
 
 # ── Bybit Demo balance file (written by whale_stream_trader.py) ─
 BYBIT_BALANCE_FILE = os.path.join(SCRIPT_DIR, "bybit_balance.json")
@@ -120,9 +119,8 @@ PAUSED_FILE        = os.path.join(SCRIPT_DIR, "paused.flag")   # circuit-breaker
 try:
     from local_config import BYBIT_API_KEY, BYBIT_API_SECRET
 except ImportError:
-    import os as _os
-    BYBIT_API_KEY    = _os.getenv("BYBIT_API_KEY", "")
-    BYBIT_API_SECRET = _os.getenv("BYBIT_API_SECRET", "")
+    BYBIT_API_KEY    = os.getenv("BYBIT_API_KEY", "")
+    BYBIT_API_SECRET = os.getenv("BYBIT_API_SECRET", "")
 try:
     from local_config import BYBIT_BASE_URL             # noqa — set "https://api.bybit.com" for live
 except ImportError:
@@ -369,8 +367,7 @@ def connect_sheet():
     try:
         from gspread.client import Client as _GClient
     except ImportError:
-        import subprocess as _sp, sys as _sys
-        _sp.check_call([_sys.executable, "-m", "pip", "install", "--upgrade", "gspread", "--quiet"])
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "gspread", "--quiet"])
         from gspread.client import Client as _GClient
     _SCOPES = [
         "https://www.googleapis.com/auth/spreadsheets",
@@ -858,9 +855,9 @@ def write_dashboard_html(all_rows):
 
     # ── Go-Live milestone card ─────────────────────────────────
     # Shows countdown until July 1, then switches to "LIVE" days-since card.
-    from datetime import date as _date
+    from datetime import date as _date, datetime as _dt_cls, timezone as _tz, timedelta as _td
     _go_live_date = _date(2026, 7, 1)
-    _today = _date.today()
+    _today = _dt_cls.now(_tz(_td(hours=7))).date()
     _days_to_live = (_go_live_date - _today).days
     if _days_to_live > 0:
         _countdown_color = "#ff4d4d" if _days_to_live <= 3 else "#ffc107" if _days_to_live <= 7 else "#00d4a8"
@@ -1262,7 +1259,7 @@ def _update_gate_checklist(all_rows):
             _bal    = float(_bd.get("balance", 0))
             _start  = float(_bd.get("start_balance", 500))
             _dd_pct = (_start - _bal) / _start * 100
-            bybit_ok = _dd_pct <= 25 and _bal > _start
+            bybit_ok = _dd_pct <= 25  # pass if drawdown ≤ 25%; flat account is fine
             g4_str  = f"{'✅' if bybit_ok else '❌'} {_dd_pct:+.1f}%"
     except Exception:
         pass
@@ -1983,9 +1980,8 @@ def main():
     _cb_state_file = os.path.join(SCRIPT_DIR, "cb_paused_prev.json")
     _cb_was_paused = False
     try:
-        import json as _cbj
         with open(_cb_state_file, "r") as _cbf:
-            _cb_was_paused = _cbj.load(_cbf).get("paused", False)
+            _cb_was_paused = json.load(_cbf).get("paused", False)
     except Exception:
         pass
 
@@ -2017,9 +2013,8 @@ def main():
 
     # Persist current state for next run
     try:
-        import json as _cbj2
         with open(_cb_state_file, "w") as _cbwf:
-            _cbj2.dump({"paused": _cb_is_paused}, _cbwf)
+            json.dump({"paused": _cb_is_paused}, _cbwf)
     except Exception:
         pass
 
@@ -2082,7 +2077,7 @@ def main():
         _long_resolved = [r for r in all_parsed
                           if ("LONG" in r.get("signal", "").upper() or "🟢" in r.get("signal", ""))
                           and r.get("status") in ("WIN", "LOSS")]
-        _long_recent   = _long_resolved[-20:] if len(_long_resolved) >= 5 else []
+        _long_recent   = _long_resolved[-20:] if len(_long_resolved) >= 20 else []
         _long_overall  = [r for r in _long_resolved if r.get("status") == "WIN"]
         _overall_long_wr = len(_long_overall) / len(_long_resolved) * 100 if _long_resolved else 0
 
@@ -2332,33 +2327,18 @@ def main():
                    if ("LONG" in r.get("signal", "").upper() or "🟢" in r.get("signal", ""))
                    and _is_real_pnl(r.get("pnl"))
                    and r.get("status") in ("WIN", "LOSS")]
-            _ml20 = _ml[-20:]
-            _ml_w  = sum(1 for r in _ml20 if r["status"] == "WIN")
-            _ml_wr = _ml_w / len(_ml20) * 100 if _ml20 else 0
-            # Gate 1 = 60% WR over last 20 real LONGs
-            _g1_ok = _ml_wr >= 60 and len(_ml20) >= 20
-            _g1_remaining = max(0, 20 - len(_ml20))
-            _wins_to_gate1 = max(0, 12 - _ml_w) if len(_ml20) >= 20 else None
+            # Gate 1 = 150+ resolved real LONG trades (volume gate)
+            _g1_ok = len(_ml) >= 150
+            _g1_remaining = max(0, 150 - len(_ml))
+            if _g1_ok:
+                _g1_str = f"✅ GATE 1 CLEARED — {len(_ml)} resolved LONGs"
+            else:
+                _g1_str = f"⏳ {len(_ml)}/150 real LONGs ({_g1_remaining} more needed)"
             # Gate 2 = 58% WR over all resolved LONGs (min 30)
-            _ml_all = _ml
+            _ml_all   = _ml
             _ml_all_w = sum(1 for r in _ml_all if r["status"] == "WIN")
             _ml_all_wr = _ml_all_w / len(_ml_all) * 100 if _ml_all else 0
             _g2_ok = _ml_all_wr >= 58 and len(_ml_all) >= 30
-
-            if _g1_ok:
-                _g1_str = f"✅ GATE 1 CLEARED — {_ml_wr:.0f}% over last 20"
-            elif len(_ml20) < 20:
-                _g1_str = (
-                    f"⏳ {len(_ml20)}/20 trades logged | "
-                    f"WR so far: {_ml_wr:.0f}% | "
-                    f"{_g1_remaining} more trade(s) needed to evaluate"
-                )
-            else:
-                _g1_str = (
-                    f"❌ {_ml_wr:.0f}% (need 60%) — "
-                    f"{_wins_to_gate1} more win(s) needed in next 20"
-                )
-
             _g2_str = (
                 f"✅ {_ml_all_wr:.0f}% over {len(_ml_all)} trades"
                 if _g2_ok else
@@ -2367,9 +2347,9 @@ def main():
 
             send_telegram_alert(
                 f"📅 <b>MONDAY GATE SNAPSHOT</b>\n"
-                f"  Gate 1 (last 20 LONGs): {_g1_str}\n"
-                f"  Gate 2 (all LONGs):     {_g2_str}\n"
-                f"  Total resolved LONGs:   {len(_ml_all)}"
+                f"  Gate 1 (volume):    {_g1_str}\n"
+                f"  Gate 2 (WR):        {_g2_str}\n"
+                f"  Total resolved LONGs: {len(_ml_all)}"
             )
             print("📅 Monday Gate snapshot sent to Telegram")
         except Exception as _me:
