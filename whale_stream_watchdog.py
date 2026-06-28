@@ -422,6 +422,58 @@ if __name__ == "__main__":
         send_telegram(msg)
 
     _watchdog_health = "CRITICAL" if trader_critical else ("AMBER" if issues_with_fixes else "GREEN")
-    _mark_done("watchdog", details={"health": _watchdog_health})
+
+    # Build per-agent cycle summary for Daily Checklist hint
+    try:
+        import datetime as _wdt
+        _wh   = _wdt.datetime.now().hour
+        _whh  = str((_wh // 4) * 4).zfill(2)
+        _wsp  = os.path.join(BASE_DIR, "daily_status.json")
+        with open(_wsp, encoding="utf-8") as _wsf:
+            _wds = json.load(_wsf)
+        # SigBot: actual coin names
+        _sb   = _wds.get(f"sigbot_{_whh}_details", {})
+        _sb_ln = ", ".join(_sb.get("longs",  []))
+        _sb_sn = ", ".join(_sb.get("shorts", []))
+        if _sb_ln or _sb_sn:
+            _sb_str = f"🟢{_sb_ln or '—'} | 🔴{_sb_sn or '—'}"
+        elif _wds.get(f"sigbot_{_whh}"):
+            _sb_str = "✓"
+        else:
+            _sb_str = "⚠ missed"
+        # Strategist: approved / vetoed coin names (or context when queue empty)
+        _st    = _wds.get(f"strategist_{_whh}_details", {})
+        _st_a  = _st.get("approved", [])
+        _st_v  = _st.get("vetoed",   [])
+        if _st_a or _st_v:
+            _st_an = ", ".join(_st_a) if _st_a else "—"
+            _st_vn = ", ".join(_st_v) if _st_v else "—"
+            _st_str = f"✅{_st_an} | ❌{_st_vn}"
+        elif paused:
+            _st_str = "⏸ CB"
+        elif _wds.get(f"strategist_{_whh}"):
+            _st_str = "queue empty"
+        else:
+            _st_str = "⚠ missed"
+        # Trader: N placed / paused
+        _tr    = _wds.get(f"trader_{_whh}_details", {})
+        _tr_p  = len(_tr.get("placed",  []))
+        _tr_cb = any("PAUSED" in s for s in _tr.get("skipped", []))
+        if _tr_cb:
+            _tr_str = "⏸ CB"
+        elif _tr_p > 0:
+            _tr_str = f"{_tr_p} placed"
+        elif _tr:
+            _tr_str = "— none"
+        elif _wds.get(f"trader_{_whh}"):
+            _tr_str = "✓"
+        else:
+            _tr_str = "⚠ missed"
+        _cycle_summary = f"Bot:{_sb_str}  Strat:{_st_str}  Trader:{_tr_str}"
+    except Exception as _wce:
+        _cycle_summary = ""
+        print(f"   ⚠ Watchdog cycle summary failed: {_wce}")
+
+    _mark_done("watchdog", details={"health": _watchdog_health, "cycle_summary": _cycle_summary})
     _write_html_snapshot()   # <-- write definitive WS_EMBEDDED blob after all agents done
     print(f"\n[{now_str}] Watchdog complete.")

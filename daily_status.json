@@ -37,5 +37,30 @@
   "watchdog_08": true,
   "watchdog_08_details": {
     "health": "AMBER"
+  },
+  "monitor_details": {
+    "positions": 7,
+    "alerts": 0,
+    "last_run": "12:06 BKK"
+  },
+  "tracker_details": {
+    "resolved": 0,
+    "wins": 0,
+    "losses": 0,
+    "open": 112,
+    "last_run": "12:00 BKK"
+  },
+  "sigbot_12": true,
+  "sigbot_12_details": {
+    "longs": [
+      "AAVE",
+      "NEAR",
+      "JUP"
+    ],
+    "shorts": [
+      "H",
+      "FF",
+      "MNT"
+    ]
   }
 }

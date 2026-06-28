@@ -2338,7 +2338,19 @@ def main():
             print("📅 Monday Gate snapshot sent to Telegram")
         except Exception as _me:
             print(f"   ⚠ Monday Gate snapshot failed: {_me}")
-    _mark_done("tracker")
+    # Build details for Daily Checklist live display
+    _bkk_tz    = timezone(timedelta(hours=7))
+    _bkk_now   = datetime.now(_bkk_tz).strftime("%H:%M")
+    _nr_wins   = sum(1 for r in _newly_resolved if r.get("status") == "WIN")
+    _nr_losses = sum(1 for r in _newly_resolved if r.get("status") == "LOSS")
+    _open_cnt  = sum(1 for r in all_parsed if r.get("status") not in ("WIN", "LOSS", "EXPIRED"))
+    _mark_done("tracker", details={
+        "resolved":  len(_newly_resolved),
+        "wins":      _nr_wins,
+        "losses":    _nr_losses,
+        "open":      _open_cnt,
+        "last_run":  f"{_bkk_now} BKK"
+    })
 
 
 if __name__ == "__main__":

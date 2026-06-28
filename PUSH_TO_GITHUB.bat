@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.80 — FIX: quad-TP allocated tracking bug (last-leg oversize); ADD: retrofit_quad_tp.py"
+git commit -m "v46.83 — Checklist: coin names in Watchdog/Strategist hints; briefing balance; queue-empty context"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...

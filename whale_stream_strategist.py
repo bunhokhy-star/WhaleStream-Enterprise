@@ -787,7 +787,10 @@ def main():
             "reduced_count":  0,
         }
         write_decisions(empty)
-        _mark_done("strategist", details={"approved": [], "vetoed": []})
+        _mark_done("strategist", details={
+            "approved": [],
+            "vetoed":   [],
+        })
         return
 
     # ── Build per-coin trade history ─────────────────────────────

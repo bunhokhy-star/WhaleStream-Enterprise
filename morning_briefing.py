@@ -861,7 +861,19 @@ if __name__ == "__main__":
     print("────────────────────────────────────────────────────────\n")
 
     send_telegram(msg)
-    _mark_done("briefing")
+    try:
+        import json as _bj
+        with open(BALANCE_FILE, encoding="utf-8") as _bf:
+            _bdata = _bj.load(_bf)
+        _bal  = _bdata.get("balance", 0.0)
+        _open = _bdata.get("open_positions", 0)
+        _brief_summary = f"Balance: ${_bal:,.0f} · {_open} open"
+    except Exception:
+        _brief_summary = ""
+    _mark_done("briefing", details={
+        "sent_at": now_bkk.strftime("%H:%M BKK"),
+        "summary": _brief_summary,
+    })
 
     # ── Auto-run analyze_shorts.py on Sunday (6) and Thursday (3) ──
     _today_wd = now_bkk.weekday()  # 0=Mon … 3=Thu … 6=Sun

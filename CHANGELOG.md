@@ -1,5 +1,64 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.83 — 2026-06-28 — Checklist: coin names in hints; Strategist queue-empty context; briefing balance
+
+### Task 285 — Rich coin names throughout Daily Checklist hints
+
+**whale_stream_watchdog.py** — cycle_summary now uses actual coin names instead of counts:
+- SigBot: `🟢EIGEN,STRK,LDO | 🔴FF,ENS` (was `Bot:3L/2S`)
+- Strategist: `✅EIGEN | ❌FF` or `queue empty` when no new signals (was `Strat:⏸ CB`)
+- Trader: `2 placed` or `⏸ CB` (unchanged format, but CB logic separated from paused.flag)
+- Full example: `Bot: 🟢EIGEN,STRK,LDO | 🔴FF,ENS  ·  Strat:queue empty  ·  Trader:⏸ CB`
+
+**whale_stream_strategist.py** — early-exit path (no new signals in queue) now reads SigBot's picks:
+- Writes `bot_longs`/`bot_shorts` into strategist details on early exit
+- Checklist shows: `— Queue empty · Bot had: 🟢EIGEN,STRK,LDO | 🔴FF,ENS`
+- When SigBot also had nothing: `— No new signals in queue this cycle`
+
+**morning_briefing.py** — `_mark_done("briefing")` now includes balance summary:
+- Reads `BALANCE_FILE` (bybit_balance.json) and writes `summary: "Balance: $NNN · N open"`
+- Checklist shows: `✅ Sent 07:00 BKK · Balance: $487 · 7 open`
+
+**Daily Checklist.html** — `formatAgentDetails("strategist")` updated:
+- Empty `approved`+`vetoed` → reads `bot_longs`/`bot_shorts` for context display
+- `formatStaticDetails("briefing")` → appends `summary` field after sent_at
+- **WS_EMBEDDED** updated with `bot_longs`/`bot_shorts` in `strategist_08_details` and corrected `watchdog_08_details.cycle_summary` with coin names
+
+## v46.82 — 2026-06-28 — Watchdog: cycle summary in hint (Bot/Strat/Trader results)
+
+### Task 284 — Watchdog adds per-agent cycle summary to daily_status.json
+
+- `_mark_done("watchdog", ...)` now reads the current cycle's `sigbot_HH_details`, `strategist_HH_details`, `trader_HH_details` from `daily_status.json` and builds a `cycle_summary` string.
+- Format: `Bot:3L/2S  Strat:⏸ CB  Trader:⏸ CB` — visible in the Watchdog row hint on the Daily Checklist.
+- When agents run normally: `Bot:3L/2S  Strat:3✅/2❌  Trader:2 placed`
+- When CB active: `Bot:3L/2S  Strat:⏸ CB  Trader:⏸ CB`
+- When an agent missed its slot: shows `⚠ missed`
+- Daily Checklist `formatAgentDetails("watchdog")` updated to append `cycle_summary` after the health status: `🟡 AMBER — check Task Scheduler  ·  Bot:3L/2S  Strat:⏸ CB  Trader:⏸ CB`
+- WS_EMBEDDED updated with today's cycle_summary.
+
+## v46.81 — 2026-06-28 — FIX: Daily Checklist — smarter agent hints + live always-running data
+
+### Task 283 — Fix Daily Checklist.html (Daily Checklist → To do list/)
+
+**Problem 1: 4h cycle agent hints were poor for Strategist/Trader/Watchdog**
+- **Strategist**: when both `approved=[]` and `vetoed=[]` (e.g. CB paused, no signals), checklist showed confusing `✅ — | ❌ —`. Now shows `— No new signals reviewed this cycle`.
+- **Trader**: when CB active, checklist showed misleading `🟢 — | ⏸ PAUSED — circuit breaker active`. Now shows `⏸ PAUSED — circuit breaker active` (no green dot). When orders placed: `✅ Placed: COIN1, COIN2`. When vetoed normally: `— Skipped: REASON`.
+- **Watchdog**: now shows `🟢 All agents healthy` / `🟡 AMBER — check Task Scheduler` / `🔴 CRITICAL — <issues>` with optional `issues[]` list support for future detail.
+
+**Problem 2: Always-running section showed static generic hint text only**
+- Added `formatStaticDetails()` function that renders live data from `_details` keys.
+- **Tracker**: shows `✅ N resolved this run (W W/L L) · X open · HH:MM BKK`
+- **Monitor**: shows `✓ N position(s) watched · no changes · HH:MM BKK` or `🔔 N alert(s) fired · ...`
+- **Briefing**: shows `✅ Sent HH:MM BKK · check Telegram`
+- `applyStatus()` now reads `tracker_details`, `monitor_details`, `briefing_details` and calls `updateHint()`.
+
+**Python agents updated to write details:**
+- `whale_stream_tracker.py`: `_mark_done("tracker", details={resolved, wins, losses, open, last_run})`
+- `whale_stream_monitor.py`: `_mark_done("monitor", details={positions, alerts, last_run})`
+- `morning_briefing.py`: `_mark_done("briefing", details={sent_at})`
+
+**WS_EMBEDDED** updated with today's data + `briefing_details`.
+
 ## v46.80 — 2026-06-28 — FIX: quad-TP allocated tracking bug + retrofit_quad_tp.py
 
 ### Cleanup — remove dead `place_partial_closes()` function (trader.py)

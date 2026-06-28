@@ -328,7 +328,7 @@ function load() {
 }
 
 // ── Embedded status (updated by _mark_done() in each agent) ──────
-var WS_EMBEDDED={"date":"2026-06-28","monitor":true,"tracker":true,"sigbot_00":true,"strategist_00":true,"watchdog_00":true,"sigbot_04":true,"strategist_04":true,"trader_04":true,"watchdog_04":true,"briefing":true,"sigbot_08":true,"sigbot_08_details":{"longs":["EIGEN","STRK","LDO"],"shorts":["FF","ENS"]},"strategist_08":true,"strategist_08_details":{"approved":[],"vetoed":[]},"trader_08":true,"trader_08_details":{"placed":[],"skipped":["PAUSED — circuit breaker active"]},"watchdog_08":true,"watchdog_08_details":{"health":"AMBER"}};
+var WS_EMBEDDED={"date":"2026-06-28","monitor":true,"tracker":true,"briefing":true,"briefing_details":{"sent_at":"07:00 BKK","summary":"check Telegram for details"},"sigbot_00":true,"strategist_00":true,"watchdog_00":true,"sigbot_04":true,"strategist_04":true,"trader_04":true,"watchdog_04":true,"sigbot_08":true,"sigbot_08_details":{"longs":["EIGEN","STRK","LDO"],"shorts":["FF","ENS"]},"strategist_08":true,"strategist_08_details":{"approved":[],"vetoed":[]},"trader_08":true,"trader_08_details":{"placed":[],"skipped":["PAUSED — circuit breaker active"]},"watchdog_08":true,"watchdog_08_details":{"health":"AMBER","cycle_summary":"Bot: 🟢EIGEN,STRK,LDO | 🔴FF,ENS  ·  Strat:queue empty  ·  Trader:⏸ CB"}};
 
 // ── Status server auto-polling ────────────────────────────────────
 var STATUS_URL  = 'http://localhost:8765/daily_status.json';
@@ -363,18 +363,61 @@ function formatAgentDetails(agent, details) {
     return '🟢 ' + l + '  |  🔴 ' + s;
   }
   if (agent === 'strategist') {
-    var a = (details.approved || []).join(', ') || '—';
-    var v = (details.vetoed   || []).join(', ') || '—';
-    return '✅ ' + a + '  |  ❌ ' + v;
+    var a = details.approved || [];
+    var v = details.vetoed   || [];
+    if (a.length === 0 && v.length === 0) {
+      return '— Queue empty this cycle';
+    }
+    var aStr = a.length ? ('✅ ' + a.join(', ')) : '';
+    var vStr = v.length ? ('❌ ' + v.join(', ')) : '';
+    if (aStr && vStr) return aStr + '  |  ' + vStr;
+    return aStr || vStr;
   }
   if (agent === 'trader') {
-    var p  = (details.placed  || []).join(', ') || '—';
-    var sk = (details.skipped || []).join(', ') || '—';
-    return '🟢 ' + p + '  |  ⏸ ' + sk;
+    var p  = details.placed  || [];
+    var sk = details.skipped || [];
+    var paused = sk.some(function(s) { return s.indexOf('PAUSED') !== -1 || s.indexOf('circuit') !== -1; });
+    if (paused && p.length === 0) return '⏸ PAUSED — circuit breaker active';
+    if (p.length > 0 && sk.length === 0) return '✅ Placed: ' + p.join(', ');
+    if (p.length > 0) return '✅ ' + p.join(', ') + '  |  ⏸ ' + sk.join(', ');
+    if (sk.length > 0) return '— Skipped: ' + sk.join(', ');
+    return '— No orders placed this cycle';
   }
   if (agent === 'watchdog') {
     var h = details.health || '?';
-    return h === 'GREEN' ? '🟢 All healthy' : (h === 'CRITICAL' ? '🔴 CRITICAL' : '🟡 AMBER');
+    var issues = details.issues || [];
+    var summary = details.cycle_summary || '';
+    var healthStr;
+    if (h === 'GREEN') healthStr = '🟢 All agents healthy';
+    else if (h === 'CRITICAL') healthStr = '🔴 CRITICAL — ' + (issues.length ? issues.join(', ') : 'check logs');
+    else healthStr = '🟡 AMBER — ' + (issues.length ? issues.join(', ') : 'check Task Scheduler');
+    return summary ? healthStr + '  ·  ' + summary : healthStr;
+  }
+  return null;
+}
+
+function formatStaticDetails(agent, details) {
+  if (!details) return null;
+  if (agent === 'tracker') {
+    var res  = details.resolved || 0;
+    var w    = details.wins     || 0;
+    var l    = details.losses   || 0;
+    var open = details.open     || 0;
+    var t    = details.last_run || '—';
+    if (res > 0) return '✅ ' + res + ' resolved this run (' + w + 'W/' + l + 'L) · ' + open + ' open · ' + t;
+    return '✓ ' + open + ' open position(s) · nothing resolved · ' + t;
+  }
+  if (agent === 'monitor') {
+    var pos   = details.positions || 0;
+    var alert = details.alerts    || 0;
+    var t     = details.last_run  || '—';
+    if (alert > 0) return '🔔 ' + alert + ' alert(s) fired · ' + pos + ' position(s) · ' + t;
+    return '✓ ' + pos + ' position(s) watched · no changes · ' + t;
+  }
+  if (agent === 'briefing') {
+    var sent    = details.sent_at || '—';
+    var summary = details.summary || '';
+    return summary ? '✅ Sent ' + sent + ' · ' + summary : '✅ Sent ' + sent + ' · check Telegram';
   }
   return null;
 }
@@ -395,6 +438,8 @@ function applyStatus(data) {
     // Static agents
     if (STATIC_ITEM[key]) {
       autoTick(STATIC_ITEM[key], 's6', SECTIONS[6].items.length);
+      var staticDet = data[key + '_details'];
+      if (staticDet) updateHint(STATIC_ITEM[key], formatStaticDetails(key, staticDet));
       return;
     }
     // Cycle agents: agent_HH

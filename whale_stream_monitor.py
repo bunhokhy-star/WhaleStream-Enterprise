@@ -384,7 +384,12 @@ def run_monitor():
     else:
         log(f"   ✓ No position changes detected")
 
-    _mark_done("monitor")
+    _bkk_now_str = bkk.strftime("%H:%M")
+    _mark_done("monitor", details={
+        "positions": len(current_positions),
+        "alerts":    alerts_fired,
+        "last_run":  f"{_bkk_now_str} BKK"
+    })
     log("✅ Monitor run complete\n")
 
 
