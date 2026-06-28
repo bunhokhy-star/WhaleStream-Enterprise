@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.78 — DATA: refresh SHORT WR in prompt (94.1%), TIER 1 LONG warning, analyze_shorts floor fix (88%)"
+git commit -m "v46.80 — FIX: quad-TP allocated tracking bug (last-leg oversize); ADD: retrofit_quad_tp.py"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...

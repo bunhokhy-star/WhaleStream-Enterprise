@@ -1,5 +1,45 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.80 — 2026-06-28 — FIX: quad-TP allocated tracking bug + retrofit_quad_tp.py
+
+### Cleanup — remove dead `place_partial_closes()` function (trader.py)
+- Old 50/50 TP system function was still present as dead code after Task 280 replaced it.
+- Confirmed zero callers. Deleted. Codebase now has only `place_quad_tp_closes()`.
+
+### Bug fix — `place_quad_tp_closes()` last-leg oversize (trader.py)
+- **Bug**: `allocated += leg_qty` was only incremented on successful API calls. If any intermediate TP leg was rejected by Bybit, the final leg would absorb both its own share AND the failed leg's share, causing the last order to exceed available position size and get rejected.
+- **Fix**: `allocated += leg_qty` now runs unconditionally — tracks *planned* allocation regardless of API result. Last-leg remainder is always correct.
+- Same fix applied to `retrofit_quad_tp.py`.
+
+### New file — `retrofit_quad_tp.py`
+- Standalone one-shot script to retrofit existing Bybit positions with 4×25% quad-TP closes.
+- Cancels existing reduce-only orders per symbol, reads TP1-TP4 from Google Sheets, places quad-TP closes.
+- Supports `--dry-run` flag for safe preview. Sends Telegram summary on completion.
+- Uses Sheets API v4 directly (no gspread dependency) for broader compatibility.
+
+## v46.79 — 2026-06-28 — FEAT: 4×25% quad-TP system + cancel-on-reversal (whale_stream_trader.py)
+
+### Task 280 — Replace 2-TP 50/50 with 4-TP 25% quad-TP system
+- **Replaced** `place_partial_closes()` (50%@TP1 + 50%@TP2/TP3) with new `place_quad_tp_closes()`
+- **New function**: places up to 4 reduce-only limit orders at 25% qty each (TP1/TP2/TP3/TP4)
+- **Removed** TIER-based TP selection (TIER 1 → TP3, TIER 2 → TP2). All trades now use all available TPs equally.
+- **Entry order**: always placed with SL only (no built-in TP). All profit-taking via quad reduce-only orders.
+- **TP4 now read from sheet**: `COL_TP4 = 8` — previously TP4 column was parsed but never passed to placement logic.
+- **Qty distribution**: `floor(qty / n_valid_tps)` per leg; last leg absorbs rounding remainder so full position is always covered.
+- **Display**: console shows `N×25% quad-TP` instead of `Bybit TP2: x.xx`. Telegram shows quad-TP detail.
+
+### Task 281 — Cancel-on-reversal for unfilled LONG orders
+- **New constant**: `ORDER_CONTEXT_FILE = order_context.json` — stores BTC price at time of each entry order placement.
+- **New function** `cancel_order(symbol, order_id)`: POST `/v5/order/cancel` wrapper.
+- **New functions** `load_order_context()` / `save_order_context()`: JSON persistence helpers.
+- **New function** `cancel_reversed_orders(threshold_pct=3.0)`: runs at start of each trader cycle.
+  - Loads `order_context.json` for stored BTC prices.
+  - Fetches current BTC price + all open non-reduce-only Buy orders.
+  - Cancels any LONG order where BTC has dropped ≥3% since placement (market reversed).
+  - Sends Telegram alert listing all cancelled orders with drop %.
+  - SHORTs intentionally excluded — rising BTC against SHORT is handled by Strategist/Watchdog.
+- **BTC price stored** in `order_context.json` when each entry order is placed (keyed by Bybit orderId).
+
 ## v46.78 — 2026-06-28 — DATA: Fresh confidence WR data in prompt + analyze_shorts floor fix
 
 ### Prompt data refresh (whale_stream_bot.py)

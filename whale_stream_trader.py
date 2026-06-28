@@ -168,6 +168,9 @@ SHORT_REPAIR_FILE    = os.path.join(SCRIPT_DIR, "short_repair.flag")
 SHORT_RECOVERY_COINS = {"H", "FF"}  # approved recovery coins (bypass SHORT REPAIR MODE)
 # Note: CHZ removed — it's in MALFORMED_COIN_BLOCKLIST in bot.py (SL always invalid)
 
+# Cancel-on-reversal: stores BTC price at time each entry order is placed
+ORDER_CONTEXT_FILE   = os.path.join(SCRIPT_DIR, "order_context.json")
+
 # Coins with poor historical LONG win rate — skip LONG signals for these
 LONG_COIN_AVOID_LIST = ["COMP", "HYPE", "ZRO"]
 
@@ -561,6 +564,114 @@ def get_stale_entry_orders(sheet_open_coins, min_age_hours=72):
     return stale
 
 
+def cancel_order(symbol, order_id):
+    """Cancel a specific open order by orderId. Returns True on success."""
+    result = bybit_request("POST", "/v5/order/cancel", body={
+        "category": BYBIT_CATEGORY,
+        "symbol":   symbol,
+        "orderId":  order_id,
+    })
+    return result.get("retCode") == 0
+
+
+def load_order_context():
+    """Load order_context.json — {order_id: {symbol, side, btc_price, placed_at}}."""
+    if os.path.exists(ORDER_CONTEXT_FILE):
+        try:
+            with open(ORDER_CONTEXT_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def save_order_context(ctx):
+    """Persist order_context.json to disk."""
+    try:
+        with open(ORDER_CONTEXT_FILE, "w", encoding="utf-8") as f:
+            json.dump(ctx, f, indent=2)
+    except Exception:
+        pass
+
+
+def cancel_reversed_orders(threshold_pct=3.0):
+    """
+    Cancel unfilled LONG entry orders where BTC has dropped >= threshold_pct%
+    since the order was placed (market reversed against the direction).
+    SHORTs are not cancelled — a rising BTC hurts SHORTs but we let the
+    Strategist/Watchdog assess that separately.
+    Reduce-only orders (partial close) are always excluded.
+    Returns list of cancelled order dicts for logging/Telegram.
+    """
+    ctx = load_order_context()
+    if not ctx:
+        return []
+
+    btc_now = get_current_price("BTCUSDT")
+    if not btc_now:
+        print("   ⚠ cancel_reversed_orders: could not fetch BTC price — skipping")
+        return []
+
+    result = bybit_request("GET", "/v5/order/realtime",
+                           {"category": BYBIT_CATEGORY, "settleCoin": "USDT"})
+    if result.get("retCode") != 0:
+        return []
+
+    open_orders = result["result"].get("list", [])
+    cancelled   = []
+
+    for order in open_orders:
+        if order.get("side") != "Buy":
+            continue
+        if order.get("reduceOnly") is True or str(order.get("reduceOnly", "")).lower() == "true":
+            continue
+
+        order_id = order.get("orderId", "")
+        symbol   = order.get("symbol", "")
+        if order_id not in ctx:
+            continue  # no BTC context stored for this order — skip
+
+        btc_at_placement = ctx[order_id].get("btc_price")
+        if not btc_at_placement or btc_at_placement <= 0:
+            continue
+
+        drop_pct = (btc_at_placement - btc_now) / btc_at_placement * 100
+        if drop_pct >= threshold_pct:
+            ok   = cancel_order(symbol, order_id)
+            coin = symbol.replace("USDT", "")
+            if ok:
+                cancelled.append({
+                    "symbol":   symbol,
+                    "order_id": order_id,
+                    "btc_then": btc_at_placement,
+                    "btc_now":  btc_now,
+                    "drop_pct": drop_pct,
+                })
+                print(f"   🚫 CANCELLED {coin} LONG — BTC dropped {drop_pct:.1f}% "
+                      f"since placement ({btc_at_placement:.0f} → {btc_now:.0f})")
+                log(f"CANCEL {coin} LONG {order_id} — BTC -{drop_pct:.1f}% "
+                    f"({btc_at_placement:.0f}→{btc_now:.0f})")
+                del ctx[order_id]
+            else:
+                print(f"   ⚠ Could not cancel {coin} LONG {order_id}")
+
+    save_order_context(ctx)
+
+    if cancelled:
+        lines = "\n".join(
+            f"  {c['symbol'].replace('USDT','')} — BTC -{c['drop_pct']:.1f}% "
+            f"({c['btc_then']:.0f}→{c['btc_now']:.0f})"
+            for c in cancelled
+        )
+        send_telegram_alert(
+            f"🚫 <b>REVERSED ORDERS CANCELLED</b> — {len(cancelled)} LONG(s)\n"
+            f"{lines}\n"
+            f"  BTC dropped ≥{threshold_pct:.0f}% since placement → market reversed"
+        )
+
+    return cancelled
+
+
 def _count_decimals(value):
     """
     Return the number of significant decimal places for any float, safely.
@@ -685,52 +796,64 @@ def place_order(symbol, side, qty, entry_price, sl_price, tp_price, info):
         return False, f"{msg} (retCode={code})"
 
 
-def place_partial_closes(symbol, entry_side, qty, tp1_price, tp_high_price, info):
+def place_quad_tp_closes(symbol, entry_side, qty, tp_prices, info):
     """
-    Place two reduce-only limit orders to implement a partial-close strategy:
-      - 50% of qty at TP1  (guaranteed profit lock-in)
-      - 50% of qty at tp_high_price (TP2 or TP3 — ride the move)
-    Used when the main entry order is placed WITHOUT a built-in takeProfit.
-    Returns: (tp1_ok, tp1_id, tp_high_ok, tp_high_id, split_qty, rem_qty)
-    If the position is too small to split (rem_qty < min_qty), returns
-    (False, "qty_too_small", False, "", 0, 0) — caller should fall back.
+    Place up to four reduce-only limit orders at 25% of qty each, targeting TP1-TP4.
+    tp_prices: list of up to 4 prices [tp1, tp2, tp3, tp4] — None/0 entries are skipped.
+    Each valid leg gets floor(qty / n_valid) contracts; the last leg absorbs any rounding
+    remainder so the full position is always covered.
+    Returns list of dicts: [{tp_label, price, qty, ok, order_id}, ...]
     """
     close_side = "Sell" if entry_side == "Buy" else "Buy"
     tick       = info["tick_size"]
     step       = info["qty_step"]
     min_q      = info["min_qty"]
 
-    split_qty = round_to_step(qty / 2, step)
-    split_qty = max(split_qty, min_q)
-    rem_qty   = round_to_step(qty - split_qty, step)
+    # Filter to valid (non-None, non-zero) TP prices
+    valid_tps = [(f"TP{i+1}", p) for i, p in enumerate(tp_prices) if p and p > 0]
+    n = len(valid_tps)
+    if n == 0:
+        return []
 
-    if rem_qty < min_q:
-        return False, "qty_too_small", False, "", split_qty, rem_qty
+    base_qty  = round_to_step(qty / n, step)
+    base_qty  = max(base_qty, min_q)
+    results   = []
+    allocated = 0
 
-    tp1_r     = round_price(tp1_price,     tick)
-    tp_high_r = round_price(tp_high_price, tick)
+    for idx, (label, tp_price) in enumerate(valid_tps):
+        if idx == n - 1:
+            # Last leg: use whatever quantity remains
+            leg_qty = round_to_step(qty - allocated, step)
+            leg_qty = max(leg_qty, min_q)
+        else:
+            leg_qty = base_qty
 
-    def _reduce(price_r, close_qty):
+        if leg_qty < min_q:
+            results.append({"tp_label": label, "price": tp_price,
+                            "qty": leg_qty, "ok": False, "order_id": "qty_too_small"})
+            continue
+
+        tp_r = round_price(tp_price, tick)
         body = {
             "category":       BYBIT_CATEGORY,
             "symbol":         symbol,
             "side":           close_side,
             "orderType":      "Limit",
-            "qty":            str(close_qty),
-            "price":          fmt_price(price_r, tick),
+            "qty":            str(leg_qty),
+            "price":          fmt_price(tp_r, tick),
             "timeInForce":    "GTC",
             "positionIdx":    0,
             "reduceOnly":     True,
             "closeOnTrigger": False,
         }
-        r = bybit_request("POST", "/v5/order/create", body=body)
-        if r.get("retCode") == 0:
-            return True, r["result"].get("orderId", "")
-        return False, r.get("retMsg", "?")
+        r   = bybit_request("POST", "/v5/order/create", body=body)
+        ok  = r.get("retCode") == 0
+        oid = r["result"].get("orderId", "") if ok else r.get("retMsg", "?")
+        results.append({"tp_label": label, "price": tp_price,
+                        "qty": leg_qty, "ok": ok, "order_id": oid})
+        allocated += leg_qty  # always advance — keeps last-leg remainder correct even on partial failures
 
-    tp1_ok,     tp1_id     = _reduce(tp1_r,     split_qty)
-    tp_high_ok, tp_high_id = _reduce(tp_high_r, rem_qty)
-    return tp1_ok, tp1_id, tp_high_ok, tp_high_id, split_qty, rem_qty
+    return results
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1146,6 +1269,15 @@ def main():
     else:
         print("   ℹ Strategist file not found — no vetoes applied (Strategist may not have run yet)")
 
+    # ── Cancel-on-reversal: drop LONG orders where BTC moved ≥3% against us ──
+    print("\n🔍 Checking for reversed LONG orders (BTC ≥3% drop since placement)...")
+    try:
+        _reversed = cancel_reversed_orders(threshold_pct=3.0)
+        if not _reversed:
+            print("   ✅ No reversed LONG orders detected")
+    except Exception as _rev_e:
+        print(f"   ⚠ cancel_reversed_orders failed: {_rev_e}")
+
     # ── Place orders ───────────────────────────────────────────
     print("\n🚀 Placing orders...\n")
     placed = 0
@@ -1163,6 +1295,7 @@ def main():
         tp1_str    = row[COL_TP1].strip()
         tp2_str    = row[COL_TP2].strip() if len(row) > COL_TP2 else ""
         tp3_str    = row[COL_TP3].strip() if len(row) > COL_TP3 else ""
+        tp4_str    = row[COL_TP4].strip() if len(row) > COL_TP4 else ""
         conf_str   = row[COL_CONF].strip() if len(row) > COL_CONF else ""
 
         symbol = f"{coin}USDT"
@@ -1245,6 +1378,7 @@ def main():
         tp1   = parse_price(tp1_str)
         tp2   = parse_price(tp2_str) if tp2_str else None
         tp3   = parse_price(tp3_str) if tp3_str else None
+        tp4   = parse_price(tp4_str) if tp4_str else None
         # Extract numeric confidence (e.g. "92%" → 92, "92" → 92)
         try:
             conf_val = float(conf_str.replace("%", "").strip())
@@ -1271,26 +1405,6 @@ def main():
             if tp1 >= entry:
                 print(f"   ✗ Invalid: TP1 ({tp1}) >= Entry ({entry}) for SHORT — skipping")
                 continue
-
-        # Select which TP level to use for the Bybit order.
-        # Tiered strategy — higher confidence → higher TP target:
-        #   TIER 1 (92%+): target TP3 if valid, else fall through to TP2, then TP1
-        #   TIER 2/3 (<92%): target TP2 if valid, else fall back to TP1
-        # "Valid" means the TP is on the correct side of the previous level.
-        is_tier1 = conf_val >= 92
-        bybit_tp = tp1
-        tp_label = "TP1"
-        if tp2 and tp2 > 0:
-            tp2_valid = (tp2 > tp1) if side == "Buy" else (tp2 < tp1)
-            if tp2_valid:
-                bybit_tp = tp2
-                tp_label = "TP2"
-                # TIER 1: try to upgrade further to TP3
-                if is_tier1 and tp3 and tp3 > 0:
-                    tp3_valid = (tp3 > tp2) if side == "Buy" else (tp3 < tp2)
-                    if tp3_valid:
-                        bybit_tp = tp3
-                        tp_label = "TP3"
 
         # Get instrument info
         info = get_instrument_info(symbol)
@@ -1396,6 +1510,7 @@ def main():
         position_val = qty * entry
         tp2_display  = f"  TP2: {tp2:.6g}" if tp2 else ""
         tp3_display  = f"  TP3: {tp3:.6g}" if tp3 else ""
+        tp4_display  = f"  TP4: {tp4:.6g}" if tp4 else ""
         if conf_val >= 92:
             tier_display = f" [TIER 1 ELITE — {conf_val:.0f}%]"
         elif conf_val >= 88:
@@ -1404,16 +1519,12 @@ def main():
             tier_display = f" [TIER 3 — {conf_val:.0f}%]"
         else:
             tier_display = f" [{conf_val:.0f}%]"
-        print(f"   Entry : {entry:.6g}  SL: {sl:.6g}  TP1: {tp1:.6g}{tp2_display}{tp3_display}  → Bybit {tp_label}: {bybit_tp:.6g}{tier_display}")
+        _n_tps = sum(1 for p in [tp1, tp2, tp3, tp4] if p)
+        print(f"   Entry : {entry:.6g}  SL: {sl:.6g}  TP1: {tp1:.6g}{tp2_display}{tp3_display}{tp4_display}  → {_n_tps}×25% quad-TP{tier_display}")
         print(f"   Qty   : {qty} contracts  (≈${position_val:.2f} position)")
 
-        # ── Place order — partial-close strategy when targeting above TP1 ─────────
-        # When we target TP2 or TP3, omit the built-in TP from the entry order and
-        # instead place two separate reduce-only orders: 50%@TP1 (lock profit) +
-        # 50%@higher TP (ride the move).  Fallback to single order when qty too small.
-        use_partial = (tp_label != "TP1")
-        entry_tp    = None if use_partial else tp1   # None = no built-in TP on entry
-        ok, result  = place_order(symbol, side, qty, entry, sl, entry_tp, info)
+        # ── Place entry order — always NO built-in TP; quad-TP closes handle exits ──
+        ok, result  = place_order(symbol, side, qty, entry, sl, None, info)
 
         if ok:
             order_id = result
@@ -1422,40 +1533,36 @@ def main():
             sheet_order_writes.append((sheet_row_idx, order_id))
             skip_counts.pop(f"row_{sheet_row_idx}", None)
 
-            partial_detail = ""
-            if use_partial:
-                t1_ok, t1_id, th_ok, th_id, split_qty, rem_qty = place_partial_closes(
-                    symbol, side, qty, tp1, bybit_tp, info
+            # ── Store BTC price at placement for cancel-on-reversal ────────────
+            _ctx = load_order_context()
+            _btc_at_placement = get_current_price("BTCUSDT")
+            _ctx[order_id] = {
+                "symbol":    symbol,
+                "side":      side,
+                "btc_price": _btc_at_placement,
+                "placed_at": datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d %H:%M BKK"),
+            }
+            save_order_context(_ctx)
+
+            # ── Place 4×25% reduce-only TP orders ────────────────────────────
+            _tp_prices    = [tp1, tp2, tp3, tp4]
+            _quad_results = place_quad_tp_closes(symbol, side, qty, _tp_prices, info)
+            _ok_legs      = [r for r in _quad_results if r["ok"]]
+            _fail_legs    = [r for r in _quad_results if not r["ok"]]
+            if _ok_legs:
+                _quad_lines = "  ".join(
+                    f"{r['tp_label']}@{r['price']:.6g}×{r['qty']}" for r in _ok_legs
                 )
-                if t1_id == "qty_too_small":
-                    # Position too small to split — place a single reduce-only close at tp1
-                    # (use TP1 not TP2/TP3 so we still lock in the nearest profit target)
-                    close_side = "Sell" if side == "Buy" else "Buy"
-                    tick_s     = info["tick_size"]
-                    fb_body    = {
-                        "category": BYBIT_CATEGORY, "symbol": symbol, "side": close_side,
-                        "orderType": "Limit", "qty": str(qty),
-                        "price": fmt_price(round_price(tp1, tick_s), tick_s),
-                        "timeInForce": "GTC", "positionIdx": 0,
-                        "reduceOnly": True, "closeOnTrigger": False,
-                    }
-                    fb_r = bybit_request("POST", "/v5/order/create", body=fb_body)
-                    if fb_r.get("retCode") == 0:
-                        print(f"   ℹ Qty too small to split — single close @ TP1 placed")
-                        partial_detail = f"\n  (qty too small to split — single close @TP1)"
-                    else:
-                        print(f"   ⚠ Fallback single close failed: {fb_r.get('retMsg')}")
-                        partial_detail = f"\n  ⚠ No TP order placed — check Bybit manually"
-                else:
-                    if t1_ok and th_ok:
-                        print(f"   ✅ Partial closes: {split_qty}×TP1 ({tp1:.6g}) + {rem_qty}×{tp_label} ({bybit_tp:.6g})")
-                        partial_detail = f"\n  Partial: {split_qty}@TP1 + {rem_qty}@{tp_label}"
-                    else:
-                        if not t1_ok:
-                            print(f"   ⚠ TP1 partial close failed: {t1_id}")
-                        if not th_ok:
-                            print(f"   ⚠ {tp_label} partial close failed: {th_id}")
-                        partial_detail = f"\n  ⚠ Partial close order(s) failed — check Bybit"
+                print(f"   ✅ Quad-TP closes: {_quad_lines}")
+                _partial_detail = (
+                    "\n  Quad-TP: " +
+                    " | ".join(f"{r['tp_label']}@{r['price']:.6g}" for r in _ok_legs)
+                )
+            else:
+                print(f"   ⚠ No TP orders placed — position has no take-profit orders")
+                _partial_detail = "\n  ⚠ No TP orders placed (no valid TP prices)"
+            for _fl in _fail_legs:
+                print(f"   ⚠ {_fl['tp_label']} close failed: {_fl['order_id']}")
 
             print(f"   ✅ Order placed!  Order ID: {order_id}")
             if conf_val >= 92:
@@ -1473,7 +1580,7 @@ def main():
             )
             send_telegram_alert(
                 f"✅ <b>DEMO ORDER PLACED</b> — {coin} {dir_label}{_tier_tag}\n"
-                f"  Entry {entry:.6g} | SL {sl:.6g} | {tp_label} {bybit_tp:.6g}{partial_detail}\n"
+                f"  Entry {entry:.6g} | SL {sl:.6g} | {_n_tps}×25% quad-TP{_partial_detail}\n"
                 f"  Conf: {conf_val:.0f}% | Qty {qty} × ${TRADE_MARGIN_USDT} margin (${qty*entry:.0f} pos){_scale_notice}\n"
                 f"  ID: {order_id}"
             )
