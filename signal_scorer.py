@@ -67,9 +67,9 @@ MODERATE_PATTERNS = {
     "order block", "fair value gap", "fvg",
 }
 
-# Thresholds
-SKIP_THRESHOLD   = 4   # below this → auto-reject (never send to Claude)
-REVIEW_THRESHOLD = 7   # below this but ≥ SKIP → send to Claude with low-score flag
+# Verdict thresholds (names match verdicts: STRONG_MIN = floor for STRONG, REVIEW_MIN = floor for REVIEW)
+STRONG_MIN  = 7   # score ≥ 7 → STRONG (high priority, send to Claude)
+REVIEW_MIN  = 4   # score ≥ 4 → REVIEW (send to Claude, flag low score); below 4 → SKIP
 
 
 def _score_confidence(confidence: float) -> tuple[int, str]:
@@ -214,9 +214,9 @@ def score_signal(signal: dict, market_bias: str, history: dict, positions: dict)
 
     total_score = d1_pts + d2_pts + d3_pts + d4_pts + d5_pts
 
-    if total_score >= REVIEW_THRESHOLD:
+    if total_score >= STRONG_MIN:
         verdict = "STRONG"
-    elif total_score >= SKIP_THRESHOLD:
+    elif total_score >= REVIEW_MIN:
         verdict = "REVIEW"
     else:
         verdict = "SKIP"

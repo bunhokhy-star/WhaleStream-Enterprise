@@ -774,16 +774,45 @@ def cancel_reversed_orders(threshold_pct=3.0):
 
     save_order_context(ctx)
 
+    # Cancel any orphaned reduce-only TP close orders for symbols whose entry was cancelled.
+    # place_quad_tp_closes() places 4 reduce-only orders right after the entry order.
+    # If the entry never fills (or is cancelled here), those TP orders are orphaned on Bybit.
+    tp_cancelled_total = 0
+    if cancelled:
+        _canc_syms = {c["symbol"] for c in cancelled}
+        for _sym in _canc_syms:
+            _tp_res = bybit_request("GET", "/v5/order/realtime", {
+                "category": BYBIT_CATEGORY,
+                "symbol":   _sym,
+            })
+            if _tp_res.get("retCode") != 0:
+                continue
+            for _tp_ord in _tp_res["result"].get("list", []):
+                _is_ro = (_tp_ord.get("reduceOnly") is True
+                          or str(_tp_ord.get("reduceOnly", "")).lower() == "true")
+                if not _is_ro:
+                    continue
+                _tp_id = _tp_ord.get("orderId", "")
+                if not _tp_id:
+                    continue
+                if cancel_order(_sym, _tp_id):
+                    tp_cancelled_total += 1
+                    _coin = _sym.replace("USDT", "")
+                    print(f"   🚫 Cancelled orphaned TP close {_tp_id} for {_coin}")
+                    log(f"CANCEL {_coin} TP close {_tp_id} — entry order reversed")
+
     if cancelled:
         lines = "\n".join(
             f"  {c['symbol'].replace('USDT','')} — BTC -{c['drop_pct']:.1f}% "
             f"({c['btc_then']:.0f}→{c['btc_now']:.0f})"
             for c in cancelled
         )
+        tp_note = f"\n  🗑 {tp_cancelled_total} orphaned TP close order(s) also cancelled" if tp_cancelled_total else ""
         send_telegram_alert(
             f"🚫 <b>REVERSED ORDERS CANCELLED</b> — {len(cancelled)} LONG(s)\n"
             f"{lines}\n"
             f"  BTC dropped ≥{threshold_pct:.0f}% since placement → market reversed"
+            f"{tp_note}"
         )
 
     return cancelled
@@ -1005,9 +1034,17 @@ def _sweep_missing_sl(data_rows):
     """
     Safety sweep — runs every trader cycle.
     Checks every open Bybit position for a missing stop-loss.
-    If stopLoss == '0' or '', restores it from the Google Sheet signal row.
-    Sends Telegram alert on restore or CRITICAL alert if SL can't be found.
-    Prevents positions from running unprotected due to old placement bugs.
+
+    Bybit V5 has TWO distinct SL types:
+      1. Order-level SL: stopLoss in /v5/order/create body → creates a conditional stop
+         order when entry fills. Does NOT populate pos["stopLoss"]. Shows as a Stop Order
+         in Open Orders, NOT in the TP/SL column.
+      2. Position-level SL: /v5/position/trading-stop → sets pos["stopLoss"]. Shows in
+         the Bybit UI TP/SL column.
+
+    This sweep checks BOTH types before deciding a position truly has no SL.
+    Without the conditional-stop check, every order-level SL position would trigger a
+    false "SL MISSING" restore every 4h cycle.
     """
     try:
         print("\n🔒 SL guard sweep — checking all open positions...")
@@ -1016,17 +1053,46 @@ def _sweep_missing_sl(data_rows):
             print("   ✅ No open positions")
             return
 
-        # Build lookup: coin → (sl_price_str) from OPEN sheet rows
+        # ── Step 1: Fetch all active conditional stop orders (order-level SL) ──
+        # place_order() sets stopLoss in /v5/order/create — this creates a Stop Order,
+        # NOT a position-level SL. We must query order/realtime to detect it.
+        cond_sl_syms = set()
+        try:
+            _so_result = bybit_request("GET", "/v5/order/realtime", {
+                "category":    BYBIT_CATEGORY,
+                "settleCoin":  "USDT",
+                "orderFilter": "StopOrder",
+            })
+            if _so_result.get("retCode") == 0:
+                for _o in _so_result["result"].get("list", []):
+                    _is_ro = (_o.get("reduceOnly") is True
+                              or str(_o.get("reduceOnly", "")).lower() == "true")
+                    if _is_ro:
+                        cond_sl_syms.add(_o.get("symbol", ""))
+                        print(f"   🔍 {_o.get('symbol','')}: conditional stop order active (order-level SL)")
+        except Exception as _cse:
+            log(f"⚠ SL guard: could not fetch conditional stop orders: {_cse}")
+
+        # ── Step 2: Build SL price lookup from sheet rows ───────────────────────
+        # Include OPEN rows (active entries) AND WIN/TP1 rows (75% still open
+        # after first partial close — SL-to-BE routine handles those separately).
         sheet_sl = {}
         for row in data_rows:
             while len(row) < 18:
                 row.append("")
-            if row[COL_STATUS].strip() != "OPEN":
-                continue
+            status = row[COL_STATUS].strip()
             coin   = row[COL_COIN].strip().upper()
-            sl_str = row[COL_SL].strip()
-            if coin and sl_str:
-                sheet_sl[coin] = sl_str
+            if not coin:
+                continue
+            if status == "OPEN":
+                sl_str = row[COL_SL].strip()
+                if sl_str:
+                    sheet_sl[coin] = sl_str
+            elif status == "WIN" and row[COL_TP_HIT].strip() == "TP1":
+                # TP1 hit: position still 75% open, SL-to-BE handles SL placement.
+                # Record coin so we don't flag it as "no sheet row found".
+                if coin not in sheet_sl:
+                    sheet_sl[coin] = ""   # empty = SL-to-BE responsible
 
         restored = 0
         missing  = []
@@ -1037,25 +1103,36 @@ def _sweep_missing_sl(data_rows):
             sl   = (pos.get("stopLoss", "") or "").strip()
             side = pos.get("side", "")   # "Buy" (LONG) or "Sell" (SHORT)
 
-            # SL already set — nothing to do
+            # Check A: position-level SL already set
             try:
                 if sl and float(sl) > 0:
-                    print(f"   ✅ {sym}: SL = {sl}")
+                    print(f"   ✅ {sym}: position-level SL = {sl}")
                     continue
             except (ValueError, TypeError):
                 pass
 
-            print(f"   ⚠ {sym}: NO SL detected — attempting restore from sheet...")
+            # Check B: conditional stop order exists (order-level SL from place_order)
+            if sym in cond_sl_syms:
+                print(f"   ✅ {sym}: conditional stop order active (order-level SL) — no restore needed")
+                continue
+
+            print(f"   ⚠ {sym}: no SL found (neither position-level nor conditional) — checking sheet...")
 
             if coin not in sheet_sl:
-                print(f"   🚨 {sym}: no OPEN sheet row found — cannot auto-restore!")
+                print(f"   🚨 {sym}: no OPEN/WIN sheet row — cannot auto-restore!")
                 missing.append(sym)
                 continue
 
+            sl_str_from_sheet = sheet_sl[coin]
+            if not sl_str_from_sheet:
+                # WIN/TP1 row — SL-to-BE routine is responsible for moving SL to breakeven
+                print(f"   ⚠ {sym}: WIN/TP1 row — SL-to-BE routine handles this (skipping restore)")
+                continue
+
             try:
-                sl_val = float(sheet_sl[coin])
+                sl_val = float(sl_str_from_sheet)
             except ValueError:
-                print(f"   🚨 {sym}: SL in sheet not a number: {sheet_sl[coin]!r}")
+                print(f"   🚨 {sym}: SL in sheet not a number: {sl_str_from_sheet!r}")
                 missing.append(sym)
                 continue
 
@@ -1076,7 +1153,7 @@ def _sweep_missing_sl(data_rows):
                 print(f"   🔒 {sym} {dl} — SL restored → {sl_fmted}")
                 send_telegram_alert(
                     f"🔒 <b>SL RESTORED</b> — {coin} {dl}\n"
-                    f"  Position had no stop-loss (old placement bug)\n"
+                    f"  Position had no stop-loss detected\n"
                     f"  SL now set to: <b>{sl_fmted}</b> (from sheet signal)\n"
                     f"  Position is now protected ✅"
                 )
@@ -1096,7 +1173,7 @@ def _sweep_missing_sl(data_rows):
         if restored:
             print(f"   🔒 SL guard: {restored} missing SL(s) restored")
         elif not missing:
-            print(f"   ✅ All {len(positions)} position(s) have SL set")
+            print(f"   ✅ All {len(positions)} position(s) have SL (position-level or conditional)")
 
     except Exception as _slg_e:
         log(f"⚠ SL guard sweep failed: {_slg_e}")
@@ -2057,7 +2134,7 @@ def main():
                     print(f"   🛡 {_sym} {_dl} — SL → breakeven  {_cur_sl:.8g} → {_new_sl_str}")
                     send_telegram_alert(
                         f"🛡 <b>SL MOVED TO BREAKEVEN</b> — {_sym.replace('USDT', '')} {_dl}\n"
-                        f"  TP1 (50%) confirmed → protecting second half\n"
+                        f"  TP1 (25%) confirmed → protecting remaining 75%\n"
                         f"  Old SL : {_cur_sl:.8g}\n"
                         f"  New SL : {_new_sl_str}  (entry / breakeven)\n"
                         f"  Worst-case blended P&L now ≥ 0%"

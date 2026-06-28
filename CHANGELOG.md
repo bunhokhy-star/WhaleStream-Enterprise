@@ -1,5 +1,50 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.6 — 2026-06-28 — Deep audit: 6 bugs fixed (SL sweep false-fires, TP orphans, confidence mismatch, version)
+
+### `whale_stream_trader.py` — 3 fixes
+- **CRITICAL: `_sweep_missing_sl()` false-fires on ALL positions every 4h cycle**
+  Bybit V5 has TWO SL types: (1) order-level (set in `/v5/order/create` body — creates a
+  conditional stop order, does NOT set `pos["stopLoss"]`) and (2) position-level (`/v5/position/trading-stop`
+  — sets `pos["stopLoss"]` field, shows in UI). The sweep only checked position-level (`pos["stopLoss"]`),
+  so every order placed by `place_order()` appeared to have no SL every cycle. Fix: now also queries
+  `/v5/order/realtime?orderFilter=StopOrder` to detect existing conditional stop orders before attempting
+  any restore. Also extended sheet lookup to include WIN/TP1 rows (75% still open after first partial
+  close) — those are routed to the SL-to-BE routine, not restored from the original signal SL.
+- **HIGH: `cancel_reversed_orders()` leaves TP close orders as orphans**
+  When BTC reverses 3%+ and an unfilled LONG entry order is cancelled, the 4 reduce-only TP close
+  orders placed by `place_quad_tp_closes()` were left open on Bybit. Now cancels all reduce-only
+  orders for the same symbol after cancelling the entry. Telegram alert updated to include TP count.
+- **HIGH: SL-to-BE Telegram says "TP1 (50%) confirmed → protecting second half"**
+  The 4-TP system closes 25% at each TP. TP1 closes 25%, leaving 75% open. Fixed text to:
+  "TP1 (25%) confirmed → protecting remaining 75%".
+
+### `whale_stream_bot.py` — 1 fix
+- **HIGH: Graveyard prompt SHORT floor says 93% but code enforces 95%**
+  Line 612: "MINIMUM SHORT CONFIDENCE: 93%" → "95% (REPAIR MODE)". Code at line 418 (and
+  gate enforcement at line 2442) blocks SHORTs <95% when WR <40%. The prompt now matches.
+  Also updated the adjacent line: "88-92% band poor WR" → "88-94% band poor WR".
+
+### `whale_stream_strategist.py` — 1 fix
+- **HIGH: AUTOMATIC VETO only covered 90–92% SHORT confidence, not 93–94%**
+  During REPAIR MODE the code enforces a 95% floor, but the Strategist VETO rule only
+  vetoed SHORTs in the 90–92% range. A 93% or 94% SHORT could pass the Strategist
+  and be blocked only later by the code floor (after 1 Claude token call was wasted).
+  Now the VETO covers 90–94%: "if it only feels 90-94%, veto".
+
+### `signal_scorer.py` — 1 fix
+- **LOW: Threshold constant names were semantically inverted (maintenance trap)**
+  `SKIP_THRESHOLD = 4` was used as the boundary for REVIEW verdict (not SKIP).
+  `REVIEW_THRESHOLD = 7` was used as the boundary for STRONG verdict (not REVIEW).
+  Numeric behavior was correct, but any future developer editing a threshold would pick
+  the wrong constant. Renamed: `STRONG_MIN = 7`, `REVIEW_MIN = 4`, with clear comments.
+
+### `morning_briefing.py` — 1 fix
+- **LOW: Version banner said "v47.0 drawdown protection" instead of "v47.5"**
+  Line 765: stale version string updated to v47.5.
+
+---
+
 ## v47.5 — 2026-06-28 — Final Audit: 12 bugs fixed (HTML race, WLD blocklist, version sync, confidence floor)
 
 ### `whale_stream_trader.py` — 4 fixes

@@ -298,7 +298,9 @@ function openCurrentCycle() {
 }
 
 // ── Date chip ─────────────────────────────────────────────────────
-function todayKey() { return 'ws-daily-' + new Date().toISOString().slice(0, 10); }
+// BKK date (UTC+7) — avoids UTC mismatch where local June 29 shows as UTC June 28
+function bkkDateStr() { var d=new Date(new Date().getTime()+7*3600000); return d.toISOString().slice(0,10); }
+function todayKey() { return 'ws-daily-' + bkkDateStr(); }
 
 document.getElementById('date-chip').textContent = new Date().toLocaleDateString('en-GB', {
   timeZone: 'Asia/Bangkok', weekday: 'short', day: 'numeric', month: 'short'
@@ -328,7 +330,7 @@ function load() {
 }
 
 // ── Embedded status (updated by _mark_done() in each agent) ──────
-var WS_EMBEDDED={"date":"2026-06-28","monitor":true,"tracker":true,"sigbot_00":true,"strategist_00":true,"watchdog_00":true,"sigbot_04":true,"strategist_04":true,"trader_04":true,"watchdog_04":true,"briefing":true,"sigbot_08":true,"sigbot_08_details":{"longs":["EIGEN","STRK","LDO"],"shorts":["FF","ENS"]},"strategist_08":true,"strategist_08_details":{"approved":[],"vetoed":[]},"trader_08":true,"trader_08_details":{"placed":[],"skipped":["PAUSED — circuit breaker active"]},"watchdog_08":true,"watchdog_08_details":{"health":"AMBER"},"monitor_details":{"positions":7,"alerts":0,"last_run":"20:30 BKK"},"tracker_details":{"resolved":0,"wins":0,"losses":0,"open":13,"last_run":"20:19 BKK"},"sigbot_12":true,"sigbot_12_details":{"longs":["AAVE","NEAR","JUP"],"shorts":["H","FF","MNT"]},"strategist_12":true,"strategist_12_details":{"approved":[],"vetoed":[],"recheck":true},"trader_12":true,"trader_12_details":{"placed":[],"skipped":["PAUSED — circuit breaker active"]},"watchdog_12":true,"watchdog_12_details":{"health":"AMBER","cycle_summary":"Bot:🟢AAVE, NEAR, JUP | 🔴H, FF, MNT  Strat:⏸ CB  Trader:— none"},"sigbot_16":true,"sigbot_16_details":{"longs":["AAVE","LIT","NEAR"],"shorts":["H","SPX","MNT"]},"strategist_16":true,"strategist_16_details":{"approved":["SPX","MNT","LIT","SPX"],"vetoed":["AAVE","XPL","JUP","FF","TIA","AAVE","JUP","H","FF"],"recheck":true},"trader_16":true,"trader_16_details":{"placed":[],"skipped":["PAUSED — circuit breaker active"]},"watchdog_16":true,"watchdog_16_details":{"health":"GREEN","cycle_summary":"Bot:🟢AAVE, LIT, NEAR | 🔴H, SPX, MNT  Strat:✅SPX, EIGEN, ENS, H, MNT, LIT | ❌AAVE, XPL, JUP, FF, TIA, FF, AAVE, JUP, FF  Trader:— none"},"sigbot_20":true,"sigbot_20_details":{"longs":["AAVE","TIA","LIT"],"shorts":["H","MNT"]},"strategist_20":true,"strategist_20_details":{"approved":["H","MNT"],"vetoed":["AAVE","XPL","JUP","SPX","FF","TIA","NEAR","LIT"]},"trader_20":true,"trader_20_details":{"placed":[],"skipped":["PAUSED — circuit breaker active"]},"watchdog_20":true,"watchdog_20_details":{"health":"AMBER","cycle_summary":"Bot:🟢AAVE, TIA, LIT | 🔴H, MNT  Strat:✅H, MNT | ❌AAVE, XPL, JUP, SPX, FF, TIA, NEAR, LIT  Trader:⏸ CB"}};
+var WS_EMBEDDED={"date":"2026-06-29","monitor":true,"monitor_details":{"positions":7,"alerts":0,"last_run":"04:30 BKK"},"tracker":true,"tracker_details":{"resolved":0,"wins":0,"losses":0,"open":16,"last_run":"04:00 BKK"},"sigbot_00":true,"sigbot_00_details":{"longs":["AAVE","TIA","LDO"],"shorts":["H","FF","WLD"]},"trader_00":true,"trader_00_details":{"placed":[],"skipped":["PAUSED — circuit breaker active"]},"watchdog_00":true,"watchdog_00_details":{"health":"AMBER","cycle_summary":"Bot:🟢AAVE, TIA, LDO | 🔴H, FF, WLD  Strat:⏸ CB  Trader:⏸ CB"},"sigbot_04":true,"sigbot_04_details":{"longs":["AAVE","JTO","LDO"],"shorts":["H","FF","MNT"]},"trader_04":true,"trader_04_details":{"placed":[],"skipped":["PAUSED — circuit breaker active"]},"watchdog_04":true,"watchdog_04_details":{"health":"AMBER","cycle_summary":"Bot:🟢AAVE, JTO, LDO | 🔴H, FF, MNT  Strat:⏸ CB  Trader:⏸ CB"}};
 
 // ── Status server auto-polling ────────────────────────────────────
 var STATUS_URL  = 'http://localhost:8765/daily_status.json';
@@ -485,7 +487,7 @@ function loadViaScriptTag() {
 
 function pollStatus() {
   // Apply embedded data immediately (works in sandboxed Cowork panel — no fetch needed)
-  var today = new Date().toISOString().slice(0, 10);
+  var today = bkkDateStr(); // BKK local date (UTC+7) — matches agent date field
   if (window.WS_EMBEDDED && window.WS_EMBEDDED.date === today) {
     setBadge(true);
     applyStatus(window.WS_EMBEDDED);

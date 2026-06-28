@@ -428,3 +428,83 @@ AMBER ALERT:
    ✓ Daily Checklist.html WS_EMBEDDED updated with full cycle snapshot.
 
 [2026-06-28 20:30 BKK] Watchdog complete.
+
+┌─────────────────────────────────────────────────────┐
+│  🐋 WHALE-STREAM MISSION                            │
+│  Build trust through discipline. Earn live capital. │
+│  This system belongs to the whole team.             │
+└─────────────────────────────────────────────────────┘
+   Balance: $329.91  |  1d to Go-Live  |  Target: $425 (Gate 4)
+
+[2026-06-29 00:30 BKK] === Watchdog run started ===
+✅ SigBot       last: 00:04 BKK  (26m ago)
+🚨 Strategist   last: 20:10 BKK  (4h 20m ago)
+✅ Trader       last: 00:20 BKK  (10m ago)
+
+==================================================
+AMBER ALERT:
+🟡 <b>WHALE-STREAM WATCHDOG — Issues Detected</b>
+🕐 2026-06-29 00:30 BKK
+
+<b>⚠️ Problems found this cycle:</b>
+🚨 <b>Strategist missed :10 slot</b>  (last: 20:10 BKK, 4h 20m ago)
+→ FIX: Open Task Scheduler → find 'WhaleStreamStrategist' → right-click → Run
+→ Or double-click run_strategist.bat
+→ Check strategist_task_log.txt for the error
+
+🚨 <b>CIRCUIT BREAKER ACTIVE</b> — all orders are paused
+→ FIX: Double-click CLEAR_PAUSE.bat to resume trading
+→ Or delete the file: C:\Users\MAX\WhaleStream\paused.flag
+→ Review trader_log.txt to understand WHY the circuit breaker fired
+
+<b>Agent Status:</b>
+  ✅ SigBot       last: 00:04 BKK  (26m ago)
+  🚨 Strategist   last: 20:10 BKK  (4h 20m ago)
+  ✅ Trader       last: 00:20 BKK  (10m ago)
+
+💰 Balance: $329.91
+✅ Watchdog alert sent to Telegram.
+   ✓ Status logged → watchdog_00
+   ✓ Daily Checklist.html WS_EMBEDDED updated with full cycle snapshot.
+
+[2026-06-29 00:30 BKK] Watchdog complete.
+
+┌─────────────────────────────────────────────────────┐
+│  🐋 WHALE-STREAM MISSION                            │
+│  Build trust through discipline. Earn live capital. │
+│  This system belongs to the whole team.             │
+└─────────────────────────────────────────────────────┘
+   Balance: $329.91  |  1d to Go-Live  |  Target: $425 (Gate 4)
+
+[2026-06-29 04:30 BKK] === Watchdog run started ===
+✅ SigBot       last: 04:03 BKK  (27m ago)
+🚨 Strategist   last: 20:10 BKK  (8h 20m ago)
+✅ Trader       last: 04:20 BKK  (10m ago)
+
+==================================================
+AMBER ALERT:
+🟡 <b>WHALE-STREAM WATCHDOG — Issues Detected</b>
+🕐 2026-06-29 04:30 BKK
+
+<b>⚠️ Problems found this cycle:</b>
+🚨 <b>Strategist missed :10 slot</b>  (last: 20:10 BKK, 8h 20m ago)
+→ FIX: Open Task Scheduler → find 'WhaleStreamStrategist' → right-click → Run
+→ Or double-click run_strategist.bat
+→ Check strategist_task_log.txt for the error
+
+🚨 <b>CIRCUIT BREAKER ACTIVE</b> — all orders are paused
+→ FIX: Double-click CLEAR_PAUSE.bat to resume trading
+→ Or delete the file: C:\Users\MAX\WhaleStream\paused.flag
+→ Review trader_log.txt to understand WHY the circuit breaker fired
+
+<b>Agent Status:</b>
+  ✅ SigBot       last: 04:03 BKK  (27m ago)
+  🚨 Strategist   last: 20:10 BKK  (8h 20m ago)
+  ✅ Trader       last: 04:20 BKK  (10m ago)
+
+💰 Balance: $329.91
+✅ Watchdog alert sent to Telegram.
+   ✓ Status logged → watchdog_04
+   ✓ Daily Checklist.html WS_EMBEDDED updated with full cycle snapshot.
+
+[2026-06-29 04:30 BKK] Watchdog complete.

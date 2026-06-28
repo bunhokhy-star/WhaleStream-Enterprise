@@ -609,8 +609,8 @@ RULES:
     - "LH/LL breakdown" alone → 0% WR in several samples. Only trade if ALSO has Stage 4-5 characteristics.
     - "Dead cat bounce failure" → 0% WR. Avoid.
   SHORT CONFIDENCE RULE (hard floor enforced in code):
-    - MINIMUM SHORT CONFIDENCE: 93% — any SHORT below 93% will be AUTO-DROPPED by the system
-    - 88-92% confidence band has 36-37% WR — do NOT output SHORTs in this range
+    - MINIMUM SHORT CONFIDENCE: 95% — any SHORT below 95% will be AUTO-DROPPED by the system (REPAIR MODE)
+    - 88-94% confidence band has poor WR — do NOT output SHORTs in this range
     - 93-95% band: 100% WR (9/9). 95%+ band: 94.1% WR (48/51). These are the ONLY acceptable SHORT zones.
     - If a setup feels like 90-92% confidence → either find the extra edge to push to 93%+ or SKIP it entirely
   LONG CONFIDENCE RULE (hard floor enforced in code):

@@ -522,10 +522,10 @@ AUTOMATIC VETO — no exceptions:
    "dead cat", or "meme" → VETO
    These have 0% win rate in our live trade history. Non-negotiable skip.
 
-3. SHORT signal confidence is in 90–92% range AND pattern does NOT explicitly mention
+3. SHORT signal confidence is in 90–94% range AND pattern does NOT explicitly mention
    "Stage 4-5 distribution", "Stage 5 distribution", or "Stage 5 collapse" → VETO
-   This is the 90-92% SHORT confidence paradox — only 36.4% WR in our data.
-   The paradox: if it's genuinely 93%+ quality, bump to APPROVE. If it only "feels" 91%, veto.
+   The 90-94% SHORT zone has poor WR in our data. Code enforces ≥95% floor in REPAIR MODE.
+   The paradox: if it's genuinely 95%+ quality, bump to APPROVE. If it only "feels" 90-94%, veto.
 
 4. BTC 7-day % < -8% (bear market confirmed) AND signal is LONG AND confidence < 97% → VETO
    Alt longs in bear markets compound drawdowns. Our #1 loss pattern.

@@ -446,3 +446,15 @@ SyntaxError: unexpected character after line continuation character
 
 ✅ Strategist complete.
 
+object address  : 00000168FAAB49A0
+object refcount : 3
+object type     : 00007FFC21CC0A80
+object type name: ValueError
+object repr     : ValueError('I/O operation on closed file.')
+lost sys.stderr
+object address  : 0000018DC98B49A0
+object refcount : 3
+object type     : 00007FFC21CC0A80
+object type name: ValueError
+object repr     : ValueError('I/O operation on closed file.')
+lost sys.stderr
