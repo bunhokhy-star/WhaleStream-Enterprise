@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v46.74  —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v46.77  —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 coins from CoinGecko (free, no key)     ║
@@ -993,39 +993,40 @@ def fetch_signal_graveyard():
         blacklisted = [c for c, cnt in short_loss_map.items()
                        if cnt >= 3 and short_win_map.get(c, 0) == 0]
 
-        lines = []
-        lines.append(f"Recent {len(recent)} trades  |  Overall WR: {win_rate:.0f}%  ({wins}W / {losses}L)")
-        lines.append(f"LONG  WR (recent): {long_wr:.0f}%  ({long_wins}W / {len(recent_longs) - long_wins}L)")
-        lines.append(f"SHORT WR (recent): {short_wr:.0f}%  ({short_wins}W / {len(recent_shorts) - short_wins}L)")
+        # ── Compact graveyard (saves ~40% tokens vs wide-table format) ──────────
+        # Permanent ban lists are already in the cached system prompt — skip here.
         _in_repair_mode = os.path.exists(os.path.join(SCRIPT_DIR, "short_repair.flag"))
-        if not _in_repair_mode:
-            # Only show threshold warnings when NOT in REPAIR MODE (repair guidance supersedes these)
-            if short_wr < 40:
-                lines.append(f"⚠️  SHORT WR CRITICAL ({short_wr:.0f}% < 40%) — REQUIRE SHORT CONFIDENCE ≥ 95% OR SKIP SHORTS")
-            elif short_wr < 45:
-                lines.append(f"⚠️  SHORT WR BELOW TARGET ({short_wr:.0f}% < 45%) — REQUIRE SHORT CONFIDENCE ≥ 93%")
-        if blacklisted:
-            lines.append(f"🚫 AUTO-BLACKLIST (3+ SHORT losses, 0 wins) — DO NOT SHORT: {', '.join(blacklisted)}")
-        # Always remind Claude of the permanent ban list — these are code-blocked at system level.
-        _perm_ban = sorted(SHORT_COIN_BLOCKLIST)
-        lines.append(f"🚫 PERMANENT SHORT BAN (code-enforced, will be rejected even if output): {', '.join(_perm_ban)}")
-        lines.append(f"   → Do NOT output SHORT signals for any of these coins. They are PERMANENTLY BANNED.")
-        lines.append("─" * 100)
+        lines = []
+
+        # Single-line stats header (was 3 lines)
         lines.append(
-            f"{'Coin':<8} {'Dir':<6} {'Pattern':<40} {'Entry':<16} "
-            f"{'TP Hit':<8} {'P&L%':<10} Result"
+            f"GRAVEYARD [{len(recent)}T | WR:{win_rate:.0f}%({wins}W/{losses}L) | "
+            f"L:{long_wr:.0f}%({long_wins}W/{len(recent_longs)-long_wins}L) | "
+            f"S:{short_wr:.0f}%({short_wins}W/{len(recent_shorts)-short_wins}L)]"
         )
-        lines.append("─" * 100)
+        if not _in_repair_mode:
+            if short_wr < 40:
+                lines.append(f"⚠️ S_WR CRITICAL ({short_wr:.0f}%<40%) — REQUIRE SHORT CONF≥95% OR SKIP")
+            elif short_wr < 45:
+                lines.append(f"⚠️ S_WR LOW ({short_wr:.0f}%<45%) — REQUIRE SHORT CONF≥93%")
+        if blacklisted:
+            lines.append(f"🚫 S_AUTO_BAN(3+L,0W): {', '.join(blacklisted)}")
+
+        # Compact table — 67 chars/row vs 100 (saves ~33% per row × 20 rows)
+        lines.append(f"{'COIN':<8} {'D':<2} {'PATTERN':<28} {'ENTRY':<12} {'TP':<4} {'PNL%':<7} RES")
+        lines.append("─" * 67)
         for r in recent:
-            icon = "✅ WIN " if r["status"] == "WIN" else "❌ LOSS"
+            pat = (r['pattern'][:26] + "…") if len(r['pattern']) > 26 else r['pattern']
+            d   = "L" if r["direction"] == "LONG" else "S"
+            res = "WIN" if r["status"] == "WIN" else "LOSS"
             lines.append(
-                f"{r['coin']:<8} {r['direction']:<6} {r['pattern']:<40} {r['entry']:<16} "
-                f"{r['tp_hit']:<8} {r['pnl']:<10} {icon}"
+                f"{r['coin']:<8} {d:<2} {pat:<28} {r['entry']:<12} "
+                f"{r['tp_hit']:<4} {r['pnl']:<7} {res}"
             )
+        lines.append("─" * 67)
 
         # ── SHORT recovery guidance (injected when repair mode is active) ──
         if _in_repair_mode:
-            lines.append("─" * 100)
             # Compute H/FF WRs dynamically from current resolved data
             _rc_coins = {"H": (0, 0), "FF": (0, 0)}
             for _rr in resolved:
@@ -1055,7 +1056,7 @@ def fetch_signal_graveyard():
                 "   you may include it — but default to STAY OUT for SHORTs on unknown coins."
             )
 
-        # ── LONG avoid list (coins with 0% WR over 3+ LONGs — injected at runtime) ─
+        # ── LONG dynamic avoid list — compact 1-line (perm bans already in cached system prompt) ──
         _long_loss_map = {}
         _long_win_map  = {}
         for _lr in _resolved_longs:
@@ -1066,23 +1067,9 @@ def fetch_signal_graveyard():
                 _long_win_map[_lc]  = _long_win_map.get(_lc, 0) + 1
         _long_avoid = sorted([c for c, cnt in _long_loss_map.items()
                               if cnt >= 2 and _long_win_map.get(c, 0) == 0])
-        # Always show code-enforced LONG blocklist even if dynamic list is empty
-        _long_perm_ban = sorted(LONG_COIN_BLOCKLIST)
-        if _long_perm_ban:
-            lines.append(f"🚫 PERMANENT LONG BAN (code-enforced, will be rejected even if output): {', '.join(_long_perm_ban)}")
-            lines.append(f"   → Do NOT output LONG signals for any of these coins. They are PERMANENTLY BANNED.")
-        if _long_avoid:
-            # Exclude already-mentioned permanent bans to avoid duplication
-            _long_avoid_extra = [c for c in _long_avoid if c not in LONG_COIN_BLOCKLIST]
-            if _long_avoid_extra:
-                lines.append("─" * 100)
-                lines.append(
-                    f"🚫 LONG AVOID LIST — DO NOT LONG these coins ({len(_long_avoid_extra)} coin(s) — 0% WR over 2+ LONGs):\n"
-                    f"   Affected: {', '.join(_long_avoid_extra)}\n"
-                    f"   Each of these coins has failed every LONG setup logged — no wins, 2+ losses.\n"
-                    f"   DO NOT output a LONG signal for any of these coins unless confidence is 97%+\n"
-                    f"   with explicit written justification. Default action = SKIP the LONG entirely."
-            )
+        _long_avoid_extra = [c for c in _long_avoid if c not in LONG_COIN_BLOCKLIST]
+        if _long_avoid_extra:
+            lines.append(f"🚫 L_AVOID(0%WR≥2T): {', '.join(_long_avoid_extra)} — skip unless conf≥97%")
 
         graveyard_text = "\n".join(lines)
         print(f"   ✓ Signal Graveyard: {len(recent)} trades (overall {win_rate:.0f}% WR | long {long_wr:.0f}% | short {short_wr:.0f}%)")

@@ -1,5 +1,27 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.77 — 2026-06-28 — PERF: Compact graveyard prompt saves ~40% dynamic tokens per bot run
+
+### Optimisation: Compact graveyard format in fetch_signal_graveyard() (whale_stream_bot.py)
+- **Problem**: Graveyard injected into dynamic user message used 100-char-wide table rows,
+  3-line stats header, 2× full 100-char separator lines, AND redundant permanent ban lists
+  (SHORT_COIN_BLOCKLIST + LONG_COIN_BLOCKLIST) that are already present in the cached system
+  prompt — paying for the same tokens every run.
+- **Fix — 4 compressions applied**:
+  1. **Stats header 3 lines → 1**: `Recent 20 trades | Overall WR… / LONG WR… / SHORT WR…`
+     merged into `GRAVEYARD [20T | WR:65%(13W/7L) | L:70% | S:60%]`
+  2. **Table rows 100 chars → 67 chars**: Direction `LONG`/`SHORT` → `L`/`S`, pattern
+     truncated to 26 chars (was 40), icons dropped (WIN/LOSS text only), columns narrowed.
+     20 rows × 33 chars saved = 660 chars = ~165 tokens.
+  3. **Separator lines**: 2× 100-char dash lines → 1× 67-char line. Saves ~133 chars.
+  4. **Permanent ban lists removed from dynamic section**: `PERMANENT SHORT BAN` (2 lines)
+     and `PERMANENT LONG BAN` (2 lines + 5-line verbose avoid block) removed — these already
+     exist verbatim in the cached system prompt (zero net information loss).
+     Dynamic `L_AVOID` now 1 compact line: `🚫 L_AVOID(0%WR≥2T): COIN1, COIN2 — skip unless conf≥97%`
+- **SHORT recovery block**: unchanged — kept in full, it's important and already compact.
+- **Estimated savings**: ~400-500 tokens per API call × 2 calls per run × 6 runs/day
+  = ~5,000 tokens/day. More importantly: more headroom for market data reduces truncation risk.
+
 ## v46.76 — 2026-06-28 — FIX: Cycle guard added to Strategist + Trader; CHANGE_TO_2H.bat deleted
 
 ### Fix: No cycle guard in whale_stream_strategist.py and whale_stream_trader.py (pre-July 1 safety)

@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.76 — FIX: cycle guard added to Strategist + Trader; CHANGE_TO_2H.bat deleted"
+git commit -m "v46.77 — PERF: compact graveyard + banner version string fixed"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...
