@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.77 — PERF: compact graveyard + banner version string fixed"
+git commit -m "v46.78 — DATA: refresh SHORT WR in prompt (94.1%), TIER 1 LONG warning, analyze_shorts floor fix (88%)"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...

@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v46.77  —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v46.78  —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 coins from CoinGecko (free, no key)     ║
@@ -253,7 +253,7 @@ except ImportError:
     MISSION_PROMPT = ""
     def print_mission_banner(): pass
 
-WHALE_STREAM_PROMPT = """WHALE-STREAM v46.49 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
+WHALE_STREAM_PROMPT = """WHALE-STREAM v46.78 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
 ROLE:
 You are an Institutional Multi-Agent Trading Committee composed of:
 • Market Regime Analyst • Smart Money Concepts Specialist • Quantitative Momentum Analyst • Liquidity & Stop-Hunt Analyst • Wyckoff Structure Analyst • Relative Strength Analyst • Breakout Probability Engine • Reversal Probability Engine • Continuation Probability Engine • Risk Management Committee
@@ -618,13 +618,14 @@ RULES:
   SHORT CONFIDENCE RULE (hard floor enforced in code):
     - MINIMUM SHORT CONFIDENCE: 93% — any SHORT below 93% will be AUTO-DROPPED by the system
     - 88-92% confidence band has 36-37% WR — do NOT output SHORTs in this range
-    - 93-95% band: 100% WR. 95%+ band: 91.7% WR. These are the ONLY acceptable SHORT zones.
+    - 93-95% band: 100% WR (9/9). 95%+ band: 94.1% WR (48/51). These are the ONLY acceptable SHORT zones.
     - If a setup feels like 90-92% confidence → either find the extra edge to push to 93%+ or SKIP it entirely
   LONG CONFIDENCE RULE (hard floor enforced in code):
     - MINIMUM LONG CONFIDENCE: 88% — any LONG below 88% will be AUTO-DROPPED by the system
     - 85-87% LONG band has 39.1% WR and avg -12.5% P&L — do NOT output LONGs in this range
     - 88-91% band: 52% WR, avg +13.1% P&L. These are the acceptable LONG zones.
     - If a setup feels like 85-87% → either find the extra edge to push to 88%+ or SKIP it entirely
+    - CAUTION: 92%+ LONG band only 6 trades at 50% WR, avg -53% P&L. Do NOT force elite ratings — stay in 88-91% zone.
   LONG PATTERNS THAT WIN (prioritize these):
     - "Stage 2 expansion" → 100% WR (3/3 trades)
     - "Stage 2 expansion retest" → 75% WR (3/4 trades)
@@ -1800,7 +1801,7 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     shorts = data.get("shorts", [])
 
     lines = []
-    lines.append(f"🐳 WHALE-STREAM v46.74")
+    lines.append(f"🐳 WHALE-STREAM v46.78")
     lines.append(f"📅 {ts}")
 
     # ── Market regime summary ─────────────────────────────────
@@ -2365,7 +2366,7 @@ def main():
 
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🐳  WHALE-STREAM v46.75 — AUTO BOT STARTING    ║")
+    print("║   🐳  WHALE-STREAM v46.78 — AUTO BOT STARTING    ║")
     print("╚══════════════════════════════════════════════════╝")
     # Check conservative flag early so we can show it in the startup banner
     _short_conservative_early = os.path.exists(os.path.join(SCRIPT_DIR, "short_conservative.flag"))

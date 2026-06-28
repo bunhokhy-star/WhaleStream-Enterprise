@@ -269,16 +269,18 @@ def main():
             fallback_threshold = lo
             break
 
-    if best_long_threshold is not None and best_long_threshold > 85:
-        p(f"  → Recommend raising LONG min confidence from 85% to {best_long_threshold}%")
+    # NOTE: Code floor is LONG_MIN_CONF = 88 in whale_stream_bot.py (set v46.62).
+    # Recommendations below reflect actual code floor of 88%, not 85%.
+    if best_long_threshold is not None and best_long_threshold > 88:
+        p(f"  → Recommend raising LONG min confidence from 88% to {best_long_threshold}%")
         p(f"  → This filters out weak setups dragging WR below 60%")
-    elif best_long_threshold == 85 or (fallback_threshold is not None and fallback_threshold <= 88):
-        p(f"  → Current 85% floor is appropriate — WR is acceptable at this level")
-        p(f"  → Keep existing LONG min confidence at 85%")
+    elif best_long_threshold is not None and best_long_threshold >= 88:
+        p(f"  → Code floor already at 88% (LONG_MIN_CONF=88 in bot.py) — no change needed")
+        p(f"  → TIER 2 (88-91%) band is the primary acceptable LONG zone")
     else:
-        p(f"  → Insufficient LONG data (need 5+ trades per band) — keep 85% floor for now")
+        p(f"  → Code floor already at 88% (LONG_MIN_CONF=88 in bot.py) — historical 85-87% trades no longer placed")
         if fallback_threshold:
-            p(f"  → Fallback: at conf >= {fallback_threshold}%, WR = {next(wr for lo,n,wr in long_band_results if lo==fallback_threshold)*100:.1f}%")
+            p(f"  → At conf >= {fallback_threshold}%: WR = {next(wr for lo,n,wr in long_band_results if lo==fallback_threshold)*100:.1f}%")
     p()
 
     # ── LONG breakdown by pattern ─────────────────────────────

@@ -1,5 +1,19 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.78 — 2026-06-28 — DATA: Fresh confidence WR data in prompt + analyze_shorts floor fix
+
+### Prompt data refresh (whale_stream_bot.py)
+- **SHORT 95%+ WR updated**: `91.7%` → `94.1% (48/51 signals)` — June 28 analysis data
+- **TIER 1 LONG caution added**: 6 trades at 50% WR, avg -53% P&L — do NOT force 92%+ ratings; stay in 88-91% zone
+- **TIER 3 SHORT WR clarified**: 93-95% band count added `(9/9)` alongside WR for clarity
+- **All 4 version strings synced**: banner, prompt header, Telegram startup, startup print — all now v46.78
+
+### analyze_shorts.py floor recommendation fix
+- **Bug**: LONG confidence recommendation section referenced "85% floor" throughout, but
+  code floor has been `LONG_MIN_CONF = 88` since v46.62. Output was confusing/wrong.
+- **Fix**: Updated all recommendation text to acknowledge actual 88% code floor.
+  Output now says "Code floor already at 88% (LONG_MIN_CONF=88 in bot.py) — no change needed."
+
 ## v46.77 — 2026-06-28 — PERF: Compact graveyard prompt saves ~40% dynamic tokens per bot run
 
 ### Optimisation: Compact graveyard format in fetch_signal_graveyard() (whale_stream_bot.py)
