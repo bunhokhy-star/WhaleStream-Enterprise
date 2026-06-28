@@ -2438,6 +2438,7 @@ def main():
     all_coins = fetch_top_300_coins()
     if len(all_coins) < 80:
         print("✗ ERROR: Not enough coins fetched. Check your internet connection.")
+        _mark_done("sigbot", details={"longs": [], "shorts": [], "error": "fetch_failed"})
         return
 
     # ── Step 3: Format into WHALE-STREAM table format ───────
@@ -2467,6 +2468,7 @@ def main():
         )
     except Exception as e:
         print(f"✗ Claude analysis failed (batch 1): {e}")
+        _mark_done("sigbot", details={"longs": [], "shorts": [], "error": "claude_failed"})
         return
 
     analysis2 = ""

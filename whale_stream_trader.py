@@ -901,6 +901,7 @@ def main():
     # ── Validate API keys ──────────────────────────────────────
     if "YOUR_BYBIT" in BYBIT_API_KEY:
         print("✗ ERROR: Please fill in BYBIT_API_KEY and BYBIT_API_SECRET in the CONFIG section.")
+        _mark_done("trader", details={"placed": [], "skipped": ["api_key_not_configured"]})
         return
 
     # ── Calibrate clock against Bybit server time ─────────────
@@ -937,6 +938,7 @@ def main():
             f"No orders can be placed until connection is restored.\n"
             f"➡ Run DIAGNOSE_BYBIT.bat to identify the cause."
         )
+        _mark_done("trader", details={"placed": [], "skipped": ["bybit_connection_failed"]})
         return
     print(f"   ✓ Available USDT: ${balance:,.2f}  (total: ${total_balance:,.2f})")
 
@@ -983,6 +985,7 @@ def main():
 
     if balance < TRADE_MARGIN_USDT:
         print(f"   ✗ Balance too low. Need at least ${TRADE_MARGIN_USDT} to place one trade.")
+        _mark_done("trader", details={"placed": [], "skipped": ["balance_too_low"]})
         return
 
     # ── Load Google Sheets ─────────────────────────────────────
@@ -993,6 +996,7 @@ def main():
     except Exception as e:
         log(f"Google Sheets FAILED: {e}")
         print(f"   ✗ Google Sheets error: {e}")
+        _mark_done("trader", details={"placed": [], "skipped": ["sheets_failed"]})
         return
 
     all_rows  = sheet.get_all_values()
@@ -1131,6 +1135,7 @@ def main():
 
     if not open_trades:
         print("\n   No OPEN signals to trade. Run whale_stream_bot.py first to generate signals.")
+        _mark_done("trader", details={"placed": [], "skipped": ["no_signals"]})
         return
 
     # ── Check existing positions + open orders on Bybit ──────────
@@ -1168,6 +1173,7 @@ def main():
         print(f"\n   ⚠ POSITION CAP: {_bb_open_positions} open trades >= {MAX_CONCURRENT_POSITIONS} limit")
         print("   No new orders placed this run to avoid cascade SL exposure.")
         send_telegram_alert(_cap_msg)
+        _mark_done("trader", details={"placed": [], "skipped": [f"position_cap_{_bb_open_positions}"]})
         return
 
     # ── Fix 2: Drawdown-based position size scaling ────────────
@@ -1237,6 +1243,7 @@ def main():
               f"≥ {MAX_DEPLOYED_FRACTION*100:.0f}% of ${total_balance:.0f} — skipping all new orders")
         send_telegram_alert(msg)
         log(f"RISK CAP — ~${deployed_est} deployed ({deployed_pct:.0f}%) ≥ {MAX_DEPLOYED_FRACTION*100:.0f}% cap")
+        _mark_done("trader", details={"placed": [], "skipped": [f"risk_cap_{deployed_pct:.0f}pct"]})
         return
     else:
         print(f"   💼 Risk check OK: ~${deployed_est} deployed ({deployed_pct:.0f}%) "

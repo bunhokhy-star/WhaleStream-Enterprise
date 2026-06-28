@@ -1,5 +1,33 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.86 — 2026-06-28 — Full _mark_done coverage: every agent exit path guaranteed to tick checklist
+
+### whale_stream_bot.py
+- Added `_mark_done("sigbot", error=...)` on "not enough coins fetched" early exit
+- Added `_mark_done("sigbot", error=...)` on Batch 1 Claude API failure early exit
+
+### whale_stream_strategist.py
+- Added `_mark_done("strategist", error=...)` on Google Sheets connection failure early exit
+- Added `_mark_done("strategist", error=...)` on Claude API failure early exit (after writing approve-all fallback decisions)
+
+### whale_stream_trader.py
+- Added `_mark_done("trader", ...)` on API key not configured early exit
+- Added `_mark_done("trader", ...)` on Bybit connection failure early exit
+- Added `_mark_done("trader", ...)` on balance too low early exit
+- Added `_mark_done("trader", ...)` on Google Sheets failure early exit
+- Added `_mark_done("trader", ...)` on no OPEN signals early exit
+- Added `_mark_done("trader", ...)` on position cap early exit (shows count)
+- Added `_mark_done("trader", ...)` on risk cap early exit (shows % deployed)
+
+### whale_stream_tracker.py
+- Wrapped `if __name__ == "__main__": main()` in try/except — any unhandled crash now calls `_mark_done("tracker", error=...)` so checklist never stays blank
+
+### BAT files
+- `ADD_STATUS_CHECK_TASK.bat`: changed bare `SET PYTHON_CMD=python` → full Python path
+- `RUN_ANALYZE_NOW.bat`: changed bare `python` → full Python path
+
+**Net effect:** Daily Checklist will tick correctly even when agents hit error paths. "Why is checklist showing 0/4?" should never recur due to a missing `_mark_done`.
+
 ## v46.85 — 2026-06-28 — CRITICAL FIX: two-tier signal expiry (8h unplaced / 72h placed)
 
 ### tracker.py — zombie signal pipeline unblock

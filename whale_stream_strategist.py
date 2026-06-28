@@ -768,6 +768,7 @@ def main():
     except Exception as e:
         log(f"✗ Google Sheets connection failed: {e}")
         print(f"   ✗ Failed to connect: {e}")
+        _mark_done("strategist", details={"approved": [], "vetoed": [], "error": "sheets_failed"})
         return
 
     # ── Find latest OPEN signals ─────────────────────────────────
@@ -910,6 +911,7 @@ def main():
             "reduced_count":  0,
         }
         write_decisions(fallback)
+        _mark_done("strategist", details={"approved": [], "vetoed": [], "error": "claude_failed"})
         return
 
     # ── Parse decisions ──────────────────────────────────────────

@@ -19,7 +19,7 @@ SET SCRIPT_DIR=%~dp0
 SET SCRIPT_DIR=%SCRIPT_DIR:~0,-1%
 
 SET TASK_NAME=WhaleStream-StatusCheck
-SET PYTHON_CMD=python
+SET PYTHON_CMD="C:\Users\MAX\AppData\Local\Python\bin\python.exe"
 SET SCRIPT=%SCRIPT_DIR%\check_daily_status.py
 
 echo ══════════════════════════════════════════════════

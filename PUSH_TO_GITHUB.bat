@@ -15,7 +15,7 @@ git add -A
 echo.
 
 echo [3] Committing...
-git commit -m "v46.85 — CRITICAL: two-tier expiry 8h unplaced/72h placed; audit fixes _mark_done/vetoed/watchdog/CLEAR_PAUSE"
+git commit -m "v46.86 — Full _mark_done coverage: all agent error exits guaranteed; BAT python paths fixed"
 echo.
 
 echo [4] Pushing to remote (setting upstream on first push)...

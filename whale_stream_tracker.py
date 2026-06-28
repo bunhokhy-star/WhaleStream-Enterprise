@@ -2359,4 +2359,12 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as _tracker_crash:
+        print(f"⚠ Tracker crashed: {_tracker_crash}")
+        # Guarantee checklist tick even on unhandled exception
+        try:
+            _mark_done("tracker", details={"error": str(_tracker_crash)[:80], "last_run": "crashed"})
+        except Exception:
+            pass
