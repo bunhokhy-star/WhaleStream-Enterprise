@@ -1,5 +1,22 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.5 — 2026-06-28 — SL guard sweep (critical capital protection)
+
+### `whale_stream_trader.py` — `_sweep_missing_sl()` function
+- Runs at the START of every trader cycle, before placing any new orders
+- Checks every open Bybit position for missing stop-loss (`stopLoss == "0"` or empty)
+- If missing: looks up SL price from the matching OPEN Google Sheet row, sets it via
+  `/v5/position/trading-stop` with `slTriggerBy=MarkPrice`, sends Telegram alert
+- If no sheet row found for a missing-SL position: sends CRITICAL Telegram alert with
+  manual instruction to go to Bybit and set SL manually
+- Idempotent: positions with SL already set are skipped (no API call, just logged)
+- Fixes the root cause of AAVE/-62%, WLD/-51%, XPL/-37% bleeding with no SL —
+  those were placed before the `fmt_price` scientific notation bug was fixed (v46.34)
+- From this version forward, any position that somehow loses its SL will be auto-restored
+  within 4h (next trader cycle)
+
+---
+
 ## v47.4 — 2026-06-28 — Final Pre-Go-Live Audit (12 bugs fixed)
 
 ### `signal_scorer.py` — Pattern matching direction fix (CRITICAL)

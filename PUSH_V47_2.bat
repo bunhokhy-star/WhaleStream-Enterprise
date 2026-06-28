@@ -1,7 +1,7 @@
 @echo off
 cd /d C:\Users\MAX\WhaleStream
 git add -A
-git commit -m "v47.4 — Final pre-go-live audit: 12 bugs fixed (pattern scoring, BKK timestamp, HTML race condition, crash guard, atomic write, Gate 6)"
+git commit -m "v47.5 — SL guard sweep: auto-restore missing stop-losses every cycle (critical capital protection)"
 git push
 echo.
 echo Done — v47.4 pushed to GitHub.

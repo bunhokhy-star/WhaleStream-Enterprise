@@ -1005,6 +1005,112 @@ def connect_sheet():
 
 
 # ─────────────────────────────────────────────────────────────
+# SL GUARD SWEEP
+# ─────────────────────────────────────────────────────────────
+
+def _sweep_missing_sl(data_rows):
+    """
+    Safety sweep — runs every trader cycle.
+    Checks every open Bybit position for a missing stop-loss.
+    If stopLoss == '0' or '', restores it from the Google Sheet signal row.
+    Sends Telegram alert on restore or CRITICAL alert if SL can't be found.
+    Prevents positions from running unprotected due to old placement bugs.
+    """
+    try:
+        print("\n🔒 SL guard sweep — checking all open positions...")
+        positions = get_open_positions_full()
+        if not positions:
+            print("   ✅ No open positions")
+            return
+
+        # Build lookup: coin → (sl_price_str) from OPEN sheet rows
+        sheet_sl = {}
+        for row in data_rows:
+            while len(row) < 18:
+                row.append("")
+            if row[COL_STATUS].strip() != "OPEN":
+                continue
+            coin   = row[COL_COIN].strip().upper()
+            sl_str = row[COL_SL].strip()
+            if coin and sl_str:
+                sheet_sl[coin] = sl_str
+
+        restored = 0
+        missing  = []
+
+        for pos in positions:
+            sym  = pos.get("symbol", "")
+            coin = sym.replace("USDT", "").replace("PERP", "").upper()
+            sl   = (pos.get("stopLoss", "") or "").strip()
+            side = pos.get("side", "")   # "Buy" (LONG) or "Sell" (SHORT)
+
+            # SL already set — nothing to do
+            try:
+                if sl and float(sl) > 0:
+                    print(f"   ✅ {sym}: SL = {sl}")
+                    continue
+            except (ValueError, TypeError):
+                pass
+
+            print(f"   ⚠ {sym}: NO SL detected — attempting restore from sheet...")
+
+            if coin not in sheet_sl:
+                print(f"   🚨 {sym}: no OPEN sheet row found — cannot auto-restore!")
+                missing.append(sym)
+                continue
+
+            try:
+                sl_val = float(sheet_sl[coin])
+            except ValueError:
+                print(f"   🚨 {sym}: SL in sheet not a number: {sheet_sl[coin]!r}")
+                missing.append(sym)
+                continue
+
+            info     = get_instrument_info(sym)
+            tick     = info["tick_size"] if info else 0.0001
+            sl_fmted = fmt_price(round_price(sl_val, tick), tick)
+
+            result = bybit_request("POST", "/v5/position/trading-stop", body={
+                "category":    BYBIT_CATEGORY,
+                "symbol":      sym,
+                "stopLoss":    sl_fmted,
+                "slTriggerBy": "MarkPrice",
+                "positionIdx": 0,
+            })
+            if result.get("retCode") == 0:
+                restored += 1
+                dl = "LONG 🟢" if side == "Buy" else "SHORT 🔴"
+                print(f"   🔒 {sym} {dl} — SL restored → {sl_fmted}")
+                send_telegram_alert(
+                    f"🔒 <b>SL RESTORED</b> — {coin} {dl}\n"
+                    f"  Position had no stop-loss (old placement bug)\n"
+                    f"  SL now set to: <b>{sl_fmted}</b> (from sheet signal)\n"
+                    f"  Position is now protected ✅"
+                )
+            else:
+                err = result.get("retMsg", "?")
+                print(f"   🚨 {sym}: SL restore failed — {err}")
+                missing.append(sym)
+
+        if missing:
+            send_telegram_alert(
+                f"🚨 <b>SL MISSING — MANUAL ACTION REQUIRED</b>\n"
+                + "\n".join(f"  • {s}" for s in missing)
+                + "\n\nThese positions have NO stop-loss and could not be auto-restored.\n"
+                + "⚠️ Go to Bybit → Positions → set SL manually now!"
+            )
+
+        if restored:
+            print(f"   🔒 SL guard: {restored} missing SL(s) restored")
+        elif not missing:
+            print(f"   ✅ All {len(positions)} position(s) have SL set")
+
+    except Exception as _slg_e:
+        log(f"⚠ SL guard sweep failed: {_slg_e}")
+        print(f"   ⚠ SL guard sweep error: {_slg_e}")
+
+
+# ─────────────────────────────────────────────────────────────
 # MAIN
 # ─────────────────────────────────────────────────────────────
 
@@ -1130,6 +1236,10 @@ def main():
 
     all_rows  = sheet.get_all_values()
     data_rows = all_rows[1:] if len(all_rows) > 1 else []
+
+    # ── SL guard: restore missing stop-losses on all open positions ──
+    # Runs before any new orders — protects positions regardless of CB state.
+    _sweep_missing_sl(data_rows)
 
     # ── Circuit breaker: check for consecutive LOSSes ─────────
     # ── Dynamic circuit breaker threshold ─────────────────────
