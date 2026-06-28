@@ -51,8 +51,10 @@ def _mark_done(agent_name, details=None):
     """Mark this agent done for the current cycle in daily_status.json."""
     import json, datetime
     _path  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "daily_status.json")
-    _today = datetime.date.today().isoformat()
-    _h     = datetime.datetime.now().hour
+    _bkk   = datetime.timezone(datetime.timedelta(hours=7))
+    _now   = datetime.datetime.now(_bkk)
+    _today = _now.date().isoformat()
+    _h     = _now.hour
     _cycle = str((_h // 4) * 4).zfill(2)
     _key   = f"{agent_name}_{_cycle}" if agent_name not in ("tracker", "monitor", "briefing") else agent_name
     try:
@@ -1560,16 +1562,21 @@ def main():
                         _pc_tp1     = parse_price(tp1_str)
                         _pc_tp2     = parse_price(tp2_str)
                         _pc_tp3     = parse_price(tp3_str) if tp3_str else None
+                        _pc_tp4     = parse_price(tp4_str) if tp4_str else None
                         _pc_is_long = "LONG" in signal.upper() or "🟢" in signal
                         if _pc_current and _pc_entry and _pc_tp1 and _pc_tp2:
                             _pc_upgrade = None
                             if _pc_is_long:
-                                if _pc_tp3 and _pc_current >= _pc_tp3:
+                                if _pc_tp4 and _pc_current >= _pc_tp4:
+                                    _pc_upgrade = ("TP1+TP4", _pc_tp4, "TP4")
+                                elif _pc_tp3 and _pc_current >= _pc_tp3:
                                     _pc_upgrade = ("TP1+TP3", _pc_tp3, "TP3")
                                 elif _pc_current >= _pc_tp2:
                                     _pc_upgrade = ("TP1+TP2", _pc_tp2, "TP2")
                             else:
-                                if _pc_tp3 and _pc_current <= _pc_tp3:
+                                if _pc_tp4 and _pc_current <= _pc_tp4:
+                                    _pc_upgrade = ("TP1+TP4", _pc_tp4, "TP4")
+                                elif _pc_tp3 and _pc_current <= _pc_tp3:
                                     _pc_upgrade = ("TP1+TP3", _pc_tp3, "TP3")
                                 elif _pc_current <= _pc_tp2:
                                     _pc_upgrade = ("TP1+TP2", _pc_tp2, "TP2")
@@ -1593,9 +1600,9 @@ def main():
                                 send_telegram_alert(
                                     f"🎯 <b>PARTIAL CLOSE COMPLETE — {_pc_label}</b>\n"
                                     f"  {_di} {coin}\n"
-                                    f"  Remainder (50%) reached {_pc_tp_name} @ {_pc_exit:.6g}\n"
+                                    f"  Remainder (75%) reached {_pc_tp_name} @ {_pc_exit:.6g}\n"
                                     f"  Blended P&L: <b>{_blended:+.1f}%</b>"
-                                    f" (50%@TP1 + 50%@{_pc_tp_name})\n"
+                                    f" (25%@TP1 + 25%@{_pc_tp_name})\n"
                                     f"  TP1 resolved {_pc_age_h:.0f}h ago"
                                 )
                 except Exception:
@@ -2123,7 +2130,7 @@ def main():
                         _cons_flag = os.path.join(SCRIPT_DIR, "short_conservative.flag")
                         import json as _json
                         with open(_cons_flag, "w") as _cf:
-                            _json.dump({"created_at": datetime.utcnow().isoformat(), "trades_target": 10}, _cf)
+                            _json.dump({"created_at": datetime.now(timezone(timedelta(hours=7))).isoformat(), "trades_target": 10}, _cf)
                         send_telegram_alert(
                             f"🎉 <b>SHORT REPAIR MODE LIFTED</b>\n"
                             f"  H/FF combined WR: {_rc_exit_wr:.0f}%"

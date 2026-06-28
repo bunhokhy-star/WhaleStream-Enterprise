@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v46.99  —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v47.0   —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 coins from CoinGecko (free, no key)     ║
@@ -50,8 +50,10 @@ def _mark_done(agent_name, details=None):
     """Mark this agent done for the current cycle in daily_status.json."""
     import json, datetime
     _path  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "daily_status.json")
-    _today = datetime.date.today().isoformat()
-    _h     = datetime.datetime.now().hour
+    _bkk   = datetime.timezone(datetime.timedelta(hours=7))
+    _now   = datetime.datetime.now(_bkk)
+    _today = _now.date().isoformat()
+    _h     = _now.hour
     _cycle = str((_h // 4) * 4).zfill(2)
     _key   = f"{agent_name}_{_cycle}" if agent_name not in ("tracker", "monitor", "briefing") else agent_name
     try:
@@ -253,7 +255,7 @@ except ImportError:
     MISSION_PROMPT = ""
     def print_mission_banner(): pass
 
-WHALE_STREAM_PROMPT = """WHALE-STREAM v46.99 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
+WHALE_STREAM_PROMPT = """WHALE-STREAM v47.0 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
 ROLE:
 You are an Institutional Multi-Agent Trading Committee composed of:
 • Market Regime Analyst • Smart Money Concepts Specialist • Quantitative Momentum Analyst • Liquidity & Stop-Hunt Analyst • Wyckoff Structure Analyst • Relative Strength Analyst • Breakout Probability Engine • Reversal Probability Engine • Continuation Probability Engine • Risk Management Committee
@@ -294,9 +296,9 @@ Each call provides ONE self-contained batch of market data (up to 100 coins).
 Analyze ALL coins in the provided batch.
 TOURNAMENT PROCESS (per batch):
 Step 1: Score ALL coins in the batch.
-Step 2: Select Top 5 LONG and Top 3 SHORT from this batch only.
+Step 2: Select Top 3 LONG and Top 3 SHORT from this batch only.
 Step 3: Output FULL ##JSON_START## block immediately — DO NOT wait for additional data.
-FINAL SELECTIONS: TOP 5 LONG + TOP 3 SHORT from this batch.
+FINAL SELECTIONS: TOP 3 LONG + TOP 3 SHORT from this batch.
 ALWAYS output complete JSON on first response.
 NEVER reference other batches.
 ════════════════════════════════════════════════════════════
@@ -1803,7 +1805,7 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     shorts = data.get("shorts", [])
 
     lines = []
-    lines.append(f"🐳 WHALE-STREAM v46.99")
+    lines.append(f"🐳 WHALE-STREAM v47.0")
     lines.append(f"📅 {ts}")
 
     # ── Market regime summary ─────────────────────────────────
@@ -2357,13 +2359,13 @@ def main():
     # ── Cycle guard: skip if already done this 4h slot ──────────────
     import json as _jcg, datetime as _dcg
     _cg_path  = os.path.join(SCRIPT_DIR, "daily_status.json")
-    _cg_hour  = _dcg.datetime.now().hour
+    _cg_hour  = _dcg.datetime.now(_dcg.timezone(_dcg.timedelta(hours=7))).hour
     _cg_cycle = str((_cg_hour // 4) * 4).zfill(2)
     _cg_key   = f"sigbot_{_cg_cycle}"
     try:
         with open(_cg_path, encoding="utf-8") as _cgf:
             _cg_data = _jcg.load(_cgf)
-        if _cg_data.get("date") == _dcg.date.today().isoformat() and _cg_data.get(_cg_key):
+        if _cg_data.get("date") == _dcg.datetime.now(_dcg.timezone(_dcg.timedelta(hours=7))).date().isoformat() and _cg_data.get(_cg_key):
             print(f"[CYCLE GUARD] {_cg_key} already completed today — skipping duplicate run.")
             return
     except Exception:

@@ -85,8 +85,10 @@ def _mark_done(agent_name="debrief", details=None):
     """Mark this agent done for the current cycle in daily_status.json."""
     import json as _json, datetime as _dt
     _path  = os.path.join(SCRIPT_DIR, "daily_status.json")
-    _today = _dt.date.today().isoformat()
-    _h     = _dt.datetime.now().hour
+    _bkk   = _dt.timezone(_dt.timedelta(hours=7))
+    _now   = _dt.datetime.now(_bkk)
+    _today = _now.date().isoformat()
+    _h     = _now.hour
     _cycle = str((_h // 4) * 4).zfill(2)
     _key   = f"{agent_name}_{_cycle}"
     try:

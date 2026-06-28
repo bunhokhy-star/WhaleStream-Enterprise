@@ -39,7 +39,7 @@ schtasks /create ^
   /st 00:45 ^
   /ri 240 ^
   /du 9999:59 ^
-  /ru "%USERNAME%" ^
+  /RL HIGHEST ^
   /f
 
 IF %ERRORLEVEL% EQU 0 (

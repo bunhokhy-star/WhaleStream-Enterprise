@@ -23,7 +23,7 @@ SET PYTHON=%SCRIPT_DIR%\run_strategist_recheck.bat
 SET TRADER=%SCRIPT_DIR%\run_trader_reactive.bat
 
 echo ══════════════════════════════════════════════════════
-echo   WHALE-STREAM v46.99 — Continuous Decision Loop
+echo   WHALE-STREAM v47.0 — Continuous Decision Loop
 echo   Task Scheduler Installer
 echo ══════════════════════════════════════════════════════
 echo.

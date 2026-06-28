@@ -179,6 +179,7 @@ schtasks /Create ^
   /TR "cmd.exe /c \"C:\Users\MAX\WhaleStream\run_status_server.bat\"" ^
   /SC ONLOGON ^
   /DELAY 0000:30 ^
+  /RL HIGHEST ^
   /F
 if %ERRORLEVEL% NEQ 0 echo    WARNING: StatusServer failed. Run as administrator!
 echo    OK: starts 30s after login (serves daily_status.json to Daily Checklist HTML)

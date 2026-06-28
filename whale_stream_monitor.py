@@ -55,8 +55,10 @@ def _mark_done(agent_name, details=None):
     """Mark this agent done for the current cycle in daily_status.json."""
     import json, datetime
     _path  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "daily_status.json")
-    _today = datetime.date.today().isoformat()
-    _h     = datetime.datetime.now().hour
+    _bkk   = datetime.timezone(datetime.timedelta(hours=7))
+    _now   = datetime.datetime.now(_bkk)
+    _today = _now.date().isoformat()
+    _h     = _now.hour
     _cycle = str((_h // 4) * 4).zfill(2)
     _key   = f"{agent_name}_{_cycle}" if agent_name not in ("tracker", "monitor", "briefing") else agent_name
     try:
@@ -94,9 +96,8 @@ def _mark_done(agent_name, details=None):
 try:
     from local_config import BYBIT_API_KEY, BYBIT_API_SECRET
 except ImportError:
-    import os as _os
-    BYBIT_API_KEY    = _os.getenv("BYBIT_API_KEY", "")
-    BYBIT_API_SECRET = _os.getenv("BYBIT_API_SECRET", "")
+    BYBIT_API_KEY    = os.getenv("BYBIT_API_KEY", "")
+    BYBIT_API_SECRET = os.getenv("BYBIT_API_SECRET", "")
 try:
     from local_config import BYBIT_BASE_URL             # noqa — set "https://api.bybit.com" for live
 except ImportError:
@@ -106,9 +107,8 @@ BYBIT_CATEGORY   = "linear"
 try:
     from local_config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 except ImportError:
-    import os as _os
-    TELEGRAM_BOT_TOKEN = _os.getenv("TELEGRAM_BOT_TOKEN", "")
-    TELEGRAM_CHAT_ID   = _os.getenv("TELEGRAM_CHAT_ID", "")
+    TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID", "")
 
 SCRIPT_DIR      = os.path.dirname(os.path.abspath(__file__))
 STATE_FILE      = os.path.join(SCRIPT_DIR, "monitor_state.json")

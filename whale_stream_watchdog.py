@@ -432,7 +432,7 @@ if __name__ == "__main__":
     # Build per-agent cycle summary for Daily Checklist hint
     try:
         import datetime as _wdt
-        _wh   = _wdt.datetime.now().hour
+        _wh   = _wdt.datetime.now(_wdt.timezone(_wdt.timedelta(hours=7))).hour
         _whh  = str((_wh // 4) * 4).zfill(2)
         _wsp  = os.path.join(BASE_DIR, "daily_status.json")
         with open(_wsp, encoding="utf-8") as _wsf:

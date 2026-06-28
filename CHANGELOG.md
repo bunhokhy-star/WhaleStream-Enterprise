@@ -53,6 +53,66 @@
 - Bybit API failure returns empty list with no log output — SL-to-BE check silently skipped
 - Fixed: added `print("⚠ get_open_positions_full(): Bybit API failure — SL-to-BE skipped (monitor handles it)")` before `return []`
 
+### Second audit pass — 23 additional fixes (2026-06-28)
+
+**BKK clock systemic fix — 6 files** (`bot.py`, `monitor.py`, `debrief.py`, `trader.py`, `tracker.py`, `morning_briefing.py`)
+- `_mark_done()` in all 6 files used `datetime.date.today()` / `datetime.datetime.now().hour` (local machine UTC)
+- If machine is not UTC+7, cycle key computed from wrong hour → wrong slot ticked in daily_status.json
+- Fixed: all 6 now compute `_bkk = datetime.timezone(datetime.timedelta(hours=7))` → `_now = datetime.datetime.now(_bkk)` before `_today`/`_h`
+- `debrief.py` uses `_dt` alias → `_bkk = _dt.timezone(_dt.timedelta(hours=7))` pattern
+
+**BKK cycle guard fix — `bot.py` + `trader.py`**
+- Cycle guard `_cg_hour = _dcg.datetime.now().hour` used local clock → wrong slot skip
+- Date comparison `_dcg.date.today().isoformat()` also local → could skip on UTC midnight when BKK is still previous day
+- Fixed: `_dcg.datetime.now(_dcg.timezone(_dcg.timedelta(hours=7))).hour` and same for `.date().isoformat()`
+
+**BKK cycle summary fix — `watchdog.py`**
+- Line 435: `_wh = _wdt.datetime.now().hour` used local clock for computing which 4h slot is current
+- Fixed: `_wdt.datetime.now(_wdt.timezone(_wdt.timedelta(hours=7))).hour`
+
+**`bot.py` — version strings updated: v46.99 → v47.0** (header banner, WHALE_STREAM_PROMPT, Telegram footer)
+
+**`bot.py` — prompt token waste: "TOP 5 LONG" → "TOP 3 LONG"**
+- Prompt said "Select Top 5 LONG and Top 3 SHORT" but Python code caps at 3 LONG
+- Claude generated 2 extra LONG signals every run that were silently discarded — wasted ~200 tokens/run
+- Fixed: "TOP 3 LONG + TOP 3 SHORT" in both prompt lines (Steps 2 and Final Selections)
+
+**`tracker.py` — TP4 missing from partial-close upgrade check**
+- When TP1-resolved remainder hits TP4, upgrade block only checked TP3 then TP2 — never TP4
+- Fixed: added `_pc_tp4 = parse_price(tp4_str) if tp4_str else None` and TP4 check before TP3 in both LONG/SHORT branches
+
+**`tracker.py` — `datetime.utcnow()` deprecated + wrong timezone**
+- `short_conservative.flag` created_at wrote `datetime.utcnow().isoformat()` — UTC vs BKK mismatch; deprecated in Python 3.12+
+- Fixed: `datetime.now(timezone(timedelta(hours=7))).isoformat()`
+
+**`tracker.py` — Telegram partial-close says "50%@TP1 + 50%@TPn"**
+- Quad-TP system closes 25% at TP1, not 50%. Telegram message was wrong.
+- Fixed: "Remainder (75%) reached" and "(25%@TP1 + 25%@{_pc_tp_name})"
+
+**`trader.py` — Local `COL_RESOLVED_AT = 16` shadow inside `check_circuit_breaker()`**
+- Re-declaration shadows module-level constant — dead code; any future change to the module constant would be silently ignored
+- Fixed: removed local re-declaration
+
+**`monitor.py` — Redundant `import os as _os` in two except blocks**
+- `os` already imported at module level (line 33). Two except blocks did `import os as _os` then `_os.getenv()`
+- Fixed: replaced with direct `os.getenv()` calls — 2 fewer runtime imports
+
+**`morning_briefing.py` — BALANCE_FILE re-read inside `send_briefing()`**
+- `bal` dict already in scope from `parse_balance()` called earlier in the function
+- Opened file again with new `json.load()` call — redundant I/O every morning briefing
+- Fixed: `_bal = bal.get("balance", 0.0)` and `_open = bal.get("open_positions", 0)`
+
+**BAT files — `/ru "%USERNAME%"` breaks Task Scheduler autonomy**
+- `ADD_STATUS_CHECK_TASK.bat` and `ADD_STATUS_SERVER_TASK.bat`: `/ru "%USERNAME%"` causes password prompt at registration → task created in "Run only when user logged on" mode → fails headless
+- Fixed: removed `/ru "%USERNAME%"`, added `/RL HIGHEST` for elevated privileges without user context
+
+**`SETUP_ALL_TASKS.bat` — StatusServer task missing `/RL HIGHEST`**
+- All 8 other tasks had `/RL HIGHEST`; StatusServer task did not → inconsistent privilege level
+- Fixed: added `/RL HIGHEST` before `/F`
+
+**`ADD_RECHECK_TASKS.bat` — Version string still said v46.99**
+- Fixed: updated to v47.0
+
 ---
 
 ## v46.99 — 2026-06-28 — Fourth full audit pass: 11 fixes across 7 files (learning loop P0, monitor hardening, SL-BE idempotency, scheduler)

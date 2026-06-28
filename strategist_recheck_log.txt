@@ -66,3 +66,29 @@
 [2026-06-28 17:10 BKK] Re-check #1 complete — 1 change(s)
 
 ✅ Re-check #1 complete.
+
+╔══════════════════════════════════════════════════════╗
+║   🧠  WHALE-STREAM STRATEGIST v1.3                  ║
+║   Signal Quality Council — APPROVE / VETO / REDUCE  ║
+╚══════════════════════════════════════════════════════╝
+
+
+┌─────────────────────────────────────────────────────┐
+│  🐋 WHALE-STREAM MISSION                            │
+│  Build trust through discipline. Earn live capital. │
+│  This system belongs to the whole team.             │
+└─────────────────────────────────────────────────────┘
+   Balance: $329.91  |  2d to Go-Live  |  Target: $425 (Gate 4)
+
+[2026-06-28 18:10 BKK] === Strategist run started 2026-06-28 18:10 BKK ===
+
+🔄 STRATEGIST RE-CHECK MODE — rules-based (no Claude API)
+[2026-06-28 18:10 BKK] Strategist re-check started
+   ✓ Loaded 10 previous decision(s)  [cycle 2026-06-28_1600]
+   📈 BTC regime: NEUTRAL
+   ✓ Prices fetched for 597 coins
+   ✅ No changes — all 14 decision(s) carry forward
+   ✓ Decisions written → strategist_decisions.json
+[2026-06-28 18:10 BKK] Re-check #2 complete — 0 change(s)
+
+✅ Re-check #2 complete.

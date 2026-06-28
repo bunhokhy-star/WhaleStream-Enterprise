@@ -38,7 +38,7 @@ echo start "" /B pythonw "%SCRIPT_DIR%\status_server.py" >> "%BAT_FILE%"
 
 echo Creating Task Scheduler entry: %TASK_NAME%
 
-schtasks /create /tn "%TASK_NAME%" /tr "%BAT_FILE%" /sc ONLOGON /delay 0000:30 /ru "%USERNAME%" /f
+schtasks /create /tn "%TASK_NAME%" /tr "%BAT_FILE%" /sc ONLOGON /delay 0000:30 /RL HIGHEST /f
 
 IF %ERRORLEVEL% EQU 0 (
     echo.

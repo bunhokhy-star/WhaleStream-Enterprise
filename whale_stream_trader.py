@@ -54,8 +54,10 @@ def _mark_done(agent_name, details=None):
     """Mark this agent done for the current cycle in daily_status.json."""
     import json, datetime
     _path  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "daily_status.json")
-    _today = datetime.date.today().isoformat()
-    _h     = datetime.datetime.now().hour
+    _bkk   = datetime.timezone(datetime.timedelta(hours=7))
+    _now   = datetime.datetime.now(_bkk)
+    _today = _now.date().isoformat()
+    _h     = _now.hour
     _cycle = str((_h // 4) * 4).zfill(2)
     _key   = f"{agent_name}_{_cycle}" if agent_name not in ("tracker", "monitor", "briefing") else agent_name
     try:
@@ -219,7 +221,6 @@ def check_circuit_breaker(data_rows, threshold=None):
     threshold defaults to CIRCUIT_LOSSES (3) but callers can override.
     """
     _threshold = threshold if threshold is not None else CIRCUIT_LOSSES
-    COL_RESOLVED_AT = 16
     resolved = []
     for row in data_rows:
         while len(row) < 18:
@@ -1041,14 +1042,14 @@ def main():
     # ── Cycle guard: skip if already done this 4h slot ──────────────
     import json as _jcg, datetime as _dcg
     _cg_path  = os.path.join(SCRIPT_DIR, "daily_status.json")
-    _cg_hour  = _dcg.datetime.now().hour
+    _cg_hour  = _dcg.datetime.now(_dcg.timezone(_dcg.timedelta(hours=7))).hour
     _cg_cycle = str((_cg_hour // 4) * 4).zfill(2)
     _cg_key   = f"trader_{_cg_cycle}"
     if not _is_reactive:   # reactive mode always bypasses the guard
         try:
             with open(_cg_path, encoding="utf-8") as _cgf:
                 _cg_data = _jcg.load(_cgf)
-            if _cg_data.get("date") == _dcg.date.today().isoformat() and _cg_data.get(_cg_key):
+            if _cg_data.get("date") == _dcg.datetime.now(_dcg.timezone(_dcg.timedelta(hours=7))).date().isoformat() and _cg_data.get(_cg_key):
                 print(f"[CYCLE GUARD] {_cg_key} already completed today — skipping duplicate run.")
                 _mark_done("trader", details={"placed": [], "skipped": ["cycle_guard"]})
                 return

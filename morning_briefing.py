@@ -51,8 +51,10 @@ def _mark_done(agent_name, details=None):
     """Mark this agent done for the current cycle in daily_status.json."""
     import json, datetime
     _path  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "daily_status.json")
-    _today = datetime.date.today().isoformat()
-    _h     = datetime.datetime.now().hour
+    _bkk   = datetime.timezone(datetime.timedelta(hours=7))
+    _now   = datetime.datetime.now(_bkk)
+    _today = _now.date().isoformat()
+    _h     = _now.hour
     _cycle = str((_h // 4) * 4).zfill(2)
     _key   = f"{agent_name}_{_cycle}" if agent_name not in ("tracker", "monitor", "briefing") else agent_name
     try:
@@ -865,11 +867,8 @@ if __name__ == "__main__":
 
     send_telegram(msg)
     try:
-        import json as _bj
-        with open(BALANCE_FILE, encoding="utf-8") as _bf:
-            _bdata = _bj.load(_bf)
-        _bal  = _bdata.get("balance", 0.0)
-        _open = _bdata.get("open_positions", 0)
+        _bal  = bal.get("balance", 0.0)
+        _open = bal.get("open_positions", 0)
         _brief_summary = f"Balance: ${_bal:,.0f} · {_open} open"
     except Exception:
         _brief_summary = ""
