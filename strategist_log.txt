@@ -55,3 +55,6 @@
 [2026-06-28 14:10 BKK] Strategist re-check started
 [2026-06-28 15:10 BKK] === Strategist run started 2026-06-28 15:10 BKK ===
 [2026-06-28 15:10 BKK] Strategist re-check started
+[2026-06-28 16:10 BKK] === Strategist run started 2026-06-28 16:10 BKK ===
+[2026-06-28 16:10 BKK] Market bias: NEUTRAL  BTC $60,381  SMA $60,250  (+0.2%)
+[2026-06-28 16:10 BKK] Decisions: 6 APPROVED, 9 VETOED, 3 REDUCE_SIZE — signals reviewed: 19

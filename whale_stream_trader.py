@@ -381,9 +381,10 @@ def bybit_request(method, endpoint, params=None, body=None):
         "X-BAPI-SIGN":          signature,
         "X-BAPI-TIMESTAMP":     timestamp,
         "X-BAPI-RECV-WINDOW":   recv_window,
-        "X-BAPI-DEMO-TRADING":  "1",        # ← demo account flag
         "Content-Type":         "application/json",
     }
+    if "demo" in BYBIT_BASE_URL:            # Only send demo header on demo endpoint (go-live blocker)
+        headers["X-BAPI-DEMO-TRADING"] = "1"
 
     url = f"{BYBIT_BASE_URL}{endpoint}"
     try:
@@ -518,12 +519,15 @@ def get_open_positions_full():
 
 
 def get_open_orders():
-    """Return set of symbols that already have an unfilled open order."""
+    """Return set of symbols that already have an unfilled ENTRY order (reduce-only excluded)."""
     result = bybit_request("GET", "/v5/order/realtime",
                            {"category": BYBIT_CATEGORY, "settleCoin": "USDT"})
     open_syms = set()
     if result.get("retCode") == 0:
         for order in result["result"].get("list", []):
+            # Skip reduce-only TP close orders — they are on existing positions, not new entries
+            if order.get("reduceOnly") is True or str(order.get("reduceOnly", "")).lower() == "true":
+                continue
             open_syms.add(order["symbol"])
     return open_syms
 
@@ -1097,19 +1101,19 @@ def main():
         return
 
     # ── Low balance warning ────────────────────────────────────
-    _BALANCE_WARN_THRESHOLD = 450.0   # warn when within $50 of Gate 4 floor
-    _BALANCE_GATE4_FLOOR    = 400.0   # Gate 4 requires balance > $400
+    _BALANCE_GATE4_FLOOR    = BYBIT_START_BALANCE * 0.85  # Gate 4 = 15% drawdown ($500×0.85=$425)
+    _BALANCE_WARN_THRESHOLD = _BALANCE_GATE4_FLOOR + 25   # warn $25 above Gate 4 floor
     if balance < _BALANCE_WARN_THRESHOLD:
         _dd_pct = (BYBIT_START_BALANCE - balance) / BYBIT_START_BALANCE * 100
         _remaining = balance - _BALANCE_GATE4_FLOOR
-        _warn_level = "🚨 CRITICAL" if balance < _BALANCE_GATE4_FLOOR + 20 else "⚠️ WARNING"
+        _warn_level = "🚨 CRITICAL" if balance < _BALANCE_GATE4_FLOOR + 10 else "⚠️ WARNING"
+        _breach_note = " ⚡ Gate 4 active now!" if balance < _BALANCE_GATE4_FLOOR else ""
         send_telegram_alert(
-            f"{_warn_level} <b>BYBIT DEMO BALANCE LOW</b>\n"
+            f"{_warn_level} <b>BYBIT BALANCE LOW</b>\n"
             f"  Current balance : ${balance:,.2f}\n"
             f"  Drawdown        : {_dd_pct:.1f}% from ${BYBIT_START_BALANCE:.0f} start\n"
-            f"  Gate 4 floor    : ${_BALANCE_GATE4_FLOOR:.0f} (real capital requires > this)\n"
-            f"  Remaining margin: ${_remaining:,.2f} before Gate 4 breach\n"
-            f"  ⚡ Gate 4 breach active: 40% size, max 4 positions, both LONG+SHORT allowed."
+            f"  Gate 4 floor    : ${_BALANCE_GATE4_FLOOR:.0f} (15% drawdown threshold)\n"
+            f"  Remaining margin: ${_remaining:,.2f} before Gate 4 breach{_breach_note}"
         )
         log(f"LOW BALANCE WARNING — ${balance:,.2f} ({_dd_pct:.1f}% drawdown)")
 
@@ -1575,7 +1579,7 @@ def main():
         except (ValueError, AttributeError):
             conf_val = 0
 
-        if not all([entry, sl, tp1]):
+        if entry is None or sl is None or tp1 is None:  # explicit None check — 0.0 is a valid price
             print(f"   ✗ Could not parse prices — skipping")
             print(f"     Entry: {entry_zone}  SL: {sl_str}  TP1: {tp1_str}")
             continue
@@ -1886,10 +1890,7 @@ def main():
         # Build set of symbols where the sheet shows STATUS=WIN / TP_HIT=TP1
         # (TP1 partial close already confirmed by tracker)
         _slbe_tp1_syms = set()
-        try:
-            _slbe_all_rows = sheet.get_all_values()[1:]
-        except Exception:
-            _slbe_all_rows = []
+        _slbe_all_rows = data_rows  # reuse already-fetched rows (avoid 2nd get_all_values() call)
 
         _COL_TP_HIT     = 14   # not yet defined as a constant in trader.py
         _COL_ENTRY_PRICE = 12
@@ -1932,10 +1933,11 @@ def main():
                 _new_sl_str = fmt_price(round_price(_avg_px, _tick), _tick)
 
                 _be_r = bybit_request("POST", "/v5/position/trading-stop", body={
-                    "category":    BYBIT_CATEGORY,
-                    "symbol":      _sym,
-                    "stopLoss":    _new_sl_str,
-                    "positionIdx": 0,
+                    "category":      BYBIT_CATEGORY,
+                    "symbol":        _sym,
+                    "stopLoss":      _new_sl_str,
+                    "slTriggerBy":   "MarkPrice",   # must match entry order — prevents LastPrice wick triggers
+                    "positionIdx":   0,
                 })
                 if _be_r.get("retCode") == 0:
                     _slbe_count += 1
@@ -1963,14 +1965,10 @@ def main():
     try:
         _sheet_open_coins = {row[COL_COIN].strip().upper()
                              for _, row in open_trades} if open_trades else set()
-        # Also include any fresh OPEN rows we didn't trade this cycle
-        try:
-            _all_rows  = sheet.get_all_values()[1:]
-            _sheet_open_coins |= {r[COL_COIN].strip().upper()
-                                  for r in _all_rows
-                                  if len(r) > COL_STATUS and r[COL_STATUS].strip() == "OPEN"}
-        except Exception:
-            pass  # use the set we have
+        # Also include any fresh OPEN rows we didn't trade this cycle (reuse already-fetched rows)
+        _sheet_open_coins |= {r[COL_COIN].strip().upper()
+                              for r in data_rows
+                              if len(r) > COL_STATUS and r[COL_STATUS].strip() == "OPEN"}
 
         _stale = get_stale_entry_orders(_sheet_open_coins, min_age_hours=72)
         if _stale:

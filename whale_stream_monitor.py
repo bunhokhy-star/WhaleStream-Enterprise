@@ -331,10 +331,12 @@ def run_monitor():
                 # Check if SL-to-BE is needed
                 sl_note = ""
                 curr_sl = curr.get("sl", 0)
+                # Fallback: use live avgPrice if prev_avg is 0 (e.g. state file wiped)
+                _effective_avg = prev_avg if prev_avg > 0 else float(curr.get("avgPrice", 0) or 0)
                 be_needed = False
-                if prev_side == "Buy"  and (curr_sl <= 0 or curr_sl < prev_avg):
+                if prev_side == "Buy"  and (curr_sl <= 0 or curr_sl < _effective_avg):
                     be_needed = True
-                elif prev_side == "Sell" and (curr_sl <= 0 or curr_sl > prev_avg):
+                elif prev_side == "Sell" and (curr_sl <= 0 or curr_sl > _effective_avg):
                     be_needed = True
 
                 if be_needed:
@@ -365,7 +367,7 @@ def run_monitor():
                 alerts_fired += 1
 
                 # Update stored size to current
-                state["positions"][symbol] = {**curr, "sl": curr["sl"]}
+                state["positions"][symbol] = curr  # curr already has updated sl/size
 
             elif curr_size > prev_size * 1.20:
                 # Size grew significantly — position was added to; update state silently

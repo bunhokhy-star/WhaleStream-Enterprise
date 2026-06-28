@@ -361,3 +361,35 @@ AMBER ALERT:
    ✓ Daily Checklist.html WS_EMBEDDED updated with full cycle snapshot.
 
 [2026-06-28 12:30 BKK] Watchdog complete.
+
+┌─────────────────────────────────────────────────────┐
+│  🐋 WHALE-STREAM MISSION                            │
+│  Build trust through discipline. Earn live capital. │
+│  This system belongs to the whole team.             │
+└─────────────────────────────────────────────────────┘
+   Balance: $329.91  |  2d to Go-Live  |  Target: $425 (Gate 4)
+
+[2026-06-28 16:30 BKK] === Watchdog run started ===
+✅ SigBot       last: 16:03 BKK  (27m ago)
+✅ Strategist   last: 16:10 BKK  (20m ago)
+✅ Trader       last: 16:20 BKK  (10m ago)
+
+✅ All agents healthy.
+🟢 <b>WHALE-STREAM — 4h Cycle Complete</b>
+🕐 2026-06-28 16:30 BKK
+
+<b>Agent Status:</b>
+  ✅ SigBot       — last run 16:03 BKK
+  ✅ Strategist   — last run 16:10 BKK
+  ✅ Trader       — last run 16:20 BKK
+  ✅ Tracker      — every 30 min
+  ✅ Monitor      — every 2 min
+
+💰 Balance: $329.91  (updated 2026-06-28 16:20 BKK)
+
+🐋 All systems running. Next cycle in ~4h.
+✅ Watchdog alert sent to Telegram.
+   ✓ Status logged → watchdog_16
+   ✓ Daily Checklist.html WS_EMBEDDED updated with full cycle snapshot.
+
+[2026-06-28 16:30 BKK] Watchdog complete.

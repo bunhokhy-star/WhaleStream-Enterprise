@@ -406,7 +406,9 @@ def parse_trader_activity():
     for line in lines:
         if "✅ Order placed!" in line:
             orders_placed += 1
-        if "❌ Order failed" in line or ("❌" in line and "Order" in line):
+        if "❌ Order failed" in line:   # precise match — avoids double-count with "❌ … Order …" below
+            orders_failed += 1
+        elif "❌" in line and "Order" in line:
             orders_failed += 1
         if "SKIP" in line and "REPAIR MODE" in line:
             skipped += 1
@@ -590,11 +592,13 @@ def build_message():
     if bias == "BEARISH":
         bias_emoji   = "🐻"
         bias_action  = "SHORT mode — trade only SHORTs today"
-        bias_detail  = f"BTC ${btc_price:,.0f} is {abs(btc_pct):.1f}% BELOW 20-period 4h SMA (${btc_sma:,.0f})"
+        bias_detail  = (f"BTC ${btc_price:,.0f} is {abs(btc_pct):.1f}% BELOW 20-period 4h SMA (${btc_sma:,.0f})"
+                        if btc_price and btc_sma else "BTC data unavailable (Bybit offline?)")
     elif bias == "BULLISH":
         bias_emoji   = "🐂"
         bias_action  = "LONG mode — trade only LONGs today"
-        bias_detail  = f"BTC ${btc_price:,.0f} is {abs(btc_pct):.1f}% ABOVE 20-period 4h SMA (${btc_sma:,.0f})"
+        bias_detail  = (f"BTC ${btc_price:,.0f} is {abs(btc_pct):.1f}% ABOVE 20-period 4h SMA (${btc_sma:,.0f})"
+                        if btc_price and btc_sma else "BTC data unavailable (Bybit offline?)")
     else:
         bias_emoji   = "😐"
         bias_action  = "NEUTRAL — both directions allowed"

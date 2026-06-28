@@ -376,7 +376,9 @@ def call_debrief_claude(prompt):
         system=[{"type": "text", "text": DEBRIEF_SYSTEM, "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": prompt}],
     )
-    raw = msg.content[0].text.strip()
+    raw = msg.content[0].text.strip() if msg.content else ""
+    if not raw:
+        return None
 
     # Parse JSON
     try:
@@ -417,13 +419,16 @@ def run_debrief(trades):
         return
 
     memory = load_memory()
-    now    = bkk_now_str()
     debriefs_written = []
 
     for trade in trades:
         coin      = trade.get("coin", "?")
         direction = trade.get("direction", "?")
         outcome   = trade.get("outcome", "?")
+
+        # Refresh now per trade — prevents false dedup when batch shares one timestamp
+        # (e.g. 5 trades in same run: trades 2–5 would all match trade 1's timestamp within 5min)
+        now = bkk_now_str()
 
         # Skip if already debriefed (duplicate call guard)
         if already_debriefed(memory, coin, direction, now):

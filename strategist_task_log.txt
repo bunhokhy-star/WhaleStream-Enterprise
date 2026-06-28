@@ -296,3 +296,83 @@ SyntaxError: unexpected character after line continuation character
 
    No signals to review. Bot may not have run yet or no signals generated.
    ✓ Decisions written → strategist_decisions.json
+
+╔══════════════════════════════════════════════════════╗
+║   🧠  WHALE-STREAM STRATEGIST v1.3                  ║
+║   Signal Quality Council — APPROVE / VETO / REDUCE  ║
+╚══════════════════════════════════════════════════════╝
+
+
+┌─────────────────────────────────────────────────────┐
+│  🐋 WHALE-STREAM MISSION                            │
+│  Build trust through discipline. Earn live capital. │
+│  This system belongs to the whole team.             │
+└─────────────────────────────────────────────────────┘
+   Balance: $329.91  |  2d to Go-Live  |  Target: $425 (Gate 4)
+
+[2026-06-28 16:10 BKK] === Strategist run started 2026-06-28 16:10 BKK ===
+📊 Loading portfolio state...
+   Balance: $329.91  Drawdown: 34.0%
+   Open positions: 7
+
+📋 Loading signals from Google Sheets...
+   ✓ Found 19 OPEN signal(s) from last bot run (within 26h)
+
+📚 Analysing trade history per coin...
+   LDO LONG: 0W / 0L (0 samples)
+   LIT LONG: 0W / 0L (0 samples)
+   STRK LONG: 0W / 0L (0 samples)
+   EIGEN LONG: 0W / 0L (0 samples)
+   NEAR LONG: 0W / 0L (0 samples)
+   H SHORT: 0W / 0L (0 samples)
+   JUP LONG: 0W / 0L (0 samples)
+   FF SHORT: 0W / 0L (0 samples)
+   SPX SHORT: 0W / 0L (0 samples)
+   XPL LONG: 0W / 0L (0 samples)
+   ENS SHORT: 0W / 0L (0 samples)
+   AAVE LONG: 0W / 0L (0 samples)
+   TIA LONG: 0W / 0L (0 samples)
+   MNT SHORT: 0W / 0L (0 samples)
+
+📈 Fetching BTC 7-day change...
+   BTC 7d: -5.66%  (Neutral regime)
+
+📊 BTC Market Regime Filter...
+   BTC price: $60,381  |  20-period 4h SMA: $60,250  |  +0.2% from SMA
+   😐 MARKET BIAS: NEUTRAL
+[2026-06-28 16:10 BKK] Market bias: NEUTRAL  BTC $60,381  SMA $60,250  (+0.2%)
+
+📚 Loading pattern memory...
+
+🧠 Calling Strategist Claude...
+   🧠 Model: claude-haiku-4-5-20251001
+   ✓ Response received (4408 chars)
+
+   Results: 6 APPROVED  9 VETOED  3 REDUCE_SIZE
+
+   ⛔  AAVE LONG [D]  Already open LONG position with -2.40 pnl; adding same direction violates capital protection after drawdown
+   ⛔  XPL LONG [D]  Already open LONG position with -1.64 pnl; same coin+direction stacks losses instead of cutting
+   ⛔  JUP LONG [D]  Already open LONG position with +0.33 pnl; stacking more size on same direction violates risk protocol
+   ✅  SPX SHORT [A]  Stage 5 distribution, 2W/0L record, dead-cat bounce entry at resistance, meme sector weakness confirmed
+   ⛔  FF SHORT [D]  Already open SHORT position with +0.75 pnl; stacking additional size on same direction conflicts with position management
+   ⛔  TIA LONG [D]  Already open LONG position with -0.38 pnl; adding same coin+direction violates capital protection rule
+   ✅  EIGEN LONG [B]  Stage 2 breakout, 92% confidence, strong negative funding squeeze setup, no history yet on this coin
+   ⚠️  STRK LONG [C]  90% confidence is below 92% threshold for extreme fear entries; deeply oversold but treat cautiously at 50% size
+   ⚠️  LDO LONG [C]  90% confidence borderline; extreme negative funding is strong but confidence on lower end—trade at 50% size
+   ⛔  FF SHORT [D]  Duplicate FF SHORT signal and already open SHORT position; consolidate into single decision
+   ✅  ENS SHORT [A]  Stage 5 distribution collapse, 95% confidence, -13.74% 7d structural breakdown, longs trapped at positive funding
+   ⛔  AAVE LONG [D]  Duplicate AAVE LONG; already open position blocks additional entry on same coin+direction
+   ⚠️  NEAR LONG [C]  90% confidence at borderline threshold; negative funding is good but confidence too low for full size—50% trade
+   ⛔  JUP LONG [D]  Duplicate JUP LONG; already open position blocks additional size on same coin+direction
+   ✅  H SHORT [A+]  Stage 5 catastrophic distribution, 97% confidence, 19W/0L graveyard dominance, preferred recovery SHORT coin
+   ⛔  FF SHORT [D]  Third FF SHORT duplicate; consolidate signals and respect open position +0.75 pnl
+   ✅  MNT SHORT [A]  Stage 5 catastrophic distribution, 95% confidence, -18.79% 7d structural breakdown, dead-cat bounce entry at resistance
+   ✅  LIT LONG [B]  Stage 2 breakout, 90% confidence, +14.90% 7d outperformance, strong negative funding, no history yet
+
+   Regime: Neutral regime (BTC -5.66% 7d). Bias toward STRONG Stage 5 SHORTs and proven LDO/AAVE/TIA LONGs; avoid stacking same coin.
+
+   ✓ Decisions written → strategist_decisions.json
+[2026-06-28 16:10 BKK] Decisions: 6 APPROVED, 9 VETOED, 3 REDUCE_SIZE — signals reviewed: 19
+
+✅ Strategist complete.
+

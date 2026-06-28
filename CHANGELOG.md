@@ -1,5 +1,83 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.97 — 2026-06-28 — Second full audit pass: 15 fixes across 5 files (trader, monitor, tracker, debrief, briefing)
+
+### P0 — Go-live blocker fixed
+
+**`trader.py` — Demo-trading header hardcoded (go-live blocker)**
+- `X-BAPI-DEMO-TRADING: "1"` was in `bybit_request()` unconditionally — all live Trader orders would silently go to demo account on July 1
+- Fixed: header only injected when `"demo" in BYBIT_BASE_URL`
+
+### P1 — High severity bugs fixed
+
+**`trader.py` — Gate 4 floor $400 instead of $425 (wrong threshold)**
+- `_BALANCE_GATE4_FLOOR = 400.0` hardcoded — spec is `BYBIT_START_BALANCE × 0.85 = $500 × 0.85 = $425`
+- Also: warning message falsely claimed "Gate 4 breach active" before checking if breach occurred
+- Fixed: `_BALANCE_GATE4_FLOOR = BYBIT_START_BALANCE * 0.85`; `_BALANCE_WARN_THRESHOLD = _BALANCE_GATE4_FLOOR + 25`; dynamic breach note
+
+**`trader.py` — `get_open_orders()` blocked re-entry on reduce-only TP close orders**
+- All reduce-only TP close orders appeared in `already_active` set — a coin with 4 open TP legs was blocked from new entries for same coin even after position was closed
+- Fixed: skip orders where `order.get("reduceOnly") is True` before adding to `open_syms`
+
+**`trader.py` — Entry price falsy trap (`not all([entry, sl, tp1])`)**
+- `not all([...])` evaluates `0.0` as falsy — a valid entry/SL/TP price of exactly 0.0 would abort the trade
+- Fixed: `if entry is None or sl is None or tp1 is None`
+
+**`trader.py` — SL-to-BE missing `slTriggerBy: MarkPrice`**
+- SL modification request lacked `"slTriggerBy": "MarkPrice"` — Bybit rejects or uses LastPrice by default (wick-stop risk)
+- Fixed: added `"slTriggerBy": "MarkPrice"` to `/v5/position/trading-stop` call
+
+**`monitor.py` — Redundant state spread `{**curr, "sl": curr["sl"]}`**
+- `state["positions"][symbol] = {**curr, "sl": curr["sl"]}` is a no-op spread (setting a key to its own value)
+- Fixed: `state["positions"][symbol] = curr`
+
+**`monitor.py` — SL-to-BE prev_avg=0 crash on wiped state file**
+- `be_needed` logic compared against `prev_avg=0` when state file was wiped — always triggered SL-to-BE incorrectly
+- Fixed: fallback `_effective_avg = prev_avg if prev_avg > 0 else float(curr.get("avgPrice", 0) or 0)`
+
+**`tracker.py` — `bybit_balance is not None` falsy trap (second location)**
+- `if _total_bal == 0 and bybit_balance:` was False for `bybit_balance == 0.0` in `write_dashboard_html` — missed the balance update
+- Fixed: `if _total_bal == 0 and bybit_balance is not None`
+
+**`tracker.py` — Weekly streak `%W` → ISO week (two locations)**
+- `strftime("%Y-W%W")` miscounts on non-Monday weeks and fails at year boundaries (Dec 28–Jan 3 edge case)
+- Fixed: `.isocalendar()` → `f"{iso[0]}-W{iso[1]:02d}"` in both `write_dashboard_html` (~L607) and `_update_gate_checklist` (~L1279)
+- Also fixed: empty weeks (bot down) no longer break streak — `continue`/`pass` instead of `break`/`consec=0`
+
+**`debrief.py` — Shared `now` across batch caused false dedup**
+- `now = bkk_now_str()` computed once before the for-loop — all 5 trades in a batch shared the same timestamp; trades 2–5 were silently skipped by `already_debriefed()` if same coin+direction within 5-min window
+- Fixed: moved `now = bkk_now_str()` inside the loop (refresh per trade)
+
+**`debrief.py` — IndexError on empty Claude response `msg.content[0]`**
+- If Anthropic returned an empty content array (throttle/timeout), bare index access crashed with IndexError
+- Fixed: `raw = msg.content[0].text.strip() if msg.content else ""`; return `None` if empty
+
+**`morning_briefing.py` — `btc_price`/`btc_sma` None crash in BEARISH/BULLISH f-strings**
+- NEUTRAL branch had `if btc_price and btc_sma else "..."` guard; BEARISH and BULLISH did not — TypeError on None when Bybit offline
+- Fixed: added same guard to both BEARISH and BULLISH branches
+
+**`morning_briefing.py` — Double-counting order failures**
+- `if "❌ Order failed" in line or ("❌" in line and "Order" in line)` — any "❌ Order failed" line matched both clauses, counted twice
+- Fixed: `if "❌ Order failed" in line: ... elif "❌" in line and "Order" in line:`
+
+### Speed / token optimizations
+
+**`trader.py` — Removed 2× redundant `sheet.get_all_values()` calls**
+- SL-to-BE check and stale order check each fetched all sheet rows a second time (already fetched at top of `run_trader`)
+- Fixed: both reuse `data_rows` (already fetched) — saves 2 Google Sheets API calls per Trader run
+
+### Infrastructure fixes
+
+**`SETUP_ALL_TASKS.bat` — Strategist and Watchdog used unreliable `/SC DAILY /RI 240 /DU 9999:59`**
+- `/RI` repeat-interval on a DAILY trigger is unreliable on some Windows 10 versions and stops after `/DU` expires
+- Fixed: both now use `/SC HOURLY /MO 4` — the same reliable pattern used by Bot and Trader
+
+**`PUSH_TO_GITHUB.bat` — Hardcoded commit message**
+- Commit message was stale after every version bump — required manual file edit before each push
+- Fixed: `set /p COMMIT_MSG=Enter commit message:` — dynamic prompt at push time
+
+---
+
 ## v46.96 — 2026-06-28 — Full system audit + 14 targeted fixes across all 8 agents
 
 ### P0 — Go-live blockers fixed

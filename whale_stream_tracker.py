@@ -604,18 +604,21 @@ def write_dashboard_html(all_rows):
             continue
         try:
             _dt = datetime.strptime(_ra[:10], "%Y-%m-%d").replace(tzinfo=_bkk_tz)
-            _wk = _dt.strftime("%Y-W%W")
+            _iso = _dt.isocalendar()
+            _wk  = f"{_iso[0]}-W{_iso[1]:02d}"   # ISO week — avoids %W year-boundary bugs
             _week_pnl[_wk] += r["pnl"]
         except Exception:
             pass
     _sorted_weeks = sorted(_week_pnl.keys())
     _last3 = _sorted_weeks[-3:] if len(_sorted_weeks) >= 3 else []
     g6_ok  = len(_last3) == 3 and all(_week_pnl[w] > 0 for w in _last3)
-    # Count max consecutive profitable weeks (most recent streak)
+    # Count current trailing streak (most recent consecutive profitable weeks)
     _consec = 0
     for _wk in reversed(_sorted_weeks):
         if _week_pnl[_wk] > 0:
             _consec += 1
+        elif _week_pnl[_wk] == 0:
+            continue  # empty week — don't break streak (bot may have been down)
         else:
             break
     g6_str = f"{'✅' if g6_ok else '❌'} {_consec}/3 wks"
@@ -772,7 +775,7 @@ def write_dashboard_html(all_rows):
     _unreal_pnl  = float(_bal.get("totalUnrealisedPnl", 0) or 0)
     _bal_updated = _bal.get("updated_at", "")
     # Fallback: if detailed fields missing, use the simple balance key
-    if _total_bal == 0 and bybit_balance:
+    if _total_bal == 0 and bybit_balance is not None:  # is not None — 0.0 is a valid balance
         _total_bal = bybit_balance
     _bal_color   = "#00d4a8" if _unreal_pnl >= 0 else "#ff4d4d"
     # Build balance card HTML (empty string if no balance data at all)
@@ -1276,7 +1279,8 @@ def _update_gate_checklist(all_rows):
             if not _ra:
                 continue
             _dt  = datetime.strptime(_ra[:10], "%Y-%m-%d").replace(tzinfo=bkk)
-            _wk  = _dt.strftime("%Y-W%W")
+            _iso = _dt.isocalendar()
+            _wk  = f"{_iso[0]}-W{_iso[1]:02d}"   # ISO week — avoids %W year-boundary bugs
             week_pnl[_wk] += r["pnl"]
         except Exception:
             pass
@@ -1287,6 +1291,8 @@ def _update_gate_checklist(all_rows):
         if week_pnl[_wk] > 0:
             consec += 1
             max_consec = max(max_consec, consec)
+        elif week_pnl[_wk] == 0:
+            pass  # empty week — don't reset streak (bot may have been down)
         else:
             consec = 0
     # Check if LAST 3 weeks are all profitable

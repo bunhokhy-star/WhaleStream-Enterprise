@@ -63,10 +63,9 @@ echo [3/9] Registering WhaleStreamStrategist (every 4h from 00:10)...
 schtasks /Create ^
   /TN "WhaleStreamStrategist" ^
   /TR "cmd.exe /c \"C:\Users\MAX\WhaleStream\run_strategist.bat\"" ^
-  /SC DAILY ^
+  /SC HOURLY ^
+  /MO 4 ^
   /ST 00:10 ^
-  /RI 240 ^
-  /DU 9999:59 ^
   /F ^
   /RL HIGHEST
 if %ERRORLEVEL% NEQ 0 goto :error_strategist
@@ -92,10 +91,9 @@ echo [5/9] Registering WhaleStreamWatchdog (every 4h from 00:30)...
 schtasks /Create ^
   /TN "WhaleStreamWatchdog" ^
   /TR "cmd.exe /c \"C:\Users\MAX\WhaleStream\run_watchdog.bat\"" ^
-  /SC DAILY ^
+  /SC HOURLY ^
+  /MO 4 ^
   /ST 00:30 ^
-  /RI 240 ^
-  /DU 9999:59 ^
   /F ^
   /RL HIGHEST
 if %ERRORLEVEL% NEQ 0 goto :error_watchdog

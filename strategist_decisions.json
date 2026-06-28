@@ -1,8 +1,141 @@
 {
-  "run_at": "2026-06-28 12:10 BKK",
-  "decisions": [],
-  "regime_note": "No signals to review",
-  "approved_count": 0,
-  "vetoed_count": 0,
-  "reduced_count": 0
+  "decisions": [
+    {
+      "coin": "AAVE",
+      "direction": "LONG",
+      "decision": "VETO",
+      "grade": "D",
+      "reason": "Already open LONG position with -2.40 pnl; adding same direction violates capital protection after drawdown"
+    },
+    {
+      "coin": "XPL",
+      "direction": "LONG",
+      "decision": "VETO",
+      "grade": "D",
+      "reason": "Already open LONG position with -1.64 pnl; same coin+direction stacks losses instead of cutting"
+    },
+    {
+      "coin": "JUP",
+      "direction": "LONG",
+      "decision": "VETO",
+      "grade": "D",
+      "reason": "Already open LONG position with +0.33 pnl; stacking more size on same direction violates risk protocol"
+    },
+    {
+      "coin": "SPX",
+      "direction": "SHORT",
+      "decision": "APPROVE",
+      "grade": "A",
+      "reason": "Stage 5 distribution, 2W/0L record, dead-cat bounce entry at resistance, meme sector weakness confirmed"
+    },
+    {
+      "coin": "FF",
+      "direction": "SHORT",
+      "decision": "VETO",
+      "grade": "D",
+      "reason": "Already open SHORT position with +0.75 pnl; stacking additional size on same direction conflicts with position management"
+    },
+    {
+      "coin": "TIA",
+      "direction": "LONG",
+      "decision": "VETO",
+      "grade": "D",
+      "reason": "Already open LONG position with -0.38 pnl; adding same coin+direction violates capital protection rule"
+    },
+    {
+      "coin": "EIGEN",
+      "direction": "LONG",
+      "decision": "APPROVE",
+      "grade": "B",
+      "reason": "Stage 2 breakout, 92% confidence, strong negative funding squeeze setup, no history yet on this coin"
+    },
+    {
+      "coin": "STRK",
+      "direction": "LONG",
+      "decision": "REDUCE_SIZE",
+      "grade": "C",
+      "reason": "90% confidence is below 92% threshold for extreme fear entries; deeply oversold but treat cautiously at 50% size"
+    },
+    {
+      "coin": "LDO",
+      "direction": "LONG",
+      "decision": "REDUCE_SIZE",
+      "grade": "C",
+      "reason": "90% confidence borderline; extreme negative funding is strong but confidence on lower end\u2014trade at 50% size"
+    },
+    {
+      "coin": "FF",
+      "direction": "SHORT",
+      "decision": "VETO",
+      "grade": "D",
+      "reason": "Duplicate FF SHORT signal and already open SHORT position; consolidate into single decision"
+    },
+    {
+      "coin": "ENS",
+      "direction": "SHORT",
+      "decision": "APPROVE",
+      "grade": "A",
+      "reason": "Stage 5 distribution collapse, 95% confidence, -13.74% 7d structural breakdown, longs trapped at positive funding"
+    },
+    {
+      "coin": "AAVE",
+      "direction": "LONG",
+      "decision": "VETO",
+      "grade": "D",
+      "reason": "Duplicate AAVE LONG; already open position blocks additional entry on same coin+direction"
+    },
+    {
+      "coin": "NEAR",
+      "direction": "LONG",
+      "decision": "REDUCE_SIZE",
+      "grade": "C",
+      "reason": "90% confidence at borderline threshold; negative funding is good but confidence too low for full size\u201450% trade"
+    },
+    {
+      "coin": "JUP",
+      "direction": "LONG",
+      "decision": "VETO",
+      "grade": "D",
+      "reason": "Duplicate JUP LONG; already open position blocks additional size on same coin+direction"
+    },
+    {
+      "coin": "H",
+      "direction": "SHORT",
+      "decision": "APPROVE",
+      "grade": "A+",
+      "reason": "Stage 5 catastrophic distribution, 97% confidence, 19W/0L graveyard dominance, preferred recovery SHORT coin"
+    },
+    {
+      "coin": "FF",
+      "direction": "SHORT",
+      "decision": "VETO",
+      "grade": "D",
+      "reason": "Third FF SHORT duplicate; consolidate signals and respect open position +0.75 pnl"
+    },
+    {
+      "coin": "MNT",
+      "direction": "SHORT",
+      "decision": "APPROVE",
+      "grade": "A",
+      "reason": "Stage 5 catastrophic distribution, 95% confidence, -18.79% 7d structural breakdown, dead-cat bounce entry at resistance"
+    },
+    {
+      "coin": "LIT",
+      "direction": "LONG",
+      "decision": "APPROVE",
+      "grade": "B",
+      "reason": "Stage 2 breakout, 90% confidence, +14.90% 7d outperformance, strong negative funding, no history yet"
+    }
+  ],
+  "regime_note": "Neutral regime (BTC -5.66% 7d). Bias toward STRONG Stage 5 SHORTs and proven LDO/AAVE/TIA LONGs; avoid stacking same coin.",
+  "approved_count": 6,
+  "vetoed_count": 9,
+  "reduced_count": 3,
+  "run_at": "2026-06-28 16:10 BKK",
+  "signal_count": 19,
+  "btc_7d_pct": -5.662686093082732,
+  "market_bias": "NEUTRAL",
+  "cycle_id": "2026-06-28_1600",
+  "recheck_count": 0,
+  "recheck_changes": []
 }
