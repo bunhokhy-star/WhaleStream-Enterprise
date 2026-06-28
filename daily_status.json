@@ -41,14 +41,14 @@
   "monitor_details": {
     "positions": 7,
     "alerts": 0,
-    "last_run": "17:10 BKK"
+    "last_run": "17:24 BKK"
   },
   "tracker_details": {
     "resolved": 0,
     "wins": 0,
     "losses": 0,
     "open": 53,
-    "last_run": "17:00 BKK"
+    "last_run": "17:19 BKK"
   },
   "sigbot_12": true,
   "sigbot_12_details": {
@@ -118,7 +118,9 @@
   "trader_16": true,
   "trader_16_details": {
     "placed": [],
-    "skipped": []
+    "skipped": [
+      "CIRCUIT BREAKER TRIGGERED \u2014 auto-paused"
+    ]
   },
   "watchdog_16": true,
   "watchdog_16_details": {

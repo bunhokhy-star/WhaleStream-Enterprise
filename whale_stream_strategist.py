@@ -682,10 +682,12 @@ def parse_strategist_response(response_text):
 # ═══════════════════════════════════════════════════════════════
 
 def write_decisions(decisions_data):
-    """Write the final decisions to strategist_decisions.json."""
+    """Write the final decisions to strategist_decisions.json (atomic)."""
     try:
-        with open(DECISIONS_FILE, "w", encoding="utf-8") as f:
+        _tmp = DECISIONS_FILE + ".tmp"
+        with open(_tmp, "w", encoding="utf-8") as f:
             json.dump(decisions_data, f, indent=2)
+        os.replace(_tmp, DECISIONS_FILE)
         print(f"   ✓ Decisions written → strategist_decisions.json")
     except Exception as e:
         print(f"   ✗ Failed to write decisions: {e}")
@@ -891,7 +893,7 @@ def main():
 
             # Rule 3 — Pattern memory: ≥3 consecutive losses
             if _new_dec != "VETO":
-                _consec = (memory.get("coin_lessons", {})
+                _consec = (memory.get("coin_stats", {})
                                .get(_coin, {})
                                .get("consecutive_losses", 0))
                 if _consec >= 3:

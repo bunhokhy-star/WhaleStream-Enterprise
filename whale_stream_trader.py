@@ -1905,6 +1905,16 @@ def main():
                 continue  # no Bybit order logged → wasn't auto-traded
             _slbe_tp1_syms.add(_sbr[COL_COIN].strip().upper() + "USDT")
 
+        # Load idempotency record — prevents duplicate Telegram alerts every 4h cycle
+        _sl_be_state_file = os.path.join(SCRIPT_DIR, "sl_be_applied.json")
+        try:
+            with open(_sl_be_state_file, "r", encoding="utf-8") as _f:
+                _sl_be_applied = set(json.load(_f))
+        except Exception:
+            _sl_be_applied = set()
+        # Prune symbols no longer in current TP1 set (trade closed or TP advanced)
+        _sl_be_applied &= _slbe_tp1_syms
+
         if not _slbe_tp1_syms:
             print("   ℹ No WIN/TP1 sheet rows — nothing to tighten")
         else:
@@ -1919,12 +1929,19 @@ def main():
                 if _avg_px <= 0:
                     continue
 
+                # Already applied in a previous cycle — skip to avoid duplicate alerts
+                if _sym in _sl_be_applied:
+                    print(f"   ✅ {_sym} — SL-to-BE already applied (idempotency guard)")
+                    continue
+
                 # Check if SL already at/better than breakeven
                 if _side == "Buy" and _cur_sl >= _avg_px:    # LONG: SL ≥ entry → already BE or better
                     print(f"   ✅ {_sym} LONG — SL already ≥ entry ({_cur_sl:.8g} ≥ {_avg_px:.8g})")
+                    _sl_be_applied.add(_sym)  # mark done even without API call
                     continue
                 if _side == "Sell" and 0 < _cur_sl <= _avg_px:  # SHORT: SL ≤ entry → already BE or better
                     print(f"   ✅ {_sym} SHORT — SL already ≤ entry ({_cur_sl:.8g} ≤ {_avg_px:.8g})")
+                    _sl_be_applied.add(_sym)  # mark done even without API call
                     continue
 
                 # Get tick size for proper price formatting
@@ -1941,6 +1958,7 @@ def main():
                 })
                 if _be_r.get("retCode") == 0:
                     _slbe_count += 1
+                    _sl_be_applied.add(_sym)   # record — won't re-alert next cycle
                     _dl = "LONG 🟢" if _side == "Buy" else "SHORT 🔴"
                     print(f"   🛡 {_sym} {_dl} — SL → breakeven  {_cur_sl:.8g} → {_new_sl_str}")
                     send_telegram_alert(
@@ -1955,6 +1973,13 @@ def main():
 
             if _slbe_count == 0 and _slbe_tp1_syms:
                 print(f"   ✅ All {len(_slbe_tp1_syms)} TP1 position(s) already at/beyond breakeven")
+
+        # Persist idempotency state
+        try:
+            with open(_sl_be_state_file, "w", encoding="utf-8") as _f:
+                json.dump(list(_sl_be_applied), _f)
+        except Exception as _be_save_e:
+            print(f"   ⚠ Could not save sl_be_applied.json: {_be_save_e}")
     except Exception as _slbe_e:
         print(f"   ⚠ SL-to-breakeven check failed: {_slbe_e}")
 

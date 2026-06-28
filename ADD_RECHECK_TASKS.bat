@@ -1,7 +1,7 @@
 @echo off
 :: ════════════════════════════════════════════════════════════════════
 :: ADD_RECHECK_TASKS.bat
-:: Registers 6 Task Scheduler entries for the v46.98 continuous
+:: Registers 6 Task Scheduler entries for the v46.99 continuous
 :: decision loop:
 ::
 ::   Strategist re-checks  (rules-only, no Claude)
@@ -23,7 +23,7 @@ SET PYTHON=%SCRIPT_DIR%\run_strategist_recheck.bat
 SET TRADER=%SCRIPT_DIR%\run_trader_reactive.bat
 
 echo ══════════════════════════════════════════════════════
-echo   WHALE-STREAM v46.98 — Continuous Decision Loop
+echo   WHALE-STREAM v46.99 — Continuous Decision Loop
 echo   Task Scheduler Installer
 echo ══════════════════════════════════════════════════════
 echo.
@@ -34,7 +34,7 @@ schtasks /create ^
   /tr "\"%PYTHON%\"" ^
   /sc HOURLY /mo 4 /st 01:10 ^
   /rl HIGHEST ^
-  /ru "%USERNAME%" /f
+  /f
 echo [A] Strategist re-check A registered (01:10 +4h)
 
 :: ── Strategist Re-check B  (02:10 every 4h) ─────────────────
@@ -43,7 +43,7 @@ schtasks /create ^
   /tr "\"%PYTHON%\"" ^
   /sc HOURLY /mo 4 /st 02:10 ^
   /rl HIGHEST ^
-  /ru "%USERNAME%" /f
+  /f
 echo [B] Strategist re-check B registered (02:10 +4h)
 
 :: ── Strategist Re-check C  (03:10 every 4h) ─────────────────
@@ -52,7 +52,7 @@ schtasks /create ^
   /tr "\"%PYTHON%\"" ^
   /sc HOURLY /mo 4 /st 03:10 ^
   /rl HIGHEST ^
-  /ru "%USERNAME%" /f
+  /f
 echo [C] Strategist re-check C registered (03:10 +4h)
 
 echo.
@@ -63,7 +63,7 @@ schtasks /create ^
   /tr "\"%TRADER%\"" ^
   /sc HOURLY /mo 4 /st 01:15 ^
   /rl HIGHEST ^
-  /ru "%USERNAME%" /f
+  /f
 echo [D] Trader reactive A registered (01:15 +4h)
 
 :: ── Trader Reactive B  (02:15 every 4h) ──────────────────────
@@ -72,7 +72,7 @@ schtasks /create ^
   /tr "\"%TRADER%\"" ^
   /sc HOURLY /mo 4 /st 02:15 ^
   /rl HIGHEST ^
-  /ru "%USERNAME%" /f
+  /f
 echo [E] Trader reactive B registered (02:15 +4h)
 
 :: ── Trader Reactive C  (03:15 every 4h) ──────────────────────
@@ -81,7 +81,7 @@ schtasks /create ^
   /tr "\"%TRADER%\"" ^
   /sc HOURLY /mo 4 /st 03:15 ^
   /rl HIGHEST ^
-  /ru "%USERNAME%" /f
+  /f
 echo [F] Trader reactive C registered (03:15 +4h)
 
 echo.

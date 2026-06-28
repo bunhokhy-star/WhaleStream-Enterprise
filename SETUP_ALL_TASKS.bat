@@ -25,22 +25,28 @@ echo.
 
 :: ── STEP 1: Delete EVERY possible task name variant ──────────────────
 echo [1/9] Clearing all existing WhaleStream tasks...
-schtasks /Delete /TN "WhaleStream-Bot"        /F >nul 2>&1
-schtasks /Delete /TN "WhaleStream-Trader"     /F >nul 2>&1
-schtasks /Delete /TN "WhaleStream-Tracker"    /F >nul 2>&1
-schtasks /Delete /TN "WhaleStream-Monitor"    /F >nul 2>&1
-schtasks /Delete /TN "WhaleStream-Briefing"   /F >nul 2>&1
-schtasks /Delete /TN "WhaleStreamStrategist"  /F >nul 2>&1
-schtasks /Delete /TN "WhaleStreamWatchdog"    /F >nul 2>&1
-schtasks /Delete /TN "WhaleStreamBot"         /F >nul 2>&1
-schtasks /Delete /TN "WhaleStreamTrader"      /F >nul 2>&1
-schtasks /Delete /TN "WhaleStreamTracker"     /F >nul 2>&1
-schtasks /Delete /TN "WhaleStream Bot"        /F >nul 2>&1
-schtasks /Delete /TN "WhaleStream Trader"     /F >nul 2>&1
-schtasks /Delete /TN "Whale-Stream-Bot"       /F >nul 2>&1
-schtasks /Delete /TN "Whale-Stream-Trader"    /F >nul 2>&1
-schtasks /Delete /TN "WS-Bot"                 /F >nul 2>&1
-schtasks /Delete /TN "WS-Trader"              /F >nul 2>&1
+schtasks /Delete /TN "WhaleStream-Bot"                    /F >nul 2>&1
+schtasks /Delete /TN "WhaleStream-Trader"                 /F >nul 2>&1
+schtasks /Delete /TN "WhaleStream-Tracker"                /F >nul 2>&1
+schtasks /Delete /TN "WhaleStream-Monitor"                /F >nul 2>&1
+schtasks /Delete /TN "WhaleStream-Briefing"               /F >nul 2>&1
+schtasks /Delete /TN "WhaleStreamStrategist"              /F >nul 2>&1
+schtasks /Delete /TN "WhaleStreamWatchdog"                /F >nul 2>&1
+schtasks /Delete /TN "WhaleStreamBot"                     /F >nul 2>&1
+schtasks /Delete /TN "WhaleStreamTrader"                  /F >nul 2>&1
+schtasks /Delete /TN "WhaleStreamTracker"                 /F >nul 2>&1
+schtasks /Delete /TN "WhaleStream Bot"                    /F >nul 2>&1
+schtasks /Delete /TN "WhaleStream Trader"                 /F >nul 2>&1
+schtasks /Delete /TN "Whale-Stream-Bot"                   /F >nul 2>&1
+schtasks /Delete /TN "Whale-Stream-Trader"                /F >nul 2>&1
+schtasks /Delete /TN "WS-Bot"                             /F >nul 2>&1
+schtasks /Delete /TN "WS-Trader"                          /F >nul 2>&1
+schtasks /Delete /TN "WhaleStream-Strategist-Recheck-A"   /F >nul 2>&1
+schtasks /Delete /TN "WhaleStream-Strategist-Recheck-B"   /F >nul 2>&1
+schtasks /Delete /TN "WhaleStream-Strategist-Recheck-C"   /F >nul 2>&1
+schtasks /Delete /TN "WhaleStream-Trader-Reactive-A"      /F >nul 2>&1
+schtasks /Delete /TN "WhaleStream-Trader-Reactive-B"      /F >nul 2>&1
+schtasks /Delete /TN "WhaleStream-Trader-Reactive-C"      /F >nul 2>&1
 echo    Done — slate wiped clean.
 echo.
 
@@ -134,7 +140,8 @@ schtasks /Create ^
   /TR "cmd.exe /c \"C:\Users\MAX\WhaleStream\run_briefing.bat\"" ^
   /SC DAILY ^
   /ST 07:00 ^
-  /F
+  /F ^
+  /RL HIGHEST
 if %ERRORLEVEL% NEQ 0 goto :error_briefing
 echo    OK: every day at 07:00 BKK
 echo.
@@ -146,7 +153,8 @@ schtasks /Create ^
   /TR "cmd.exe /c \"C:\Users\MAX\WhaleStream\run_orphan_check.bat\"" ^
   /SC DAILY ^
   /ST 06:00 ^
-  /F
+  /F ^
+  /RL HIGHEST
 if %ERRORLEVEL% NEQ 0 echo    WARNING: OrphanCheck failed. Run as administrator!
 echo    OK: daily at 06:00 (orphaned Bybit position detection)
 echo.
@@ -158,7 +166,8 @@ schtasks /Create ^
   /TR "cmd.exe /c \"C:\Users\MAX\WhaleStream\run_log_analyzer.bat\"" ^
   /SC DAILY ^
   /ST 07:00 ^
-  /F
+  /F ^
+  /RL HIGHEST
 if %ERRORLEVEL% NEQ 0 echo    WARNING: LogAnalyzer failed. Run as administrator!
 echo    OK: daily at 07:00 (log health report)
 echo.

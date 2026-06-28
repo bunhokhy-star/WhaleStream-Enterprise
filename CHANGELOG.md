@@ -1,5 +1,58 @@
 # WHALE-STREAM CHANGELOG
 
+## v46.99 — 2026-06-28 — Fourth full audit pass: 11 fixes across 7 files (learning loop P0, monitor hardening, SL-BE idempotency, scheduler)
+
+### P0 — Critical fixes
+
+**`debrief.py` + `strategist.py` — `consecutive_losses` key never written — Strategist Rule 3 permanently dead**
+- `save_memory()` built `coin_lessons[coin]` as `{direction: [lessons]}` — no `consecutive_losses` integer anywhere
+- Strategist Rule 3 read `memory["coin_lessons"][coin]["consecutive_losses"]` — always returned default 0 — coins with 3+ consecutive losses were never vetoed by the recheck agent
+- Fixed (debrief.py): after building `coin_lessons`, now also builds `memory["coin_stats"][coin] = {"consecutive_losses": N}` by scanning recent debriefs newest-first and counting consecutive LOSS outcomes
+- Fixed (strategist.py Rule 3): read path changed from `coin_lessons` to `coin_stats` — correctly reads the integer; also keeps `coin_lessons` direction-loop clean
+
+### P1 — High-priority fixes
+
+**`monitor.py` — `get_all_positions()` API failure returns `{}` — treats all positions as closed (false alerts)**
+- On Bybit API error (`retCode != 0`), returned empty dict `{}` — monitor then diffed against state and fired "POSITION CLOSED" Telegram alerts for every tracked position
+- Could cause panic during brief network interruptions; every position fires a false close alert
+- Fixed: returns `None` on API failure; `run_monitor()` now checks `if current_positions is None: log(...); _mark_done(...); return` before diffing
+
+**`monitor.py` — SL-to-BE re-fires on every TP2/TP3 partial fill — no `be_set` guard**
+- When TP1 closed 25% of a position, monitor correctly moved SL to breakeven
+- But TP2 closing another 25% also triggers `curr_size <= prev_size * PARTIAL_CLOSE_RATIO` — re-fires SL-to-BE with another Telegram alert
+- Fixed: added `"be_set": True` flag written to state after successful SL move; `be_needed` block now gates on `if not prev.get("be_set"):`; new branch prints "✓ SL-to-BE already applied (skipping)"
+
+**`monitor.py` — `save_state()` direct write — corrupt on crash**
+- Direct `json.dump()` to `STATE_FILE` — a crash mid-write corrupts `monitor_state.json`, causing monitor to lose all position tracking
+- Fixed: atomic write via temp file + `os.replace()`
+
+**`trader.py` — SL-to-BE re-fires every 4h cycle — duplicate Telegram alerts**
+- When Bybit position's `stopLoss` field doesn't immediately reflect a previously applied conditional SL, the `SL ≥ entry` bypass check fails and the cycle re-fires the `trading-stop` API call with another Telegram alert
+- Fixed: new `sl_be_applied.json` idempotency file; records which symbols have had SL-to-BE applied; pruned each cycle to only symbols still in `_slbe_tp1_syms`; prevents duplicate Telegram alerts across cycles
+
+**`bot.py` — LONG confidence prompt says `Reject < 90%` but code floor is 88%**
+- Prompt instructed Claude to discard 88-89% LONGs that the code would accept — Claude generated no TIER 2 88-89% signals
+- Fixed: `LONGS: Reject < 88%. Output ONLY 88–100.` and TIER 2 band updated from `90–91%` to `88–91%`
+- Also fixed: all 4 stale version strings `v46.93` → `v46.99` in bot.py
+
+### P2 — Hardening fixes
+
+**`strategist.py` — `write_decisions()` direct write — corrupt on crash**
+- `DECISIONS_FILE` written directly with `json.dump()` — crash mid-write leaves truncated JSON; Trader reads corrupted decisions
+- Fixed: atomic write via temp file + `os.replace()`
+
+**`SETUP_ALL_TASKS.bat` — 3 tasks missing `/RL HIGHEST` + Step 1 missing 6 recheck deletes**
+- `WhaleStream-Briefing`, `WhaleStream-OrphanCheck`, `WhaleStream-LogAnalyzer` registered without `/RL HIGHEST` — could be preempted by normal-priority processes under load
+- Fixed: added `/RL HIGHEST` to all three tasks
+- Step 1 cleanup did not delete `WhaleStream-Strategist-Recheck-A/B/C` or `WhaleStream-Trader-Reactive-A/B/C` — re-running SETUP_ALL_TASKS.bat left ghost tasks from old ADD_RECHECK_TASKS.bat runs
+- Fixed: added all 6 delete lines to Step 1
+
+**`ADD_RECHECK_TASKS.bat` — `/ru "%USERNAME%"` resolves to wrong account when run as admin**
+- When BAT is run as Administrator, `%USERNAME%` resolves to the admin account name, not the logged-in user — tasks may register under the wrong account
+- Fixed: removed `/ru "%USERNAME%"` from all 6 task registrations (matches SETUP_ALL_TASKS.bat behavior)
+
+---
+
 ## v46.98 — 2026-06-28 — Third full audit pass: 19 fixes across 8 files (learning loop, go-live blockers, scheduling, hardening)
 
 ### P0 — Critical bugs fixed

@@ -212,6 +212,21 @@ def save_memory(memory):
     memory["avoid_patterns"]  = sorted(avoid_patterns)
     memory["prefer_patterns"] = sorted(prefer_patterns)
 
+    # Compute consecutive_losses per coin (most recent trades first)
+    # Stored separately so coin_lessons[coin] direction-loop is not disturbed.
+    coin_stats = {}
+    for c in coin_lessons:
+        c_debriefs = [d for d in memory.get("debriefs", []) if d.get("coin", "") == c]
+        c_debriefs.sort(key=lambda d: d.get("debrief_at", ""), reverse=True)
+        consec = 0
+        for d in c_debriefs:
+            if d.get("outcome", "").upper() == "LOSS":
+                consec += 1
+            else:
+                break
+        coin_stats[c] = {"consecutive_losses": consec}
+    memory["coin_stats"] = coin_stats
+
     try:
         _tmp = MEMORY_FILE + ".tmp"
         with open(_tmp, "w", encoding="utf-8") as f:

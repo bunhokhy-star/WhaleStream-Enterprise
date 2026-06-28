@@ -192,23 +192,25 @@ def send_alert(msg):
 # BYBIT POSITION HELPERS
 # ─────────────────────────────────────────────────────────────
 def get_all_positions():
-    """Return dict of symbol → position dict for all open positions (size > 0)."""
+    """Return dict of symbol → position dict for all open positions (size > 0).
+    Returns None on API failure — caller must handle to avoid false close alerts."""
     result = bybit_request("GET", "/v5/position/list",
                            {"category": BYBIT_CATEGORY, "settleCoin": "USDT"})
+    if result.get("retCode") != 0:
+        return None   # API failure — do NOT treat as "no positions open"
     positions = {}
-    if result.get("retCode") == 0:
-        for p in result["result"].get("list", []):
-            sz = float(p.get("size", 0) or 0)
-            if sz > 0:
-                positions[p["symbol"]] = {
-                    "size":     sz,
-                    "side":     p.get("side", ""),          # "Buy" / "Sell"
-                    "avgPrice": float(p.get("avgPrice", 0) or 0),
-                    "sl":       float(p.get("stopLoss", 0) or 0),
-                    "tp":       float(p.get("takeProfit", 0) or 0),
-                    "liqPrice": float(p.get("liqPrice", 0) or 0),
-                    "unrealisedPnl": float(p.get("unrealisedPnl", 0) or 0),
-                }
+    for p in result["result"].get("list", []):
+        sz = float(p.get("size", 0) or 0)
+        if sz > 0:
+            positions[p["symbol"]] = {
+                "size":     sz,
+                "side":     p.get("side", ""),          # "Buy" / "Sell"
+                "avgPrice": float(p.get("avgPrice", 0) or 0),
+                "sl":       float(p.get("stopLoss", 0) or 0),
+                "tp":       float(p.get("takeProfit", 0) or 0),
+                "liqPrice": float(p.get("liqPrice", 0) or 0),
+                "unrealisedPnl": float(p.get("unrealisedPnl", 0) or 0),
+            }
     return positions
 
 
@@ -272,8 +274,10 @@ def load_state():
 
 def save_state(state):
     try:
-        with open(STATE_FILE, "w", encoding="utf-8") as f:
+        _tmp = STATE_FILE + ".tmp"
+        with open(_tmp, "w", encoding="utf-8") as f:
             json.dump(state, f, indent=2)
+        os.replace(_tmp, STATE_FILE)
     except Exception as e:
         log(f"   ⚠ Could not save state: {e}")
 
@@ -291,6 +295,11 @@ def run_monitor():
 
     # Fetch current Bybit positions
     current_positions = get_all_positions()
+    if current_positions is None:
+        log("   ⚠ Bybit API failure — skipping cycle (cannot diff positions safely)")
+        _mark_done("monitor", details={"positions": "API_ERROR", "alerts": 0,
+                                       "last_run": bkk.strftime("%H:%M") + " BKK"})
+        return
     log(f"   Bybit open positions: {len(current_positions)} ({', '.join(current_positions) or 'none'})")
 
     alerts_fired = 0
@@ -334,14 +343,16 @@ def run_monitor():
                 # Fallback: use live avgPrice if prev_avg is 0 (e.g. state file wiped)
                 _effective_avg = prev_avg if prev_avg > 0 else float(curr.get("avgPrice", 0) or 0)
                 be_needed = False
-                if prev_side == "Buy"  and (curr_sl <= 0 or curr_sl < _effective_avg):
-                    be_needed = True
-                elif prev_side == "Sell" and (curr_sl <= 0 or curr_sl > _effective_avg):
-                    be_needed = True
+                if not prev.get("be_set"):   # skip if SL-to-BE already applied this trade
+                    if prev_side == "Buy"  and (curr_sl <= 0 or curr_sl < _effective_avg):
+                        be_needed = True
+                    elif prev_side == "Sell" and (curr_sl <= 0 or curr_sl > _effective_avg):
+                        be_needed = True
 
                 if be_needed:
                     ok, result = move_sl_to_breakeven(symbol, prev_side, curr["avgPrice"])  # use live avg, not stale prev_avg
                     if ok:
+                        curr["be_set"] = True   # prevent re-firing on TP2/TP3 partial closes
                         was_str = f"{curr_sl:.6g}" if curr_sl else "none"   # pre-compute to avoid invalid f-string format spec
                         sl_note = (
                             f"\n  🛡 SL moved to breakeven: {result:.6g}"
@@ -351,6 +362,8 @@ def run_monitor():
                     else:
                         sl_note = f"\n  ⚠ SL-to-BE failed: {result}"
                         log(f"   ⚠ SL-to-BE failed for {symbol}: {result}")
+                elif prev.get("be_set"):
+                    sl_note = f"\n  ✓ SL-to-BE already applied (skipping)"
                 else:
                     sl_note = f"\n  ✓ SL already at/above breakeven ({curr_sl:.6g})"
 

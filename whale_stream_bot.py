@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v46.93  —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v46.99  —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 coins from CoinGecko (free, no key)     ║
@@ -253,7 +253,7 @@ except ImportError:
     MISSION_PROMPT = ""
     def print_mission_banner(): pass
 
-WHALE_STREAM_PROMPT = """WHALE-STREAM v46.93 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
+WHALE_STREAM_PROMPT = """WHALE-STREAM v46.99 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
 ROLE:
 You are an Institutional Multi-Agent Trading Committee composed of:
 • Market Regime Analyst • Smart Money Concepts Specialist • Quantitative Momentum Analyst • Liquidity & Stop-Hunt Analyst • Wyckoff Structure Analyst • Relative Strength Analyst • Breakout Probability Engine • Reversal Probability Engine • Continuation Probability Engine • Risk Management Committee
@@ -471,12 +471,12 @@ Stability Score 15 | Liquidity Quality 10 | Exhaustion Probability 10 | Risk/Rew
 TOTAL = 100
 ════════════════════════════════════════════════════════════
 CONFIDENCE FILTER:
-• LONGS:  Reject < 90%. Output ONLY 90–100.
+• LONGS:  Reject < 88%. Output ONLY 88–100.
 • SHORTS: Reject < 95%. Output ONLY 95–100. (Raised from 91% — SHORT WR was 24% on real trades, strategy in repair mode)
 • In Bear Consolidation or BTC.D HIGH + Extreme Fear: Reject SHORTs entirely (output STAY OUT).
 
 CONFIDENCE CALIBRATION — LONG BANDS (MANDATORY — do not artificially cap at 90%):
-• 90–91%  TIER 2 — Minimum qualifying setup. Two or more factors confirmed, one uncertainty remains.
+• 88–91%  TIER 2 — Minimum qualifying setup. Two or more factors confirmed, one uncertainty remains.
 • 92–96%  TIER 1 — ELITE setup. Score HERE if THREE or more of the following are true:
     ✅ Market regime is Bull Expansion or Bull Consolidation
     ✅ Stage 2 or Stage 3 trend structure confirmed with rising OI
@@ -1803,7 +1803,7 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     shorts = data.get("shorts", [])
 
     lines = []
-    lines.append(f"🐳 WHALE-STREAM v46.93")
+    lines.append(f"🐳 WHALE-STREAM v46.99")
     lines.append(f"📅 {ts}")
 
     # ── Market regime summary ─────────────────────────────────
@@ -2372,7 +2372,7 @@ def main():
 
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🐳  WHALE-STREAM v46.93 — AUTO BOT STARTING    ║")
+    print("║   🐳  WHALE-STREAM v46.99 — AUTO BOT STARTING    ║")
     print("╚══════════════════════════════════════════════════╝")
     # Check conservative flag early so we can show it in the startup banner
     _short_conservative_early = os.path.exists(os.path.join(SCRIPT_DIR, "short_conservative.flag"))

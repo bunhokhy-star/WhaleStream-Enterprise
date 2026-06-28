@@ -49,3 +49,31 @@
    No new orders will be placed until you clear the pause.
    → Delete 'paused.flag' or run CLEAR_PAUSE.bat to resume.
 [2026-06-28 15:15 BKK] PAUSED — circuit breaker flag present, skipping all orders
+
+┌─────────────────────────────────────────────────────┐
+│  🐋 WHALE-STREAM MISSION                            │
+│  Build trust through discipline. Earn live capital. │
+│  This system belongs to the whole team.             │
+└─────────────────────────────────────────────────────┘
+   Balance: $329.91  |  2d to Go-Live  |  Target: $425 (Gate 4)
+
+
+╔══════════════════════════════════════════════════╗
+║   🤖  WHALE-STREAM TRADER — BYBIT DEMO          ║
+║   💰  $20 margin × 10x = $200 per trade        ║
+╚══════════════════════════════════════════════════╝
+
+   ⏱ PC clock is 121 ms behind of Bybit — offset applied
+⚡ REACTIVE MODE — re-checking decisions from Strategist re-check
+💳 Checking Bybit demo wallet...
+   ✓ Available USDT: $329.91  (total: $329.91)
+[2026-06-28 17:15 BKK] LOW BALANCE WARNING — $329.91 (34.0% drawdown)
+
+📋 Loading signals from Google Sheets...
+[2026-06-28 17:15 BKK] Google Sheets connected OK
+
+🚨 CIRCUIT BREAKER TRIGGERED!
+   Last 3 resolved trades all LOSS — auto-pausing trader.
+   Written: paused.flag
+   → Run CLEAR_PAUSE.bat after reviewing the situation to resume.
+[2026-06-28 17:15 BKK] CIRCUIT BREAKER — last 3 trades all LOSS, trader PAUSED
