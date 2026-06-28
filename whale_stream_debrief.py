@@ -345,7 +345,7 @@ def build_debrief_prompt(trade):
     outcome_detail = f"{outcome}"
     if tp_hit:
         outcome_detail += f" — {tp_hit} hit"
-    if pnl is not None:
+    if pnl:  # only append if non-zero pnl available
         outcome_detail += f" — P&L: {pnl:+.1f}%"
 
     # ── Multi-agent consensus layer (Principle 5) ─────────────
@@ -536,7 +536,7 @@ def main():
     """
     print()
     print("╔══════════════════════════════════════════════════════╗")
-    print("║   🧠  WHALE-STREAM DEBRIEF AGENT v47.2              ║")
+    print("║   🧠  WHALE-STREAM DEBRIEF AGENT v47.4              ║")
     print("║   Post-Trade Learning — every loss teaches us        ║")
     print("╚══════════════════════════════════════════════════════╝")
     print()

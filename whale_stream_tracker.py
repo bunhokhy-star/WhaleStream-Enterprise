@@ -1198,8 +1198,10 @@ renderLeaderboard('worstCoins', WORST_COINS, false);
 </html>"""
 
     out_path = os.path.join(SCRIPT_DIR, "dashboard.html")
-    with open(out_path, "w", encoding="utf-8") as f:
+    tmp_path = out_path + ".tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
         f.write(html)
+    os.replace(tmp_path, out_path)   # atomic on NTFS — no partial-write corruption
     print(f"  📊 Dashboard written → {out_path}")
 
 

@@ -79,13 +79,8 @@ def _mark_done(agent_name, details=None):
         _jspath = _path.replace("daily_status.json", "daily_status.js")
         with open(_jspath, "w", encoding="utf-8") as _f:
             _f.write("window.WHALE_STATUS=" + json.dumps(_data) + ";")
-        _html_path = os.path.join(os.path.dirname(_path), "To do list", "Daily Checklist.html")
-        with open(_html_path, encoding="utf-8") as _hf:
-            _html = _hf.read()
-        _inject = "var WS_EMBEDDED=" + json.dumps(_data, separators=(',', ':')) + ";"
-        _html = re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
-        with open(_html_path, "w", encoding="utf-8") as _hf:
-            _hf.write(_html)
+        # NOTE: HTML write intentionally omitted here — Watchdog is sole HTML writer
+        # (runs at :30 after all agents finish). Writing here would race with Watchdog.
     except Exception as _me:
         print(f"   ⚠ Status write failed: {_me}")
 

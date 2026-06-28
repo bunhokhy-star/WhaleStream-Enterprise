@@ -685,8 +685,18 @@ def build_message():
         mode_tag = " (REPAIR MODE)" if analysis["repair_mode"] else ""
         gate3_line = f"  Gate 3: ❌ SHORT WR {short_wr_str}{mode_tag}"
 
-    # ── Gate 6 (profitable weeks) — placeholder; no weekly tracker file yet ──
-    gate6_line = "  Gate 6: ❌ 0/3 profitable weeks"
+    # ── Gate 6 (profitable weeks) — read from daily_status.json if available ──
+    try:
+        _ds_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "daily_status.json")
+        with open(_ds_path, encoding="utf-8") as _dsf:
+            _ds = json.load(_dsf)
+        _g6 = _ds.get("gate6_status", "")
+        if _g6:
+            gate6_line = f"  Gate 6: {_g6}"
+        else:
+            gate6_line = "  Gate 6: ⏳ Check dashboard (updated Sundays)"
+    except Exception:
+        gate6_line = "  Gate 6: ⏳ Check dashboard (updated Sundays)"
 
     # ── Win rates ──
     long_label  = f"{analysis['long_wr']:>6}  ({analysis['long_w']}W / {analysis['long_l']}L)"

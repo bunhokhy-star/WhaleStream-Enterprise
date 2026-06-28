@@ -164,14 +164,14 @@ def _score_pattern(pattern: str) -> tuple[int, str]:
 
     pat_lower = pattern.lower()
 
-    # Check strong patterns (substring match for flexibility)
+    # Check strong patterns (pattern must CONTAIN the strong keyword, not vice versa)
     for strong in STRONG_PATTERNS:
-        if strong in pat_lower or pat_lower in strong:
+        if strong in pat_lower:
             return 2, f"pattern '{pattern}' (strong) +2"
 
     # Check moderate patterns
     for moderate in MODERATE_PATTERNS:
-        if moderate in pat_lower or pat_lower in moderate:
+        if moderate in pat_lower:
             return 1, f"pattern '{pattern}' (moderate) +1"
 
     return 0, f"pattern '{pattern}' (unrecognised) +0"

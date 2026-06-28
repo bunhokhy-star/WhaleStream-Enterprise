@@ -54,12 +54,10 @@ if hasattr(sys.stderr, "buffer"):
 
 # ── Credentials ────────────────────────────────────────────────
 try:
-    from local_config import ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+    from local_config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 except ImportError:
-    import os as _os
-    ANTHROPIC_API_KEY  = _os.getenv("ANTHROPIC_API_KEY", "")
-    TELEGRAM_BOT_TOKEN = _os.getenv("TELEGRAM_BOT_TOKEN", "")
-    TELEGRAM_CHAT_ID   = _os.getenv("TELEGRAM_CHAT_ID", "")
+    TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID", "")
 
 # ══════════════════════════════════════════════════════════════════
 # SECTION 1 — CONFIGURATION

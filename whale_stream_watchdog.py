@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM WATCHDOG v47.2                                ║
+║   WHALE-STREAM WATCHDOG v47.4                                ║
 ║                                                              ║
 ║  ROLE (Principle 1): System health guardian.                 ║
 ║  Runs at :30 of every 4h cycle. Confirms all agents ran.     ║
@@ -111,7 +111,7 @@ def _mark_done(agent_name, details=None):
 
 
 # Deadline windows (minutes after cycle start before we flag as missed)
-BOT_DEADLINE_MIN        = 32   # Bot at :00, Watchdog at :30 = 30 min
+BOT_DEADLINE_MIN        = 40   # Bot at :00, Watchdog at :30 = 30 min (+10 min Task Scheduler jitter buffer)
 STRATEGIST_DEADLINE_MIN = 22   # Strategist at :10
 TRADER_DEADLINE_MIN     = 16   # Trader at :20
 TRADER_CRITICAL_HOURS   = 4    # Escalate to CRITICAL if Trader down this long (4h = 1 missed cycle)
@@ -216,7 +216,8 @@ def check_tracker():
     if dt is None:
         try:
             _sp = os.path.join(BASE_DIR, "daily_status.json")
-            _sd = json.load(open(_sp, encoding="utf-8"))
+            with open(_sp, encoding="utf-8") as _sf:
+                _sd = json.load(_sf)
             if _sd.get("tracker") and _sd.get("date") == datetime.now(BKK).date().isoformat():
                 # Use tracker_log.txt mtime as proxy for last run time
                 _mt = os.path.getmtime(TRACKER_LOG)
@@ -375,6 +376,26 @@ def build_critical_alert(now_str, trade_last, trade_ago, bal_str):
 # ─────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    # ── Crash guard: Telegram alert if Watchdog dies unexpectedly ──
+    import sys as _sys
+    def _wdog_excepthook(_et, _ev, _etb):
+        _crash_msg = (
+            f"🚨 WATCHDOG CRASHED — system health unknown!\n"
+            f"Error: {_ev}"
+        )
+        print(_crash_msg)
+        try:
+            import requests as _rq
+            _rq.post(
+                f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                json={"chat_id": TELEGRAM_CHAT_ID, "text": _crash_msg},
+                timeout=10,
+            )
+        except Exception:
+            pass
+        _sys.__excepthook__(_et, _ev, _etb)
+    _sys.excepthook = _wdog_excepthook
+
     try:
         from mission import print_mission_banner
         print_mission_banner()

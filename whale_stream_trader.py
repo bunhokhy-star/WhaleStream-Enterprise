@@ -1238,7 +1238,7 @@ def main():
         ts_str = row[COL_TIMESTAMP].strip()
         if ts_str:
             try:
-                sig_dt = datetime.strptime(ts_str, "%Y-%m-%d %H:%M")
+                sig_dt = datetime.strptime(ts_str.replace(" BKK", ""), "%Y-%m-%d %H:%M")
                 sig_dt = sig_dt.replace(tzinfo=BKK)
                 age_hours = (bkk_now - sig_dt).total_seconds() / 3600
                 if age_hours > MAX_SIGNAL_AGE_HOURS:

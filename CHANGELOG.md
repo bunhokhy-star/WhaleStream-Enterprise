@@ -1,5 +1,53 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.4 — 2026-06-28 — Final Pre-Go-Live Audit (12 bugs fixed)
+
+### `signal_scorer.py` — Pattern matching direction fix (CRITICAL)
+- Bidirectional substring check (`pat_lower in strong`) caused partial patterns (e.g. "bull")
+  to score STRONG+2 because "bull" ⊆ "bull flag". Changed to one-directional `strong in pat_lower`.
+
+### `whale_stream_trader.py` — Timestamp BKK suffix strip (CRITICAL)
+- Sheet stores timestamps as "2026-06-28 12:00 BKK". `strptime("%Y-%m-%d %H:%M")` raises ValueError
+  on " BKK" suffix → caught by `except Exception: continue` → ALL approved signals silently skipped.
+- Fix: `.replace(" BKK", "")` before strptime. Now all approved signals are correctly processed.
+
+### `whale_stream_watchdog.py` — 3 fixes
+- BOT_DEADLINE_MIN: 32 → 40 (absorbs Task Scheduler startup jitter up to 5 min under SYSTEM user)
+- File handle leak: `json.load(open(...))` → `with open(...) as f: json.load(f)`
+- Added `sys.excepthook` crash guard — sends Telegram alert if Watchdog itself crashes unhandled
+- Banner: v47.2 → v47.4
+
+### `whale_stream_monitor.py` — Remove HTML write from `_mark_done` (race condition)
+- Monitor runs every 2 min; writing Daily Checklist.html here raced with Watchdog's
+  `_write_html_snapshot()` at :30. Watchdog is now sole HTML writer.
+
+### `whale_stream_bot.py` — 2 fixes
+- Removed HTML write from `_mark_done` (same race condition fix as monitor.py)
+- Fixed inline BKK recomputation in `_mark_done` — now uses module-level `BKK`
+- Banner: v47.2 → v47.4
+
+### `whale_stream_strategist.py` — 2 fixes
+- Fixed inline BKK + datetime recomputation in `_mark_done` — now uses module-level `BKK`
+- Removed HTML write from `_mark_done` (same race condition fix)
+
+### `whale_stream_debrief.py` — Dead code fix
+- `pnl = float(... or 0)` makes pnl always float; `if pnl is not None` always True →
+  always appended "P&L: +0.0%" for no-P&L trades. Changed to `if pnl:`.
+- Banner: v47.2 → v47.4
+
+### `trade_logger.py` — Remove unnecessary ANTHROPIC_API_KEY import
+- trade_logger never calls Claude API; removed key from import to minimize exposure.
+
+### `whale_stream_tracker.py` — Atomic dashboard.html write
+- Direct `open(out_path, "w")` vulnerable to partial-write corruption on crash.
+- Now writes to `.tmp` then `os.replace()` (atomic on NTFS).
+
+### `morning_briefing.py` — Gate 6 dynamic from daily_status.json
+- Was hardcoded "❌ 0/3 profitable weeks" always. Now reads `gate6_status` from
+  `daily_status.json`; falls back to "⏳ Check dashboard (updated Sundays)".
+
+---
+
 ## v47.4 — 2026-06-28 — Full system wiring + Go-Live Test Suite
 
 ### `whale_stream_strategist.py` — Live win-rate history from trade_logger
