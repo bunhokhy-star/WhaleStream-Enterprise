@@ -42,7 +42,6 @@ import io
 import sys
 import csv
 import json
-import subprocess
 from datetime import datetime, timezone, timedelta
 
 BKK = timezone(timedelta(hours=7))   # Bangkok timezone (UTC+7) — used everywhere
@@ -52,15 +51,6 @@ if hasattr(sys.stdout, "buffer"):
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
 if hasattr(sys.stderr, "buffer"):
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True)
-
-# ── Auto-install missing libraries ─────────────────────────────
-REQUIRED = {"gspread": "gspread", "google.oauth2": "google-auth"}
-for mod, pkg in REQUIRED.items():
-    try:
-        __import__(mod)
-    except ImportError:
-        print(f"   ⬇ Installing {pkg}...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", pkg, "--quiet"])
 
 # ── Credentials ────────────────────────────────────────────────
 try:
@@ -138,21 +128,28 @@ def safe_float(s, default=None):
         return default
 
 
-def connect_sheet():
-    creds_path = os.path.join(SCRIPT_DIR, GOOGLE_CREDS_FILE)
+def _get_sheet_rows() -> list:
+    """
+    Fetch all rows from Google Sheet using the Sheets REST API v4.
+    No gspread dependency — uses google-auth (already installed by other agents).
+    Returns list of lists (same format as gspread.get_all_values()).
+    """
+    import requests as _req
     from google.oauth2.service_account import Credentials as _GCreds
-    try:
-        from gspread.client import Client as _GClient
-    except ImportError:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "gspread", "--quiet"])
-        from gspread.client import Client as _GClient
-    _SCOPES = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive",
-    ]
-    creds  = _GCreds.from_service_account_file(creds_path, scopes=_SCOPES)
-    client = _GClient(auth=creds)
-    return client.open_by_key(GOOGLE_SHEET_ID).sheet1
+    from google.auth.transport.requests import Request as _GReq
+
+    creds_path = os.path.join(SCRIPT_DIR, GOOGLE_CREDS_FILE)
+    _SCOPES    = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+    creds      = _GCreds.from_service_account_file(creds_path, scopes=_SCOPES)
+    creds.refresh(_GReq())
+
+    url = (
+        f"https://sheets.googleapis.com/v4/spreadsheets"
+        f"/{GOOGLE_SHEET_ID}/values/Sheet1"
+    )
+    resp = _req.get(url, headers={"Authorization": f"Bearer {creds.token}"}, timeout=15)
+    resp.raise_for_status()
+    return resp.json().get("values", [])
 
 
 def _categorise(status: str, tp_hit: str, pnl_pct: float) -> str:
@@ -233,8 +230,7 @@ def sync_from_sheets() -> int:
     """
     print("📋 Connecting to Google Sheets...")
     try:
-        sheet    = connect_sheet()
-        all_rows = sheet.get_all_values()
+        all_rows = _get_sheet_rows()
     except Exception as e:
         log(f"✗ Sheets connection failed: {e}")
         return 0

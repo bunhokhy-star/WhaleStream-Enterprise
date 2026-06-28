@@ -1,0 +1,7 @@
+[2026-06-28 20:21 BKK] ✗ Sheets connection failed: Command '['C:\\Users\\MAX\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe', '-m', 'pip', 'install', '--upgrade', 'gspread', '--quiet']' returned non-zero exit status 1.
+[2026-06-28 20:21 BKK] ✗ Sheets connection failed: Command '['C:\\Users\\MAX\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe', '-m', 'pip', 'install', '--upgrade', 'gspread', '--quiet']' returned non-zero exit status 1.
+[2026-06-28 20:22 BKK] ✗ Sheets connection failed: No module named 'gspread.client'
+[2026-06-28 20:24 BKK] ✗ Sheets connection failed: module 'gspread' has no attribute 'authorize'
+[2026-06-28 20:26 BKK] ✗ Sheets connection failed: module 'gspread' has no attribute 'service_account'
+[2026-06-28 20:26 BKK] ✗ Sheets connection failed: module 'gspread' has no attribute 'service_account'
+[2026-06-28 20:31 BKK] Synced 206 trades: 20FW / 104PW / 82L  PNL=$+0.00
