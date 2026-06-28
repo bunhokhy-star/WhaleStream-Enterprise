@@ -1,5 +1,35 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.4 — 2026-06-28 — Full system wiring + Go-Live Test Suite
+
+### `whale_stream_strategist.py` — Live win-rate history from trade_logger
+- Imports `_load_local_log` from trade_logger (try/except fallback)
+- New `build_history_from_logger(signals)` — builds coin+direction history from ALL 206+ trades
+  (vs old `build_coin_history()` which only scanned last 60 sheet rows)
+- `scorer_history` (logger-based, full data) fed to Signal Scorer WR dimension
+- Sheet history still used for Claude prompt (shows recency / last 4 trades)
+- Signal scorer WR dimension now uses real 206-trade dataset — accurate win rates
+
+### `whale_stream_debrief.py` — Auto-sync trade_logger after every resolution
+- After `save_memory()`, calls `sync_from_sheets()` from trade_logger
+- Keeps `trade_log.json` current after every WIN/LOSS so Strategist's next
+  scorer run sees up-to-date win rates immediately
+
+### NEW: `test_golive.py` — Go-Live Test Suite (11 test sections)
+- Runs before July 1 to verify all critical systems are operational
+- Section 1: Required file existence check (15 files)
+- Section 2: Credentials load (all 5 keys from local_config.py)
+- Section 3: Signal Scorer — import + score_signal() + SKIP/STRONG logic
+- Section 4: Trade Logger — import + win_rate + by_coin + by_hour + streak
+- Section 5: Google Sheets REST API v4 connectivity + OPEN/WIN/LOSS counts
+- Section 6: Bybit public + authenticated API + balance + DEMO vs LIVE key detection
+- Section 7: Telegram ping (sends test message to ops channel)
+- Section 8: BTC 4h SMA20 market regime filter
+- Section 9: Strategist imports + build_history_from_logger() + pattern_memory
+- Section 10: JSON state files (strategist_decisions, bybit_balance, etc.)
+- Section 11: Windows Task Scheduler — 7 task presence + Ready/Disabled status
+- Final summary: PASS/FAIL/WARN counts + go-live verdict
+
 ## v47.3 — 2026-06-28 — Signal Scorer + Trade Logger (Strategist intelligence upgrade)
 
 ### NEW: `signal_scorer.py` — Pre-Claude signal quality gate

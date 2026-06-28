@@ -118,3 +118,9 @@
 [2026-06-28 19:10 BKK] Re-check #3 complete — 0 change(s)
 
 ✅ Re-check #3 complete.
+object address  : 0000026782B749A0
+object refcount : 3
+object type     : 00007FFAFE6B0A80
+object type name: ValueError
+object repr     : ValueError('I/O operation on closed file.')
+lost sys.stderr

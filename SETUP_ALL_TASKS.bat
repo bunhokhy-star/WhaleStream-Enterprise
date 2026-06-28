@@ -25,6 +25,7 @@ echo.
 
 :: ── STEP 1: Delete EVERY possible task name variant ──────────────────
 echo [1/9] Clearing all existing WhaleStream tasks...
+:: Hyphen-prefix format (current standard)
 schtasks /Delete /TN "WhaleStream-Bot"                    /F >nul 2>&1
 schtasks /Delete /TN "WhaleStream-Trader"                 /F >nul 2>&1
 schtasks /Delete /TN "WhaleStream-Tracker"                /F >nul 2>&1
@@ -32,15 +33,28 @@ schtasks /Delete /TN "WhaleStream-Monitor"                /F >nul 2>&1
 schtasks /Delete /TN "WhaleStream-Briefing"               /F >nul 2>&1
 schtasks /Delete /TN "WhaleStreamStrategist"              /F >nul 2>&1
 schtasks /Delete /TN "WhaleStreamWatchdog"                /F >nul 2>&1
+:: No-separator format (legacy)
 schtasks /Delete /TN "WhaleStreamBot"                     /F >nul 2>&1
 schtasks /Delete /TN "WhaleStreamTrader"                  /F >nul 2>&1
 schtasks /Delete /TN "WhaleStreamTracker"                 /F >nul 2>&1
+:: Space format (legacy)
 schtasks /Delete /TN "WhaleStream Bot"                    /F >nul 2>&1
 schtasks /Delete /TN "WhaleStream Trader"                 /F >nul 2>&1
+:: Dash-separated format (legacy)
 schtasks /Delete /TN "Whale-Stream-Bot"                   /F >nul 2>&1
 schtasks /Delete /TN "Whale-Stream-Trader"                /F >nul 2>&1
+:: Short format (legacy)
 schtasks /Delete /TN "WS-Bot"                             /F >nul 2>&1
 schtasks /Delete /TN "WS-Trader"                          /F >nul 2>&1
+:: Subfolder format (old ADD_*_TASK.bat style — \WhaleStream\Bot etc.)
+schtasks /Delete /TN "WhaleStream\Bot"                    /F >nul 2>&1
+schtasks /Delete /TN "WhaleStream\Trader"                 /F >nul 2>&1
+schtasks /Delete /TN "WhaleStream\Tracker"                /F >nul 2>&1
+schtasks /Delete /TN "WhaleStream\Monitor"                /F >nul 2>&1
+schtasks /Delete /TN "WhaleStream\Briefing"               /F >nul 2>&1
+schtasks /Delete /TN "WhaleStream\Strategist"             /F >nul 2>&1
+schtasks /Delete /TN "WhaleStream\Watchdog"               /F >nul 2>&1
+:: Recheck/reactive tasks
 schtasks /Delete /TN "WhaleStream-Strategist-Recheck-A"   /F >nul 2>&1
 schtasks /Delete /TN "WhaleStream-Strategist-Recheck-B"   /F >nul 2>&1
 schtasks /Delete /TN "WhaleStream-Strategist-Recheck-C"   /F >nul 2>&1

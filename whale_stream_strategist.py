@@ -328,6 +328,50 @@ def build_coin_history(all_rows, signals):
     return history
 
 
+def build_history_from_logger(signals):
+    """
+    Build full coin+direction history from trade_log.json (ALL 206+ trades).
+    Used by Signal Scorer for accurate WR dimension.
+    Falls back to empty dict if trade_logger is unavailable.
+
+    Returns same format as build_coin_history():
+      {("COIN", "DIRECTION"): [{"outcome": "WIN"/"LOSS", ...}, ...]}  newest-first
+    """
+    if not _LOGGER_AVAILABLE:
+        return {}
+    try:
+        data    = _tl_load_log()
+        trades  = data.get("trades", [])
+        targets = set((s["coin"], s["direction"]) for s in signals)
+        history = {t: [] for t in targets}
+
+        # Sort newest-first (closed_at is "YYYY-MM-DD HH:MM BKK")
+        for t in sorted(trades, key=lambda x: x.get("closed_at", ""), reverse=True):
+            key = (t["coin"], t["direction"])
+            if key not in targets:
+                continue
+            history[key].append({
+                "outcome":  t["status"],               # "WIN" or "LOSS"
+                "tp_hit":   t.get("tp_hit",    ""),
+                "pnl":      f"{t.get('pnl_pct', 0):+.2f}%",
+                "pattern":  t.get("pattern",   ""),
+                "resolved": t.get("closed_at", ""),
+                "category": t.get("category",  ""),
+            })
+
+        found = sum(1 for v in history.values() if v)
+        total_in_log = len(trades)
+        print(f"   📊 Logger: {total_in_log} total trades  |  {found}/{len(targets)} signal coin(s) have history")
+        for (coin, dir_), tlist in history.items():
+            if tlist:
+                wins = sum(1 for t in tlist if t["outcome"] == "WIN")
+                print(f"      {coin} {dir_}: {wins}W / {len(tlist)-wins}L  ({len(tlist)} trade(s))")
+        return history
+    except Exception as e:
+        print(f"   ⚠ trade_logger history unavailable: {e}")
+        return {}
+
+
 def load_portfolio_state():
     """
     Read current open positions from monitor_state.json and balance from bybit_balance.json.
@@ -451,6 +495,13 @@ except ImportError:
         return signals, [], []
     def format_score_for_prompt(signal):
         return "Score: N/A (scorer unavailable)"
+
+# ── Trade Logger (full 206+ trade history for scorer WR dimension) ─
+try:
+    from trade_logger import _load_local_log as _tl_load_log
+    _LOGGER_AVAILABLE = True
+except ImportError:
+    _LOGGER_AVAILABLE = False
 
 STRATEGIST_SYSTEM = (MISSION_PROMPT + """You are the WHALE-STREAM Trading Strategist — the second layer of review between signal generation and execution.
 
@@ -1027,12 +1078,18 @@ def main():
         return
 
     # ── Build per-coin trade history ─────────────────────────────
-    print("\n📚 Analysing trade history per coin...")
+    print("\n📚 Analysing trade history per coin (Sheet — last 60 rows)...")
     history = build_coin_history(data_rows, signals)
     for (coin, direction), trades in history.items():
         wins   = sum(1 for t in trades if t["outcome"] == "WIN")
         losses = sum(1 for t in trades if t["outcome"] == "LOSS")
-        print(f"   {coin} {direction}: {wins}W / {losses}L ({len(trades)} samples)")
+        print(f"   {coin} {direction}: {wins}W / {losses}L ({len(trades)} sample(s) from sheet)")
+
+    # ── Load FULL history from trade_logger (all trades, for scorer WR) ──
+    print("\n📊 Loading full trade history from trade_logger...")
+    logger_history = build_history_from_logger(signals)
+    # scorer uses logger (all trades = accurate WR), Claude prompt uses sheet history (recency)
+    scorer_history = logger_history if logger_history else history
 
     # ── Get BTC 7-day % for regime check ────────────────────────
     print("\n📈 Fetching BTC 7-day change...")
@@ -1121,7 +1178,7 @@ def main():
     print("\n🎯 Scoring signals (pre-Claude quality gate)...")
     if _SCORER_AVAILABLE:
         strong_sigs, review_sigs, skipped_sigs = score_all_signals(
-            signals, market_bias, history, positions
+            signals, market_bias, scorer_history, positions
         )
         for s in signals:
             score_line = format_score_for_prompt(s)

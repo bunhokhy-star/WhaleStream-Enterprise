@@ -504,6 +504,15 @@ def run_debrief(trades):
     save_memory(memory)
     log(f"✓ pattern_memory.json updated — {len(memory['debriefs'])} total debriefs")
 
+    # ── Sync trade_logger after every resolution ─────────────────
+    # Keeps trade_log.json current so Strategist scorer WR is live.
+    try:
+        from trade_logger import sync_from_sheets as _tl_sync
+        print("\n📊 Syncing trade_logger (post-debrief)...")
+        _tl_sync()
+    except Exception as _tl_e:
+        log(f"   ⚠ trade_logger sync failed (non-critical): {_tl_e}")
+
     # ── Telegram summary (ops channel) — multi-agent consensus ──
     lines = [f"🧠 <b>TEAM DEBRIEF</b> — {len(debriefs_written)} trade(s) | Multi-Agent Consensus"]
     for d in debriefs_written:

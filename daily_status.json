@@ -41,14 +41,14 @@
   "monitor_details": {
     "positions": 7,
     "alerts": 0,
-    "last_run": "20:32 BKK"
+    "last_run": "21:16 BKK"
   },
   "tracker_details": {
     "resolved": 0,
     "wins": 0,
     "losses": 0,
     "open": 13,
-    "last_run": "20:30 BKK"
+    "last_run": "21:00 BKK"
   },
   "sigbot_12": true,
   "sigbot_12_details": {
