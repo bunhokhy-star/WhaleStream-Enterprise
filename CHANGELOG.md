@@ -1,5 +1,43 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.5 — 2026-06-28 — Final Audit: 9 bugs fixed (HTML race, WLD blocklist, version sync)
+
+### `whale_stream_trader.py` — 4 fixes
+- **HTML race condition**: Removed `WS_EMBEDDED` HTML write from `_mark_done` —
+  Watchdog is sole HTML writer at :30. Trader writing HTML could corrupt the snapshot.
+- **WLD added to LONG_COIN_AVOID_LIST**: WLD was on the LONG blocklist in bot.py but
+  missing from trader's code-level skip guard. Now blocks WLD LONG orders at execution.
+- **`place_quad_tp_closes()` allocated counter**: Fixed — `allocated` now advances
+  regardless of success/failure. Previously a failed middle leg left last-leg qty overstated.
+- **SL guard sweep** (from prior v47.5 commit): `_sweep_missing_sl()` runs every cycle.
+  (retains full description from prior entry below)
+
+### `morning_briefing.py` — HTML race condition fix
+- Removed `WS_EMBEDDED` HTML write from `_mark_done` — same race condition as trader.py.
+  Briefing runs at 07:00 and was clobbering Watchdog's 04:30 snapshot.
+
+### `whale_stream_debrief.py` — 2 fixes
+- **`if pnl:` → `if pnl is not None:`**: Breakeven closes (pnl == 0.0) were silently
+  omitted from outcome detail string. Now correctly shows "P&L: +0.0%" for breakeven.
+- Banner: v47.2/v47.4 → v47.5
+
+### `whale_stream_bot.py` — Version banner sync
+- All 4 version strings updated: header, prompt, Telegram line, startup banner → v47.5
+
+### `whale_stream_watchdog.py` — Version banner sync
+- Banner: v47.4 → v47.5
+
+### `whale_stream_monitor.py` — Stale comment fix
+- Header comment said "~50% size drop → TP1". Updated to "≥15% size drop" to match
+  actual Quad-TP 25% close detection logic (PARTIAL_CLOSE_RATIO = 0.85).
+
+### `whale_stream_tracker.py` — Bybit price fetch failure alert
+- Silent failure: if `load_bybit_prices()` threw an exception, tracker printed a line
+  but continued silently — all trades stalled for the cycle with no notification.
+- Now sends Telegram alert on Bybit price fetch failure so operator knows immediately.
+
+---
+
 ## v47.5 — 2026-06-28 — SL guard sweep (critical capital protection)
 
 ### `whale_stream_trader.py` — `_sweep_missing_sl()` function

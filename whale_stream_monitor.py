@@ -6,7 +6,7 @@
 ║  and fires immediate Telegram alerts.                        ║
 ║                                                              ║
 ║  Detects:                                                    ║
-║    • ~50% size drop  → TP1 partial close + move SL to BE     ║
+║    • ≥15% size drop  → partial close detected + move SL to BE ║
 ║    • Position gone   → Full close alert (WIN/LOSS pending)   ║
 ║    • New position    → Logs to state (no alert)               ║
 ║                                                              ║

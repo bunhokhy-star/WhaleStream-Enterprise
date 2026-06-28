@@ -233,6 +233,11 @@ def load_bybit_prices():
         print(f"   ✓ Bybit: {len(_bybit_cache)} prices loaded")
     except Exception as e:
         print(f"   ✗ Bybit price load failed: {e}")
+        send_telegram_alert(
+            f"⚠️ <b>Tracker: Bybit price fetch FAILED</b>\n"
+            f"  Error: {e}\n"
+            f"  Trade resolution will be skipped this cycle — no price data available."
+        )
 
 
 def get_price(coin):

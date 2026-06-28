@@ -76,13 +76,7 @@ def _mark_done(agent_name, details=None):
         _jspath = _path.replace("daily_status.json", "daily_status.js")
         with open(_jspath, "w", encoding="utf-8") as _f:
             _f.write("window.WHALE_STATUS=" + json.dumps(_data) + ";")
-        _html_path = os.path.join(os.path.dirname(_path), "To do list", "Daily Checklist.html")
-        with open(_html_path, encoding="utf-8") as _hf:
-            _html = _hf.read()
-        _inject = "var WS_EMBEDDED=" + json.dumps(_data, separators=(',', ':')) + ";"
-        _html = re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
-        with open(_html_path, "w", encoding="utf-8") as _hf:
-            _hf.write(_html)
+        # NOTE: HTML write intentionally omitted — Watchdog is sole HTML writer (:30 cycle end)
     except Exception as _me:
         print(f"   ⚠ _mark_done write failed: {_me}")
 
@@ -181,7 +175,7 @@ SHORT_RECOVERY_COINS = {"H", "FF"}  # approved recovery coins (bypass SHORT REPA
 ORDER_CONTEXT_FILE   = os.path.join(SCRIPT_DIR, "order_context.json")
 
 # Coins with poor historical LONG win rate — skip LONG signals for these
-LONG_COIN_AVOID_LIST = ["COMP", "HYPE", "ZRO", "QNT", "WIF"]   # must match LONG_COIN_BLOCKLIST in bot.py
+LONG_COIN_AVOID_LIST = ["COMP", "HYPE", "ZRO", "QNT", "WIF", "WLD"]   # must match LONG_COIN_BLOCKLIST in bot.py
 
 def log(msg):
     """Write to console and trader_log.txt with timestamp."""
@@ -974,8 +968,7 @@ def place_quad_tp_closes(symbol, entry_side, qty, tp_prices, info):
         oid = r["result"].get("orderId", "") if ok else r.get("retMsg", "?")
         results.append({"tp_label": label, "price": tp_price,
                         "qty": leg_qty, "ok": ok, "order_id": oid})
-        if ok:
-            allocated += leg_qty  # only advance on successful placement — keeps last-leg remainder correct
+        allocated += leg_qty  # advance regardless of success — prevents last leg from absorbing failed legs
 
     return results
 

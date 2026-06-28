@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM DEBRIEF AGENT v47.2 — POST-TRADE LEARNING    ║
+║   WHALE-STREAM DEBRIEF AGENT v47.5 — POST-TRADE LEARNING    ║
 ║                                                              ║
 ║  Called automatically by whale_stream_tracker.py after      ║
 ║  each WIN or LOSS resolution.                                ║
@@ -345,7 +345,7 @@ def build_debrief_prompt(trade):
     outcome_detail = f"{outcome}"
     if tp_hit:
         outcome_detail += f" — {tp_hit} hit"
-    if pnl:  # only append if non-zero pnl available
+    if pnl is not None:  # include 0.0 breakeven closes
         outcome_detail += f" — P&L: {pnl:+.1f}%"
 
     # ── Multi-agent consensus layer (Principle 5) ─────────────
@@ -536,7 +536,7 @@ def main():
     """
     print()
     print("╔══════════════════════════════════════════════════════╗")
-    print("║   🧠  WHALE-STREAM DEBRIEF AGENT v47.4              ║")
+    print("║   🧠  WHALE-STREAM DEBRIEF AGENT v47.5              ║")
     print("║   Post-Trade Learning — every loss teaches us        ║")
     print("╚══════════════════════════════════════════════════════╝")
     print()
