@@ -1,0 +1,18 @@
+object address  : 0000026A2E9F49A0
+object refcount : 3
+object type     : 00007FFC21CC0A80
+object type name: ValueError
+object repr     : ValueError('I/O operation on closed file.')
+lost sys.stderr
+object address  : 000001C1DE3549A0
+object refcount : 3
+object type     : 00007FFC21CC0A80
+object type name: ValueError
+object repr     : ValueError('I/O operation on closed file.')
+lost sys.stderr
+object address  : 00000241022849A0
+object refcount : 3
+object type     : 00007FFC21CC0A80
+object type name: ValueError
+object repr     : ValueError('I/O operation on closed file.')
+lost sys.stderr

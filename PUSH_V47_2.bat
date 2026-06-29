@@ -1,8 +1,8 @@
 @echo off
 cd /d C:\Users\MAX\WhaleStream
 git add -A
-git commit -m "v47.10 — 11 bugs: monitor crash hidden (CRITICAL), trader SHORT floor 95->conditional (HIGH), bot short_wr neutral fallback (HIGH), SL sweep during CB (HIGH), debrief resolved_at dedup key (HIGH), balance warn sentinel (HIGH), partial close TP1 label (MEDIUM), status_server normpath (MEDIUM), gap checker midnight (MEDIUM), tracker Gate3 pnl >=5->>=1.5 (MEDIUM), JULY1 checklist fixes + version bumps"
+git commit -m "v47.11 — Strategist self-healing: watchdog kills zombie processes + relaunches automatically; run_strategist.bat stderr separated to prevent shutdown crash deadlock"
 git push
 echo.
-echo Done — v47.10 pushed to GitHub.
+echo Done — v47.11 pushed to GitHub.
 pause

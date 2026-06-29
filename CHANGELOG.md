@@ -1,5 +1,39 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.11 — 2026-06-29 — Strategist deadlock self-healing + run_strategist.bat stderr fix
+
+### Root cause diagnosed
+Strategist missed all June 29 cycles (00:10, 04:10, 08:10) due to a Python interpreter
+shutdown crash (`ValueError('I/O operation on closed file.') / lost sys.stderr`) that left
+`cmd.exe` as a zombie process. Windows Task Scheduler saw the task as "Currently Running"
+and refused to start new instances.
+
+### `whale_stream_watchdog.py` — Autonomous self-healing
+- **Self-heal when Strategist misses its :10 slot**: Watchdog now detects missed Strategist
+  cycles and automatically (1) kills stuck Python processes via PowerShell WMI,
+  (2) runs `schtasks /End /TN "WhaleStreamStrategist"` to clear the stuck Task Scheduler
+  instance, (3) relaunches `run_strategist.bat` via `subprocess.Popen` to cover the missed
+  cycle immediately, (4) annotates the Telegram alert with "🔧 Self-heal attempted".
+  This makes the 8-agent system fully autonomous — it recovers from interpreter crashes
+  without any human intervention.
+- Added `import time` and `import subprocess` to support self-healing.
+
+### `run_strategist.bat` — Prevent recurrence
+- **Separated stderr from stdout**: Changed `2>&1` (combined file handle) to
+  `2>> strategist_task_err.txt` (separate error log). When Python crashes during interpreter
+  shutdown, it can no longer fight with itself over a single file handle. The cmd.exe wrapper
+  now exits cleanly even after Python's shutdown hook writes to stderr, preventing the zombie
+  deadlock that blocked Task Scheduler.
+- Added `exit /b 0` at end of bat — ensures cmd.exe always exits even after Python errors.
+- Error output now captured in `strategist_task_err.txt` for separate inspection.
+
+### FORCE_FIX_STRATEGIST.bat — Manual recovery tool (for use while stuck)
+- New file created (June 29 session): kills stuck Strategist processes, clears Task Scheduler
+  "running" record, runs Strategist once immediately, then verifies task is re-enabled.
+  Run as administrator when Watchdog self-heal is not yet live (e.g., this outage).
+
+---
+
 ## v47.10 — 2026-06-29 — 11 bugs fixed: CRITICAL monitor crash hidden, HIGH trader SHORT floor, HIGH bot short_wr neutral fallback, HIGH SL sweep during CB, HIGH debrief dedup key, HIGH balance alert spam, MEDIUM partial close label, MEDIUM status_server path, MEDIUM gap checker midnight, MEDIUM tracker Gate3 pnl threshold, LOW version strings + CHECKLIST
 
 ### `whale_stream_monitor.py` — 3 fixes

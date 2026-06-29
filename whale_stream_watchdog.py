@@ -26,6 +26,8 @@ import sys
 import os
 import json
 import re
+import time
+import subprocess
 import requests
 from datetime import datetime, timezone, timedelta
 
@@ -460,8 +462,42 @@ if __name__ == "__main__":
             f"🚨 <b>SigBot missed :00 slot</b>  (last: {bot_last}, {fmt_ago(bot_ago)})\n{FIX_BOT}"
         )
     if not strat_ok:
+        # ── Self-heal: kill stuck Strategist task + relaunch ─────────────
+        # Root cause: Python "lost sys.stderr" crash during interpreter shutdown
+        # leaves cmd.exe hanging. Task Scheduler sees task as "Running" forever
+        # and refuses to start new instances. Fix: kill the stuck process,
+        # end the Task Scheduler's "running" record, then relaunch immediately.
+        _healed = False
+        try:
+            # 1. Kill any stuck Python processes running whale_stream_strategist.py
+            subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                 "Get-WmiObject Win32_Process | Where-Object { $_.Name -eq 'python.exe' "
+                 "-and $_.CommandLine -like '*whale_stream_strategist*' } | "
+                 "ForEach-Object { $_.Terminate() }"],
+                capture_output=True, timeout=15
+            )
+            # 2. Force-end the stuck Task Scheduler instance record
+            subprocess.run(
+                ["schtasks", "/End", "/TN", "WhaleStreamStrategist"],
+                capture_output=True, timeout=10
+            )
+            time.sleep(2)
+            # 3. Relaunch the Strategist immediately to cover the missed cycle
+            subprocess.Popen(
+                f'start "" /B "{os.path.join(BASE_DIR, "run_strategist.bat")}"',
+                shell=True, cwd=BASE_DIR
+            )
+            _healed = True
+            print("   🔧 Self-heal: killed stuck WhaleStreamStrategist + relaunched")
+        except Exception as _she:
+            print(f"   ⚠ Self-heal attempt failed: {_she}")
+
+        _heal_note = ("🔧 <b>Self-heal attempted</b> — Strategist relaunched at :30. "
+                      "Check next Telegram for Strategist result.\n") if _healed else ""
         issues_with_fixes.append(
-            f"🚨 <b>Strategist missed :10 slot</b>  (last: {strat_last}, {fmt_ago(strat_ago)})\n{FIX_STRATEGIST}"
+            f"🚨 <b>Strategist missed :10 slot</b>  (last: {strat_last}, {fmt_ago(strat_ago)})\n"
+            f"{_heal_note}{FIX_STRATEGIST}"
         )
     if not trade_ok:
         issues_with_fixes.append(
