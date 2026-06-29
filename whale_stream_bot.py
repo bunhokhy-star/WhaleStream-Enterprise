@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v47.5   —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v47.7   —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 coins from CoinGecko (free, no key)     ║
@@ -251,7 +251,7 @@ except ImportError:
     MISSION_PROMPT = ""
     def print_mission_banner(): pass
 
-WHALE_STREAM_PROMPT = """WHALE-STREAM v47.5 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
+WHALE_STREAM_PROMPT = """WHALE-STREAM v47.7 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
 ROLE:
 You are an Institutional Multi-Agent Trading Committee composed of:
 • Market Regime Analyst • Smart Money Concepts Specialist • Quantitative Momentum Analyst • Liquidity & Stop-Hunt Analyst • Wyckoff Structure Analyst • Relative Strength Analyst • Breakout Probability Engine • Reversal Probability Engine • Continuation Probability Engine • Risk Management Committee
@@ -287,7 +287,7 @@ The trend is not your enemy — fighting it is.
 
 LIVE REGIME: injected in MARKET REGIME section of user message below.
 ════════════════════════════════════════════════════════════
-ANALYSIS ENGINE (v47.5)
+ANALYSIS ENGINE (v47.7)
 Each call provides ONE self-contained batch of market data (up to 100 coins).
 Analyze ALL coins in the provided batch.
 TOURNAMENT PROCESS (per batch):
@@ -1352,15 +1352,15 @@ def fetch_btc_24h_momentum():
                     guidance = (
                         f"BTC is UP {change_24h:+.1f}% in 24h (${price:,.0f}). "
                         "⚠ DANGER ZONE FOR SHORTS. Historical data shows cascading SHORT failures during BTC rallies. "
-                        "MANDATORY RULE: Output MAXIMUM 1 SHORT this run, confidence ≥93% only. "
-                        "If no SHORT qualifies at ≥93%, output 0 SHORTs — replace with a 5th LONG instead."
+                        "MANDATORY RULE: Output MAXIMUM 1 SHORT this run, confidence ≥95% only (REPAIR MODE floor). "
+                        "If no SHORT qualifies at ≥95%, output 0 SHORTs — replace with a 5th LONG instead."
                     )
                 elif change_24h >= 1.5:
                     alert    = "📈 UPTREND"
                     guidance = (
                         f"BTC is UP {change_24h:+.1f}% in 24h (${price:,.0f}). "
                         "Caution on SHORTs — uptrend environment. "
-                        "Limit to maximum 2 SHORTs. Each SHORT must be ≥92% confidence. "
+                        "Limit to maximum 2 SHORTs. Each SHORT must be ≥95% confidence (REPAIR MODE floor applies). "
                         "Prefer SHORTs on coins showing clear exhaustion/rejection, not just downtrending."
                     )
                 elif change_24h <= -3.0:
@@ -1803,7 +1803,7 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     shorts = data.get("shorts", [])
 
     lines = []
-    lines.append(f"🐳 WHALE-STREAM v47.5")
+    lines.append(f"🐳 WHALE-STREAM v47.7")
     lines.append(f"📅 {ts}")
 
     # ── Market regime summary ─────────────────────────────────
@@ -2264,7 +2264,7 @@ def main():
 
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🐳  WHALE-STREAM v47.5  — AUTO BOT STARTING    ║")
+    print("║   🐳  WHALE-STREAM v47.7  — AUTO BOT STARTING    ║")
     print("╚══════════════════════════════════════════════════╝")
     # Check conservative flag early so we can show it in the startup banner
     _short_conservative_early = os.path.exists(os.path.join(SCRIPT_DIR, "short_conservative.flag"))
@@ -2439,7 +2439,7 @@ def main():
     # ── Programmatic SHORT confidence filter (belt + suspenders) ──────────────
     # If SHORT WR is critical, strip any shorts Claude emitted below the threshold,
     # even if Claude didn't obey the graveyard instruction.
-    min_short_conf = 95 if short_wr_recent < 40 else 93  # data-driven floor (v46.53)
+    min_short_conf = 95 if short_wr_recent < 50 else 93  # 95% floor until SHORT WR recovers to ≥50% (v47.7)
     before = len(merged_shorts)
     merged_shorts = [s for s in merged_shorts if _parse_conf(s) >= min_short_conf]
     dropped = before - len(merged_shorts)

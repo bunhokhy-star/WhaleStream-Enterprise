@@ -961,7 +961,12 @@ def place_quad_tp_closes(symbol, entry_side, qty, tp_prices, info):
     if n == 0:
         return []
 
-    base_qty  = round_to_step(qty / n, step)
+    # If position too small to split into n legs at min_q each, reduce leg count
+    # (prevents last-leg overcounting when base_qty rounds below min_q)
+    if qty < n * min_q:
+        n = max(1, int(qty // min_q))
+        valid_tps = valid_tps[:n]
+    base_qty  = round_to_step(qty / n, step) if n > 0 else min_q
     base_qty  = max(base_qty, min_q)
     results   = []
     allocated = 0
@@ -994,7 +999,7 @@ def place_quad_tp_closes(symbol, entry_side, qty, tp_prices, info):
         }
         r   = bybit_request("POST", "/v5/order/create", body=body)
         ok  = r.get("retCode") == 0
-        oid = r["result"].get("orderId", "") if ok else r.get("retMsg", "?")
+        oid = (r.get("result") or {}).get("orderId", "") if ok else r.get("retMsg", "?")
         results.append({"tp_label": label, "price": tp_price,
                         "qty": leg_qty, "ok": ok, "order_id": oid})
         allocated += leg_qty  # advance regardless of success — prevents last leg from absorbing failed legs
@@ -1192,7 +1197,7 @@ def main():
         pass
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🤖  WHALE-STREAM TRADER v47.5 — BYBIT DEMO    ║")
+    print("║   🤖  WHALE-STREAM TRADER v47.7 — BYBIT DEMO    ║")
     print(f"║   💰  ${TRADE_MARGIN_USDT} margin × {LEVERAGE}x = ${TRADE_MARGIN_USDT*LEVERAGE} per trade        ║")
     print("╚══════════════════════════════════════════════════╝")
     print()
@@ -1594,7 +1599,11 @@ def main():
         _react_cancelled = 0
         _react_closed    = 0
         _react_failed    = 0
-        for _rr_idx, _rr_row in open_trades:
+        # Use ALL OPEN rows (not age-filtered open_trades) so older placed orders are found too
+        _all_placed_open = [(i + 2, r) for i, r in enumerate(data_rows)
+                            if (len(r) > COL_STATUS and r[COL_STATUS].strip().upper() == "OPEN"
+                                and len(r) > COL_BYBIT_ID and r[COL_BYBIT_ID].strip())]
+        for _rr_idx, _rr_row in _all_placed_open:
             _rr_coin   = _rr_row[COL_COIN].strip().upper()
             _rr_signal = _rr_row[COL_SIGNAL].strip().upper()
             _rr_dir    = "LONG" if ("LONG" in _rr_signal or "🟢" in _rr_signal) else "SHORT"
@@ -1752,6 +1761,14 @@ def main():
             conf_val = float(conf_str.replace("%", "").strip())
         except (ValueError, AttributeError):
             conf_val = 0
+
+        # ── Code-level confidence floor (belt+suspenders after Strategist) ──
+        if side == "Sell" and conf_val < 95:
+            print(f"   ✗ {coin} SHORT: conf {conf_val:.0f}% < 95% floor (REPAIR MODE) — skipping")
+            continue
+        if side == "Buy" and conf_val < 88:
+            print(f"   ✗ {coin} LONG: conf {conf_val:.0f}% < 88% floor — skipping")
+            continue
 
         if entry is None or sl is None or tp1 is None:  # explicit None check — 0.0 is a valid price
             print(f"   ✗ Could not parse prices — skipping")

@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM WATCHDOG v47.5                                ║
+║   WHALE-STREAM WATCHDOG v47.7                                ║
 ║                                                              ║
 ║  ROLE (Principle 1): System health guardian.                 ║
 ║  Runs at :30 of every 4h cycle. Confirms all agents ran.     ║
@@ -68,9 +68,13 @@ def _write_html_snapshot():
         with open(_html_path, encoding="utf-8") as _hf:
             _html = _hf.read()
         _inject = "var WS_EMBEDDED=" + json.dumps(_data, separators=(',', ':'), ensure_ascii=False) + ";"
-        _html = re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
+        _new_html = re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
+        if _new_html == _html:
+            # Pattern not matched (first run or HTML was reset) — inject before </script>
+            _new_html = _html.replace("</script>", f"{_inject}\n</script>", 1)
+            print("   ⚠ WS_EMBEDDED pattern not found — used fallback inject.")
         with open(_html_path, "w", encoding="utf-8") as _hf:
-            _hf.write(_html)
+            _hf.write(_new_html)
         print("   ✓ Daily Checklist.html WS_EMBEDDED updated with full cycle snapshot.")
     except Exception as _e:
         print(f"   ⚠ HTML snapshot write failed: {_e}")

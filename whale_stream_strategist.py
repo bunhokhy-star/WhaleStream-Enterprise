@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM STRATEGIST v47.5 — SIGNAL QUALITY COUNCIL    ║
+║   WHALE-STREAM STRATEGIST v47.7 — SIGNAL QUALITY COUNCIL    ║
 ║                                                              ║
 ║  Team role: runs at :10 (Bot fires :00, Trader fires :20)   ║
 ║                                                              ║
@@ -799,7 +799,7 @@ def _get_cycle_id():
 def main():
     print()
     print("╔══════════════════════════════════════════════════════╗")
-    print("║   🧠  WHALE-STREAM STRATEGIST v47.5                 ║")
+    print("║   🧠  WHALE-STREAM STRATEGIST v47.7                 ║")
     print("║   Signal Quality Council — APPROVE / VETO / REDUCE  ║")
     print("╚══════════════════════════════════════════════════════╝")
     print()
@@ -1019,10 +1019,12 @@ def main():
         return
     # ── End re-check mode ────────────────────────────────────────────
 
-    # ── Note if circuit breaker is active (don't block the run — just log it) ──
+    # ── Circuit breaker: skip all work when paused.flag exists ──────────────────
     if os.path.exists(PAUSED_FILE):
-        log("⚠ Circuit breaker ACTIVE — decisions will still be written but Trader is paused")
-        print("   ⚠ Note: paused.flag exists — Trader is paused but Strategist will still run")
+        log("⚠ Circuit breaker ACTIVE — Strategist paused (no Claude call, no decisions written)")
+        print("   ⚠ paused.flag found — Strategist is paused. Skipping signal review to save tokens.")
+        _mark_done("strategist", details={"approved": [], "vetoed": [], "skipped": "PAUSED — circuit breaker active"})
+        return
 
     # ── Load portfolio state ─────────────────────────────────────
     print("📊 Loading portfolio state...")

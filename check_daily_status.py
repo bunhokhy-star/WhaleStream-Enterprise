@@ -161,6 +161,10 @@ def run_check():
 
     # ── Check always-running agents ────────────────────────────────
     for agent in STATIC_AGENTS:
+        # Briefing only runs at 07:00 BKK — don't flag as gap before it's scheduled
+        if agent == "briefing" and now.hour < 7:
+            ok.append(agent)   # treat as OK until 07:00
+            continue
         if data.get(agent):
             ok.append(agent)
         else:

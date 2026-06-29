@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM DEBRIEF AGENT v47.5 — POST-TRADE LEARNING    ║
+║   WHALE-STREAM DEBRIEF AGENT v47.7 — POST-TRADE LEARNING    ║
 ║                                                              ║
 ║  Called automatically by whale_stream_tracker.py after      ║
 ║  each WIN or LOSS resolution.                                ║
@@ -108,6 +108,12 @@ def _mark_done(agent_name="debrief", details=None):
             json.dump(_data, _f, indent=2)
     except Exception as _de:
         print(f"   ⚠ _mark_done write failed: {_de}")
+    try:
+        _jspath = _path.replace("daily_status.json", "daily_status.js")
+        with open(_jspath, "w", encoding="utf-8") as _f:
+            _f.write("window.WHALE_STATUS=" + json.dumps(_data) + ";")
+    except Exception as _je:
+        print(f"   ⚠ _mark_done JS write failed: {_je}")
 
 
 def log(msg):
@@ -536,7 +542,7 @@ def main():
     """
     print()
     print("╔══════════════════════════════════════════════════════╗")
-    print("║   🧠  WHALE-STREAM DEBRIEF AGENT v47.5              ║")
+    print("║   🧠  WHALE-STREAM DEBRIEF AGENT v47.7              ║")
     print("║   Post-Trade Learning — every loss teaches us        ║")
     print("╚══════════════════════════════════════════════════════╝")
     print()

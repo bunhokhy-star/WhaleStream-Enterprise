@@ -1,5 +1,80 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.7 — 2026-06-29 — Comprehensive audit: 12 fixes (Daily Checklist offline, confidence floors, circuit breaker, TP ordering, JS sync)
+
+### `To do list/Daily Checklist.html` — 1 fix
+- **CRITICAL: OFFLINE display at 00:00 and 04:00 BKK cycles**
+  JavaScript `todayKey()` used UTC date (`new Date().toISOString()`); agents write Bangkok date
+  (`timezone(timedelta(hours=7))`). At 00:00 BKK = 17:00 UTC June 28, JS used June 28 key but
+  agents wrote June 29 key — perpetual OFFLINE. Fixed by adding `bkkDateStr()` using
+  `new Date().getTime() + 7*3600000` offset. Applied to both `todayKey()` (line 301) and
+  the `today` date check (line ~488).
+
+### `whale_stream_trader.py` — 4 fixes
+- **CRITICAL: `place_quad_tp_closes()` KeyError crash** — Bybit returns success (`retCode=0`)
+  but occasionally omits the `"result"` key. `r["result"].get(...)` threw KeyError, aborting
+  TP close placement and leaving position fully unprotected. Fixed: `(r.get("result") or {}).get("orderId", "")`.
+- **HIGH: No code-level confidence floor enforcement** — Strategist checks floors, but if
+  Strategist output was malformed or the circuit breaker skipped it, Trader would execute any
+  confidence. Added belt+suspenders: SHORTs <95% and LONGs <88% are hard-blocked at Trader.
+- **HIGH: `place_quad_tp_closes()` min_q inflation** — When `qty < n * min_q`, the last leg
+  was overstated because `round_to_step(qty/n, step)` < `min_q` forces each leg to `min_q`,
+  consuming more than `qty` total. Fixed: pre-flight `n = max(1, int(qty // min_q))` to
+  reduce leg count before allocating.
+- **MEDIUM: Reactive veto scan missed older placed orders** — Age-filtered `open_trades` only
+  included orders placed in the last `_max_age_h` hours. Reactive mode scans for vetoed orders
+  to cancel — must see ALL OPEN rows, not just recent ones. Fixed: scan all rows where
+  `COL_STATUS == "OPEN"` and `COL_BYBIT_ID` is non-empty.
+
+### `whale_stream_strategist.py` — 1 fix
+- **HIGH: Circuit breaker skipped work but didn't return** — `paused.flag` check logged a
+  note and called `continue`, but the run proceeded. Strategist still called Claude, still
+  wrote decisions, still sent Telegram — wasting ~$0.08 in tokens per cycle while paused.
+  Fixed: now calls `_mark_done(..., skipped="PAUSED")` then `return` immediately.
+
+### `whale_stream_bot.py` — 3 fixes
+- **MEDIUM: BTC rally gate text said ≥93%, code enforces ≥95%** — Bot prompt "MANDATORY RULE:
+  confidence ≥93% only" contradicted REPAIR MODE 95% floor. Fixed to say ≥95%.
+- **MEDIUM: BTC uptrend gate text said ≥92%, code enforces ≥95%** — Same contradiction.
+  "Each SHORT must be ≥92%" → "≥95% (REPAIR MODE floor applies)".
+- **MEDIUM: SHORT recovery threshold was <40% not <50%** — `min_short_conf = 95 if short_wr_recent < 40`
+  meant the 95% floor only kicked in when SHORT WR fell below 40%. Design doc says floor
+  applies until SHORT WR recovers to ≥50%. Fixed: `< 40` → `< 50`.
+
+### `whale_stream_debrief.py` — 1 fix
+- **MEDIUM: `_mark_done()` did not write `daily_status.js`** — Only `daily_status.json` was
+  written. Checklist HTML uses `daily_status.js` as a CORS-safe fallback when the status
+  server is unreachable (e.g., file:// access). Debrief ticks were never visible in fallback
+  mode. Added `.js` write after the `.json` write.
+
+### `whale_stream_watchdog.py` — 1 fix
+- **MEDIUM: `_write_html_snapshot()` regex silent-failed on first run** — `re.sub(r'var WS_EMBEDDED=...')` 
+  returns the original string unchanged if the pattern isn't found (first run, or HTML reset).
+  The identical string was written, injecting nothing. Added: if `_new_html == _html`, fall
+  back to `str.replace("</script>", f"{_inject}\n</script>", 1)`.
+
+### `check_daily_status.py` — 1 fix
+- **LOW: False gap alert for `briefing` before 07:00 BKK** — Gap checker runs at 00:45 and
+  04:45. Briefing only fires at 07:00 daily, so it's always "missing" at those checks and
+  triggers a spurious Telegram alert every early cycle. Fixed: `if agent == "briefing" and now.hour < 7: ok.append(agent)`.
+
+### `DELETE_PAUSE_NOW.bat` — disabled
+- **OPS: Missing `cb_grace.txt` write after circuit breaker clear** — This bat did `del /f paused.flag`
+  without writing `cb_grace.txt`. The next Trader run would immediately re-trigger the circuit
+  breaker (sees fresh loss streak without the grace window). File replaced with a disabled stub
+  that redirects users to `CLEAR_PAUSE.bat` (which handles both steps correctly).
+
+### `status_server.py` — 1 fix
+- **OPS: `"localhost"` binding can resolve to IPv6 `::1` on Windows** — Python's `HTTPServer`
+  with `"localhost"` may bind to `[::1]:8765` while the checklist HTML fetches
+  `http://localhost:8765` over IPv4 `127.0.0.1`. Fixed: explicit `"127.0.0.1"` binding.
+
+### Version bumps
+- All 6 agent files updated from v47.5 → v47.7:
+  bot.py, strategist.py, trader.py, debrief.py, watchdog.py, morning_briefing.py
+
+---
+
 ## v47.6 — 2026-06-28 — Deep audit: 6 bugs fixed (SL sweep false-fires, TP orphans, confidence mismatch, version)
 
 ### `whale_stream_trader.py` — 3 fixes

@@ -1,8 +1,8 @@
 @echo off
 cd /d C:\Users\MAX\WhaleStream
 git add -A
-git commit -m "v47.6 — 6 bugs fixed: SL sweep false-fires (Bybit order-level SL detection), TP orphan cancel, SL-to-BE 50%->25% text, bot/strategist 93%->95% SHORT floor, signal_scorer threshold rename, morning_briefing version"
+git commit -m "v47.7 — 12 fixes: Daily Checklist offline (UTC/BKK date mismatch), Strategist circuit breaker skip, Trader confidence floor + TP KeyError + min_q inflation + reactive scan, bot SHORT floor thresholds, debrief JS write, watchdog regex fallback, gap-check briefing guard, DELETE_PAUSE disabled, status_server IPv4 bind"
 git push
 echo.
-echo Done — v47.6 pushed to GitHub.
+echo Done — v47.7 pushed to GitHub.
 pause

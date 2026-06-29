@@ -762,7 +762,7 @@ def build_message():
         f"  Available:  ${available_bal:,.2f}",
         f"  In Margin:  ${margin_in_use:,.2f}",
         f"  Unreal P&L: {pnl_sign}${unreal_pnl:,.2f}",
-        f"  Size scale: {size_scale_pct}%  (v47.5 drawdown protection)",
+        f"  Size scale: {size_scale_pct}%  (v47.7 drawdown protection)",
         f"  Updated:    {bal_updated}",
         "",
         "📊 GATE PROGRESS",
