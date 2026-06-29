@@ -39,7 +39,7 @@ Then manually pause it while you edit:
   - WhaleStream-OrphanCheck, WhaleStream-LogAnalyzer, WhaleStream-StatusCheck, WhaleStream-StatusServer
   - WhaleStream-Recheck-A/B/C, WhaleStream-Reactive-A/B/C
 
-### Step 3 — Edit local_config.py (THE ONLY FILE YOU TOUCH)
+### Step 3 — Edit local_config.py (main switch file)
 ```
 Notepad C:\Users\MAX\WhaleStream\local_config.py
 ```
@@ -63,8 +63,8 @@ Run: DIAGNOSE_BYBIT.bat
 You should see: `retCode: 0` and your **live** balance printed.
 If it shows demo balance or error → stop, re-check the keys.
 
-### Step 5 — Set live trade size
-Add or update `TRADE_MARGIN_USDT` in **`local_config.py`** (THE ONLY FILE YOU TOUCH):
+### Step 5 — Set live trade size + update start balance
+Add or update `TRADE_MARGIN_USDT` in **`local_config.py`**:
 ```python
 TRADE_MARGIN_USDT = 25   # ← set your live size here
 ```

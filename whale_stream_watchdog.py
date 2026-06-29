@@ -118,7 +118,7 @@ def _mark_done(agent_name, details=None):
 
 # Deadline windows (minutes after cycle start before we flag as missed)
 BOT_DEADLINE_MIN        = 40   # Bot at :00, Watchdog at :30 = 30 min (+10 min Task Scheduler jitter buffer)
-STRATEGIST_DEADLINE_MIN = 22   # Strategist at :10
+STRATEGIST_DEADLINE_MIN = 25   # Strategist at :10; Watchdog at :30 = 20 min gap (+5 min jitter buffer)
 TRADER_DEADLINE_MIN     = 16   # Trader at :20
 TRADER_CRITICAL_HOURS   = 4    # Escalate to CRITICAL if Trader down this long (4h = 1 missed cycle)
 
@@ -409,6 +409,10 @@ if __name__ == "__main__":
         )
         print(_crash_msg)
         try:
+            _mark_done("watchdog", details={"health": "CRASHED"})
+        except Exception:
+            pass
+        try:
             import requests as _rq
             _rq.post(
                 f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
@@ -472,7 +476,7 @@ if __name__ == "__main__":
             # 1. Kill any stuck Python processes running whale_stream_strategist.py
             subprocess.run(
                 ["powershell", "-NoProfile", "-NonInteractive", "-Command",
-                 "Get-WmiObject Win32_Process | Where-Object { $_.Name -eq 'python.exe' "
+                 "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'python.exe' "
                  "-and $_.CommandLine -like '*whale_stream_strategist*' } | "
                  "ForEach-Object { $_.Terminate() }"],
                 capture_output=True, timeout=15

@@ -390,8 +390,6 @@ def parse_trader_activity():
     """
     lines = read_last_lines(TRADER_LOG, 500)   # v47.9: increased from 100 (~2 days of activity)
     now_bkk  = datetime.now(BKK)
-    yesterday = (now_bkk - timedelta(days=1)).strftime("%Y-%m-%d")
-
     orders_placed = 0
     orders_failed = 0
     skipped       = 0
@@ -643,6 +641,29 @@ def build_message():
     conservative_flag = os.path.exists(os.path.join(BASE_DIR, "short_conservative.flag"))
     gate4_flag        = os.path.exists(os.path.join(BASE_DIR, "gate4_breach.flag"))
 
+    # ── CB grace window status (v47.13) ──
+    _cb_grace_label = ""
+    try:
+        import json as _json
+        from datetime import timezone as _tz
+        _grace_path = os.path.join(BASE_DIR, "cb_grace.txt")
+        if os.path.exists(_grace_path):
+            with open(_grace_path, "r", encoding="utf-8") as _gf:
+                _gd = _json.load(_gf)
+            _cleared_at = datetime.fromisoformat(_gd["cleared_at"])
+            if _cleared_at.tzinfo is None:
+                _cleared_at = _cleared_at.replace(tzinfo=_tz.utc)
+            _elapsed_min = (datetime.now(_tz.utc) - _cleared_at).total_seconds() / 60
+            _grace_total = 480   # 8h = 2 full cycles
+            _remaining   = int(_grace_total - _elapsed_min)
+            if _remaining > 0:
+                _expires_bkk = (_cleared_at + timedelta(minutes=_grace_total)).astimezone(BKK)
+                _cb_grace_label = f"⏳ {_remaining} min remaining (expires {_expires_bkk.strftime('%H:%M')} BKK)"
+            else:
+                _cb_grace_label = f"✅ expired {int(-_remaining)} min ago"
+    except Exception:
+        pass
+
     # ── Size scaling (v47.0) ──
     if drawdown_pct >= 12:
         size_scale_pct = 60
@@ -787,6 +808,7 @@ def build_message():
         "",
         "🚩 SYSTEM FLAGS",
         f"  Circuit breaker: {'🚨 ACTIVE' if paused_flag else '✅ clear'}",
+        f"  CB grace window: {_cb_grace_label}" if _cb_grace_label else "  CB grace window: (no recent clear)",
         f"  SHORT repair:    {'🔧 ACTIVE' if repair_flag else '✅ clear'}",
         f"  SHORT conserv:   {'⚠️ ACTIVE' if conservative_flag else '✅ clear'}",
         "",

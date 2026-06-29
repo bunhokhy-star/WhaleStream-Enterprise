@@ -1,5 +1,39 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.13 — 2026-06-29 — Full audit pass: 10 fixes across 6 files
+
+### `whale_stream_trader.py`
+- **HIGH: Fix `place_quad_tp_closes()` allocated counter bug** — `allocated += leg_qty` was
+  only incremented inside `if ok:`, meaning if TP1/TP2/TP3 legs all failed, the last leg
+  (TP4) would receive 100% of the position quantity instead of 25%. Now always increments
+  regardless of placement success, so last leg is always bounded to the remainder.
+- **HIGH: Remove redundant `bybit_balance.json` re-reads** — Two try/except blocks re-read
+  the balance file (for position cap check and drawdown scaling) immediately after it was
+  written with the same live values. Simplified to use in-memory variables directly
+  (`n_positions`, `total_balance`, `BYBIT_START_BALANCE`), eliminating 2 unnecessary disk reads.
+
+### `whale_stream_watchdog.py`
+- **MEDIUM: Raise `STRATEGIST_DEADLINE_MIN` 22 → 25** — Strategist runs at :10, Watchdog at
+  :30 = 20-minute gap. Was only leaving 2-minute jitter buffer; raised to 5 minutes.
+- **MEDIUM: Add `_mark_done("watchdog")` to `_wdog_excepthook`** — Watchdog crash handler
+  sent Telegram alert but never wrote `daily_status.json`. Gap checker would miss the crash.
+  Now calls `_mark_done("watchdog", details={"health": "CRASHED"})` before Telegram.
+- **LOW: `Get-WmiObject` → `Get-CimInstance`** in self-healing PowerShell command (modern PS syntax).
+
+### `morning_briefing.py`
+- **MEDIUM: Add CB grace window visibility** — Added `cb_grace.txt` read to System Flags
+  section. Now shows remaining grace minutes and expiry time (BKK) so operator knows exactly
+  when the CB can re-arm. Shows "no recent clear" if no file exists.
+- **LOW: Removed dead `yesterday` variable** (was defined but never used).
+
+### `whale_stream_monitor.py` / `whale_stream_debrief.py`
+- **LOW: Version strings updated** v47.10 → v47.13 in both files (header banner + runtime print).
+
+### `JULY1_GOLIVE_CHECKLIST.md`
+- **MEDIUM: Fix "THE ONLY FILE YOU TOUCH" contradiction** — Step 3 said `local_config.py` is
+  the only file you touch, but Step 5 also requires editing `trader.py` and `tracker.py` for
+  `BYBIT_START_BALANCE`. Removed the misleading phrase from both steps.
+
 ## v47.12 — 2026-06-29 — Circuit breaker grace period 60min→480min + FIX_CB_NOW.bat
 
 ### Root cause diagnosed

@@ -1001,8 +1001,7 @@ def place_quad_tp_closes(symbol, entry_side, qty, tp_prices, info):
         oid = (r.get("result") or {}).get("orderId", "") if ok else r.get("retMsg", "?")
         results.append({"tp_label": label, "price": tp_price,
                         "qty": leg_qty, "ok": ok, "order_id": oid})
-        if ok:
-            allocated += leg_qty
+        allocated += leg_qty   # always track planned allocation so last leg doesn't absorb failed legs' qty
 
     _fail_legs = [r for r in results if not r["ok"]]
     if _fail_legs:
@@ -1506,16 +1505,9 @@ def main():
     # balance file already written before the pause check — no second write needed
 
     # ── Fix 1: Hard cap — max 8 concurrent open positions ─────
-    # Read bybit_balance.json to get the live open_positions count.
-    # If >= 8 simultaneous trades are already active, skip ALL orders
-    # this run to prevent a market turn from triggering a cascade of SLs.
-    _bb_open_positions = n_positions   # fallback: use the live count we just fetched
-    try:
-        with open(BYBIT_BALANCE_FILE, "r", encoding="utf-8") as _bb_f:
-            _bb_data = json.load(_bb_f)
-            _bb_open_positions = int(_bb_data.get("open_positions", n_positions))
-    except Exception:
-        pass   # use live n_positions as fallback
+    # Use the live n_positions count already fetched from Bybit API above.
+    # (bybit_balance.json was just written with this same value — no need to re-read it.)
+    _bb_open_positions = n_positions
 
     MAX_CONCURRENT_POSITIONS = 8
     if _bb_open_positions >= MAX_CONCURRENT_POSITIONS:
@@ -1535,15 +1527,8 @@ def main():
     #   < 8% drawdown  → full size (1.0×)
     #   8–12% drawdown → 75% size (caution zone)
     #   ≥ 12% drawdown → 60% size (danger zone — currently here at ~13.2%)
-    _bb_balance       = total_balance   # live Bybit balance
-    _bb_start_balance = BYBIT_START_BALANCE
-    try:
-        with open(BYBIT_BALANCE_FILE, "r", encoding="utf-8") as _bb_f2:
-            _bb_data2 = json.load(_bb_f2)
-            _bb_balance       = float(_bb_data2.get("balance",       total_balance))
-            _bb_start_balance = float(_bb_data2.get("start_balance", BYBIT_START_BALANCE))
-    except Exception:
-        pass   # use live values as fallback
+    _bb_balance       = total_balance        # live Bybit balance (already fetched above)
+    _bb_start_balance = BYBIT_START_BALANCE  # constant — update to live balance on July 1 go-live
 
     _drawdown_pct = max(0.0, (_bb_start_balance - _bb_balance) / _bb_start_balance * 100) if _bb_start_balance > 0 else 0.0
     if _drawdown_pct < 8:

@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║       WHALE-STREAM NEAR-REAL-TIME MONITOR          v47.10     ║
+║       WHALE-STREAM NEAR-REAL-TIME MONITOR          v47.13     ║
 ║                                                              ║
 ║  Polls Bybit every 2 minutes to detect position changes      ║
 ║  and fires immediate Telegram alerts.                        ║
