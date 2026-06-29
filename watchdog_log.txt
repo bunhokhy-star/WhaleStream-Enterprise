@@ -587,3 +587,24 @@ AMBER ALERT:
 [2026-06-29 12:30 BKK] Watchdog complete.
 
 C:\Users\MAX\WhaleStream>
+┌─────────────────────────────────────────────────────┐
+│  🐋 WHALE-STREAM MISSION                            │
+│  Build trust through discipline. Earn live capital. │
+│  This system belongs to the whole team.             │
+└─────────────────────────────────────────────────────┘
+   Balance: $331.21  |  1d to Go-Live  |  Target: $425 (Gate 4)
+
+[2026-06-29 16:30 BKK] === Watchdog run started ===
+🚨 SigBot       last: 12:05 BKK  (4h 25m ago)
+🚨 Strategist   last: 20:10 BKK  (20h 20m ago)
+🚨 Trader       last: 12:20 BKK  (4h 10m ago)
+   🔧 Self-heal: killed stuck WhaleStreamStrategist + relaunched
+
+🔴 CRITICAL ESCALATION: Trader down 4h 10m
+✅ Watchdog alert sent to Telegram.
+
+C:\Users\MAX\WhaleStream>✅ Watchdog alert sent to Telegram.
+   ✓ Status logged → watchdog_16
+   ✓ Daily Checklist.html WS_EMBEDDED updated with full cycle snapshot.
+
+[2026-06-29 16:30 BKK] Watchdog complete.

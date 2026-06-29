@@ -30,7 +30,7 @@ if /i "%CONFIRM%"=="YES" (
     if exist "C:\Users\MAX\WhaleStream\cb_pause_alerted.flag" del "C:\Users\MAX\WhaleStream\cb_pause_alerted.flag"
     "C:\Users\MAX\AppData\Local\Python\bin\python.exe" -c "import json,datetime; f=open(r'C:\Users\MAX\WhaleStream\cb_grace.txt','w'); f.write(json.dumps({'cleared_at':datetime.datetime.now(datetime.timezone.utc).isoformat()})); f.close()"
     echo.
-    echo  ✅ Pause cleared. Grace period written ^(60min^).
+    echo  ✅ Pause cleared. Grace period written ^(480min = 8h = 2 full cycles^).
     echo     cb_pause_alerted.flag also deleted ^(Trader will resend alert on next CB^).
     echo     Trader will place orders on next run without re-triggering CB.
     echo     Next run: check Task Scheduler or wait for the 4-hour cycle.

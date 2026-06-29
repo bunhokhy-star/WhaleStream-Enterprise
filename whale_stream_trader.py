@@ -1384,7 +1384,7 @@ def main():
             if _grace_ts.tzinfo is None:
                 _grace_ts = _grace_ts.replace(tzinfo=timezone.utc)
             _grace_age_min = (_now_utc - _grace_ts).total_seconds() / 60
-            if _grace_age_min < 60:
+            if _grace_age_min < 480:  # 480 min = 8h = 2 full cycles
                 _cb_grace_active = True
                 log(f"CB grace period active — cleared {_grace_age_min:.0f}min ago by operator")
                 print(f"   ⚡ CB grace period active ({_grace_age_min:.0f}min ago) — overriding streak check")

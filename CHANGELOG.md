@@ -1,5 +1,29 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.12 — 2026-06-29 — Circuit breaker grace period 60min→480min + FIX_CB_NOW.bat
+
+### Root cause diagnosed
+Circuit breaker (CB) was re-triggering on every cycle despite being manually cleared.
+Sequence: CB cleared → Trader ran at 08:xx (within 60-min grace) → no orders placed
+(no qualifying signals) → grace expired → Trader ran at 12:xx → saw same 3 consecutive
+LOSSes → re-triggered CB → system locked again. The 60-minute grace window was too short
+to survive a full 4-hour cycle gap.
+
+### `whale_stream_trader.py`
+- **Extended CB grace period from 60 → 480 minutes** (8 hours = 2 full trading cycles).
+  When operator clears the CB (via CLEAR_PAUSE.bat or FIX_CB_NOW.bat), the `cb_grace.txt`
+  override now prevents re-trigger for 8 hours, covering 2 consecutive Trader runs.
+  This ensures at least 2 real cycles of opportunity before the CB can re-arm.
+  Change: `if _grace_age_min < 60:` → `if _grace_age_min < 480:`
+
+### `FIX_CB_NOW.bat` — Emergency CB clear + grace override (NEW)
+- Created for situations where CB needs immediate clearing without a user confirmation dialog.
+  Deletes `paused.flag`, writes fresh `cb_grace.txt` with current UTC time (480-min window),
+  deletes `cb_pause_alerted.flag` and `balance_warn_alerted.flag` so alerts re-fire correctly.
+
+### `CLEAR_PAUSE.bat`
+- Updated displayed message from "60min" to "480min = 8h = 2 full cycles".
+
 ## v47.11 — 2026-06-29 — Strategist deadlock self-healing + run_strategist.bat stderr fix
 
 ### Root cause diagnosed
