@@ -4,15 +4,15 @@
   "monitor_details": {
     "positions": 7,
     "alerts": 0,
-    "last_run": "07:56 BKK"
+    "last_run": "09:02 BKK"
   },
   "tracker": true,
   "tracker_details": {
     "resolved": 0,
     "wins": 0,
     "losses": 0,
-    "open": 18,
-    "last_run": "07:30 BKK"
+    "open": 19,
+    "last_run": "09:00 BKK"
   },
   "sigbot_00": true,
   "sigbot_00_details": {
@@ -68,5 +68,28 @@
   "briefing_details": {
     "sent_at": "07:00 BKK",
     "summary": "Balance: $330 \u00b7 7 open"
+  },
+  "sigbot_08": true,
+  "sigbot_08_details": {
+    "longs": [
+      "JTO",
+      "AAVE",
+      "TIA"
+    ],
+    "shorts": [
+      "H",
+      "MNT",
+      "FF"
+    ]
+  },
+  "trader_08": true,
+  "trader_08_details": {
+    "placed": [],
+    "skipped": []
+  },
+  "watchdog_08": true,
+  "watchdog_08_details": {
+    "health": "AMBER",
+    "cycle_summary": "Bot:\ud83d\udfe2JTO, AAVE, TIA | \ud83d\udd34H, MNT, FF  Strat:\u26a0 missed  Trader:\u2014 none"
   }
 }

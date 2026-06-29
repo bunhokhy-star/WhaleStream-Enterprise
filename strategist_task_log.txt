@@ -458,3 +458,9 @@ object type     : 00007FFC21CC0A80
 object type name: ValueError
 object repr     : ValueError('I/O operation on closed file.')
 lost sys.stderr
+object address  : 0000028758554A00
+object refcount : 3
+object type     : 00007FFC21CC0A80
+object type name: ValueError
+object repr     : ValueError('I/O operation on closed file.')
+lost sys.stderr

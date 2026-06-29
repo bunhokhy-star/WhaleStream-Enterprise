@@ -345,7 +345,7 @@ def parse_last_fills_24h():
     Lines containing "✅ Position closed" or "filled" count as fills.
     Returns count of such lines.
     """
-    _lines = read_last_lines(MONITOR_LOG, 2000)
+    _lines = read_last_lines(MONITOR_LOG, 5000)   # v47.9: increased from 2000 for full-day coverage
     if not _lines:
         return 0
 
@@ -388,7 +388,7 @@ def parse_trader_activity():
 
     Returns a dict.
     """
-    lines = read_last_lines(TRADER_LOG, 100)
+    lines = read_last_lines(TRADER_LOG, 500)   # v47.9: increased from 100 (~2 days of activity)
     now_bkk  = datetime.now(BKK)
     yesterday = (now_bkk - timedelta(days=1)).strftime("%Y-%m-%d")
 
@@ -770,7 +770,7 @@ def build_message():
         f"  Available:  ${available_bal:,.2f}",
         f"  In Margin:  ${margin_in_use:,.2f}",
         f"  Unreal P&L: {pnl_sign}${unreal_pnl:,.2f}",
-        f"  Size scale: {size_scale_pct}%  (v47.8 drawdown protection)",
+        f"  Size scale: {size_scale_pct}%  (v47.9 drawdown protection)",
         f"  Updated:    {bal_updated}",
         "",
         "📊 GATE PROGRESS",

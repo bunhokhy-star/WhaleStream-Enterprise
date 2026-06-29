@@ -1,5 +1,25 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.9 — 2026-06-29 — 3 safety + ops fixes (CLEAR_BREACH_NOW confirmation, log scan limits, version bumps)
+
+### `CLEAR_BREACH_NOW.bat` — 1 fix
+- **SAFETY: No confirmation before clearing both circuit breaker flags** — The bat deleted `paused.flag`
+  AND `gate4_breach.flag` immediately on double-click with no user confirmation. This is a dangerous
+  safety bypass: a misclick during a real drawdown event would resume live trading into a losing
+  market. Added a YES/no prompt that explains the risk before clearing anything. Cancelling leaves all
+  flags untouched.
+
+### `morning_briefing.py` — 2 fixes
+- **MEDIUM: Trader log scan too small** — `parse_trader_activity()` only read the last 100 lines of
+  `trader_log.txt`. At the 4h cycle rate, 100 lines covers ~1–2 days at best; yesterday's orders
+  could be missed by the morning briefing. Increased to 500 lines (~1 full week).
+- **MEDIUM: Monitor log alert scan too small** — Fill/close event scan used 2000 lines. Increased
+  to 5000 for complete 24h coverage even on active days with many monitor ticks.
+
+### `signal_scorer.py` — version bump to v47.9
+
+---
+
 ## v47.8 — 2026-06-29 — Full system audit: 21 fixes across 9 files (circuit breakers, TP safety, dedup, security, monitoring)
 
 ### `whale_stream_bot.py` — 5 fixes

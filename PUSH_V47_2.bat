@@ -1,8 +1,8 @@
 @echo off
 cd /d C:\Users\MAX\WhaleStream
 git add -A
-git commit -m "v47.8 — 21 fixes: Bot CB check missing, Trader TP allocated bug, debrief dedup drops 2nd trade, status_server security patch, check_daily_status localhost fix, Strategist recheck bypasses CB, blended P&L 25/75, Trader pause spam sentinel, scorer threshold 88%, watchdog PAUSED timestamp, debrief Claude timeout+try/except, monitor _mark_done on failure, briefing self-coverage noise, conflict guard ordering, WLD prompt gap, P&L sign filters, CLEAR_PAUSE cb_alerted flag"
+git commit -m "v47.9 — 24 fixes: includes all v47.8 fixes (Bot CB check, TP allocated bug, debrief dedup, status_server security, CB grace, Strategist recheck, blended P&L, pause spam, scorer 88pct, watchdog PAUSED, debrief timeout, monitor mark_done, briefing self-coverage, conflict guard, WLD prompt, P&L sign, cb_alerted flag) + v47.9 (CLEAR_BREACH_NOW YES confirm, briefing log scan 100->500 + 2000->5000)"
 git push
 echo.
-echo Done — v47.7 pushed to GitHub.
+echo Done — v47.9 pushed to GitHub.
 pause
