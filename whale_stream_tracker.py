@@ -33,6 +33,7 @@ import json
 import hmac
 import hashlib
 import time as _btime
+import tempfile
 import requests
 import subprocess
 from collections import defaultdict
@@ -1579,7 +1580,7 @@ def main():
                                 else:
                                     _pnl1 = (_pc_entry - _pc_tp1)  / _pc_entry * 100 * LEVERAGE
                                     _pnl2 = (_pc_entry - _pc_exit) / _pc_entry * 100 * LEVERAGE
-                                _blended   = (_pnl1 + _pnl2) / 2
+                                _blended   = _pnl1 * 0.25 + _pnl2 * 0.75  # 25% closed at TP1, 75% still running
                                 _blend_str = f"{_blended:+.2f}% [T]"
                                 _sr = i + 2
                                 updates.append((_sr, COL_TP_HIT + 1, _pc_label))
@@ -1593,7 +1594,7 @@ def main():
                                     f"  {_di} {coin}\n"
                                     f"  Remainder (75%) reached {_pc_tp_name} @ {_pc_exit:.6g}\n"
                                     f"  Blended P&L: <b>{_blended:+.1f}%</b>"
-                                    f" (25%@TP1 + 25%@{_pc_tp_name})\n"
+                                    f" (25%@TP1 + 75%@{_pc_tp_name})\n"
                                     f"  TP1 resolved {_pc_age_h:.0f}h ago"
                                 )
                 except Exception:
@@ -1810,11 +1811,22 @@ def main():
             _debrief_script = os.path.join(SCRIPT_DIR, "whale_stream_debrief.py")
             if os.path.exists(_debrief_script):
                 _flags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
-                subprocess.Popen(
-                    [sys.executable, _debrief_script, json.dumps(_newly_resolved)],
-                    creationflags=_flags
-                )
-                print(f"\n🧠 Debrief Agent launched — {len(_newly_resolved)} trade(s) queued for analysis")
+                _tmp_fd, _tmp_path = tempfile.mkstemp(suffix=".json", prefix="debrief_data_")
+                try:
+                    with os.fdopen(_tmp_fd, "w", encoding="utf-8") as _f:
+                        json.dump(_newly_resolved, _f)
+                except Exception as _e:
+                    print(f"   ⚠ Could not write debrief temp file: {_e}")
+                    try:
+                        os.close(_tmp_fd)
+                    except Exception:
+                        pass
+                else:
+                    subprocess.Popen(
+                        [sys.executable, _debrief_script, _tmp_path, "--from-file"],
+                        creationflags=_flags,
+                    )
+                    print(f"\n🧠 Debrief Agent launched — {len(_newly_resolved)} trade(s) queued for analysis")
             else:
                 print("\n   ℹ Debrief Agent script not found — skipping")
         except Exception as _de:

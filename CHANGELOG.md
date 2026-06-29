@@ -1,5 +1,117 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.8 — 2026-06-29 — Full system audit: 21 fixes across 9 files (circuit breakers, TP safety, dedup, security, monitoring)
+
+### `whale_stream_bot.py` — 5 fixes
+- **CRITICAL: Circuit breaker check completely missing from `main()`** — `paused.flag` was never
+  checked in the Bot. When Watchdog/Trader set the circuit breaker, Bot continued to run: fetching
+  200 coins, calling Claude twice, and logging signals — ignoring the safety halt. Added explicit
+  `paused.flag` check at the top of `main()` (after cycle guard, before any Claude call). Bot now
+  marks done and returns immediately when paused.
+- **HIGH: SHORT WR floor boundary off-by-one** — `short_wr_recent < 50` meant a WR of exactly 50%
+  dropped to the 93% floor instead of staying at 95%. Fixed: `<= 50` so the boundary is inclusive.
+- **HIGH: Conflict guard ran before SHORT confidence filter** — A valid 94% LONG signal could be
+  dropped by the cross-direction conflict guard because a 88% SHORT for the same coin was present.
+  That SHORT would then be auto-dropped by the confidence filter anyway. Fixed by reordering: SHORT
+  confidence filter runs first, then conflict guard operates only on remaining valid SHORTs.
+- **HIGH: WLD missing from LONG COIN AVOID prompt text** — WLD is in `LONG_COIN_BLOCKLIST` (code
+  drops it), but Claude was never told not to generate WLD LONG signals. Claude wasted a slot every
+  run. Added WLD to the LONG POOR COINS list in `WHALE_STREAM_PROMPT`.
+- **HIGH: Graveyard P&L sign filter asymmetric** — Filters existed for (SHORT LOSS + pnl>0) and
+  (LONG WIN + pnl<0) but not for the inverse. Added: (SHORT WIN + pnl<0) and (LONG LOSS + pnl>0)
+  now also skipped as malformed. Prevents corrupted graveyard entries from polluting self-learning.
+
+### `signal_scorer.py` — 1 fix
+- **HIGH: Confidence threshold 85% vs system floor 88%** — Scorer awarded full points (+2) to any
+  signal ≥85%, including the 85–87% band. Those signals always pass pre-screening then get
+  auto-dropped by the Bot's 88% LONG floor — wasting a Strategist Claude call every cycle. Raised
+  scorer threshold from 85% to 88% to match the system floor.
+
+### `whale_stream_strategist.py` — 1 fix
+- **HIGH: `--recheck` mode bypassed `paused.flag` circuit breaker** — The pause check was located
+  after the entire `--recheck` branch. A recheck run during a CB pause would still fetch Sheets,
+  evaluate signals, and overwrite `strategist_decisions.json`. Fixed: pause check moved to before
+  the `--recheck` branch — first action in `main()` after basic setup.
+
+### `whale_stream_trader.py` — 4 fixes
+- **CRITICAL: `allocated += leg_qty` ran even when TP leg order failed** — In `place_quad_tp_closes()`,
+  the `allocated` counter advanced regardless of whether `ok` was True. If TP2 failed silently,
+  the last leg underpaid (absorbed the failed leg's share), leaving contracts between TP2 and TP3
+  unprotected. Fixed: `allocated += leg_qty` now inside `if ok:`. Added post-loop warning print
+  when any legs fail.
+- **HIGH: Telegram alert sent on EVERY Trader run while paused** — 6 identical "TRADER PAUSED —
+  CIRCUIT BREAKER ACTIVE" messages fired per day until the operator cleared the flag. Added
+  `cb_pause_alerted.flag` sentinel: first pause sends alert + writes flag; subsequent runs skip
+  Telegram. `CLEAR_PAUSE.bat` now deletes `cb_pause_alerted.flag` so the next CB cycle re-alerts.
+- **HIGH: `availableToBorrow` in wallet balance chain** — If all margin was deployed,
+  `availableToWithdraw = 0` caused the `or` chain to fall through to `availableToBorrow`, which
+  can be nonzero in cross-margin mode even with zero free USDT. Could allow new orders when fully
+  deployed. Removed `availableToBorrow` from the chain; now only `availableToWithdraw or walletBalance`.
+- **MEDIUM: SHORT floor print label said "(REPAIR MODE)"** — The 95% SHORT floor is always active
+  (code-level), not only during REPAIR MODE. The misleading label was removed. Now: "95% code floor".
+
+### `whale_stream_tracker.py` — 2 fixes
+- **HIGH: Blended P&L for partial TP used 50/50 average instead of 25/75 weighted** — When TP1
+  hit (25% close) and the trade was upgraded to a TP2+ level, the blended P&L was `(pnl1+pnl2)/2`.
+  Correct formula: `pnl1 * 0.25 + pnl2 * 0.75`. Fixed. Also corrected Telegram message text.
+- **HIGH: Debrief subprocess passed JSON via command-line arg** — Windows has an 8191-char CLI
+  limit. A batch of multiple resolved trades can exceed this, causing the subprocess to silently
+  fail to start and permanently losing those debrief runs. Fixed: data written to `tempfile.mkstemp()`
+  and file path passed as `--from-file` argument. Temp file deleted by Debrief after reading.
+
+### `whale_stream_debrief.py` — 3 fixes
+- **CRITICAL: Dedup guard dropped second trade when same coin+direction resolved in same batch** —
+  `already_debriefed()` used `(coin, direction, run_timestamp)` as key. In a batch of two BTC LONG
+  trades, the second was always silently dropped because `run_timestamp` was identical. Fixed: added
+  `resolved_at` (the trade's own resolution time) to the dedup key, making each trade unique.
+- **HIGH: No try/except around Claude call in debrief loop** — Any exception from
+  `call_debrief_claude()` (network error, rate limit, etc.) propagated out of the loop, abandoning
+  all remaining trades without updating `pattern_memory.json`. Fixed: wrapped in try/except —
+  failed calls log a warning and fall through to the minimal fallback entry.
+- **HIGH: No timeout on Anthropic client** — A hung API call would hold the subprocess open
+  indefinitely. Multiple overlapping debrief runs would accumulate, and the last writer would
+  overwrite earlier runs' pattern memory. Fixed: `anthropic.Anthropic(..., timeout=30.0)`.
+
+### `whale_stream_watchdog.py` — 1 fix
+- **HIGH: `check_trader()` replaced RUN COMPLETE timestamp with any later PAUSED line** — When
+  a PAUSED message appeared in the log after a RUN COMPLETE line, the `dt_any` fallback overwrote
+  `dt`, making a paused trader look "OK" to the health checker. Fixed: `dt_any` scan now skips
+  lines containing "PAUSED" — only genuine activity lines update the fallback timestamp.
+
+### `check_daily_status.py` — 1 fix
+- **CRITICAL: `STATUS_URL` used "localhost" instead of "127.0.0.1"** — `status_server.py` binds
+  explicitly to `127.0.0.1` (IPv4) since the v47.7 fix. On Windows, "localhost" can resolve to
+  `::1` (IPv6), causing a connection refused — the gap checker reported status server as OFFLINE
+  on every run even when the server was healthy. Fixed: `STATUS_URL = "http://127.0.0.1:8765/..."`.
+
+### `morning_briefing.py` — 1 fix
+- **HIGH: Briefing always showed itself as "not seen today"** — `_agent_coverage_section()` checks
+  `daily_status.json` for agent completion. `_mark_done("briefing")` is called at the END of the
+  briefing's own run — so at the moment the coverage section runs, briefing is always missing,
+  generating daily false-alarm noise. Fixed: skip the "briefing" key in the self-coverage check.
+
+### `whale_stream_monitor.py` — 1 fix
+- **HIGH: `_mark_done("monitor")` called on Bybit API failure** — When `get_all_positions()` returned
+  None, the monitor immediately called `_mark_done()` and exited. `check_daily_status.py` saw
+  `monitor=True` and reported green — hiding sustained API outages completely. Fixed: on API failure,
+  do NOT call `_mark_done()`. The gap checker will now detect the monitor as missing for that cycle.
+
+### `status_server.py` — 1 fix
+- **HIGH: Entire WhaleStream directory served over HTTP** — The server exposed all files including
+  `local_config.py` (API keys, Telegram token) and `google_credentials.json` to any local process.
+  Added `do_GET()` override that restricts serving to only `daily_status.json` and `daily_status.js`
+  — returns 403 for all other paths.
+
+### `CLEAR_PAUSE.bat` — 1 fix
+- **OPS: Did not delete `cb_pause_alerted.flag` on CB clear** — The new v47.8 `cb_pause_alerted.flag`
+  sentinel (trader pause de-duplication) must be deleted when the CB is cleared so the next CB event
+  re-alerts the operator. Added `del cb_pause_alerted.flag` to the CLEAR_PAUSE.bat confirmation block.
+
+### Version bumps
+- bot.py, signal_scorer.py, strategist.py, trader.py, debrief.py, watchdog.py, monitor.py: v47.7 → v47.8
+
+---
+
 ## v47.7 — 2026-06-29 — Comprehensive audit: 12 fixes (Daily Checklist offline, confidence floors, circuit breaker, TP ordering, JS sync)
 
 ### `To do list/Daily Checklist.html` — 1 fix

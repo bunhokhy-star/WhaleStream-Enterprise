@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM WATCHDOG v47.7                                ║
+║   WHALE-STREAM WATCHDOG v47.8                                ║
 ║                                                              ║
 ║  ROLE (Principle 1): System health guardian.                 ║
 ║  Runs at :30 of every 4h cycle. Confirms all agents ran.     ║
@@ -198,9 +198,27 @@ def check_strategist():
 def check_trader():
     # Primary: RUN COMPLETE (successful trade cycle)
     dt = last_log_timestamp(TRADER_LOG, r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}) BKK\] RUN COMPLETE")
-    # Fallback: any BKK timestamp (catches PAUSED runs)
-    dt_any = last_log_timestamp(TRADER_LOG, r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}) BKK\]")
-    # Use most recent of the two
+    # Fallback: any BKK timestamp that is NOT a PAUSED line.
+    # Bug fix: if PAUSED is logged AFTER a RUN COMPLETE, scanning all timestamps
+    # would pick up the PAUSED timestamp and overwrite the valid RUN COMPLETE dt,
+    # making a paused run appear as a successful one.
+    dt_any = None
+    try:
+        with open(TRADER_LOG, "r", encoding="utf-8", errors="replace") as _tf:
+            for _line in _tf:
+                if "PAUSED" in _line or "paused" in _line:
+                    continue  # skip PAUSED lines — they must not overwrite RUN COMPLETE
+                _m = re.search(r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}) BKK\]", _line)
+                if _m:
+                    try:
+                        _dt = datetime.strptime(_m.group(1), "%Y-%m-%d %H:%M").replace(tzinfo=BKK)
+                        if dt_any is None or _dt > dt_any:
+                            dt_any = _dt
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+    # Use most recent of RUN COMPLETE and non-PAUSED fallback
     if dt is None or (dt_any and dt_any > dt):
         dt = dt_any
     ago = minutes_ago(dt)

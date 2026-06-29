@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM DEBRIEF AGENT v47.7 — POST-TRADE LEARNING    ║
+║   WHALE-STREAM DEBRIEF AGENT v47.8 — POST-TRADE LEARNING    ║
 ║                                                              ║
 ║  Called automatically by whale_stream_tracker.py after      ║
 ║  each WIN or LOSS resolution.                                ║
@@ -157,13 +157,20 @@ def load_memory():
     return {"last_updated": "", "debriefs": []}
 
 
-def already_debriefed(memory, coin, direction, debrief_at_approx):
+def already_debriefed(memory, coin, direction, debrief_at_approx, trade_unique_key=""):
     """
     Check if this specific trade was already debriefed.
-    Uses coin+direction+resolution timestamp proximity (within 5 min).
+    Uses coin+direction+trade_unique_key (resolved_at or tp_hit) to avoid
+    dropping the 2nd trade for the same coin+direction in the same batch.
+    Falls back to 5-minute timestamp proximity when trade_unique_key matches.
     """
     for d in memory.get("debriefs", []):
         if d.get("coin") == coin and d.get("direction") == direction:
+            # NEW: require trade-unique field to also match (resolved_at or tp_hit)
+            # OLD key was just coin+direction — caused silent drops in same-batch duplicates
+            stored_unique = (d.get("resolved_at", "") or d.get("tp_hit", "") or "")
+            if trade_unique_key and stored_unique and trade_unique_key != stored_unique:
+                continue  # different trade — same coin+direction but different resolution
             stored_ts = d.get("debrief_at", "")
             if stored_ts and debrief_at_approx:
                 # Both are "YYYY-MM-DD HH:MM BKK" format
@@ -394,7 +401,7 @@ Analyse this trade including the Strategist consensus. Return JSON only."""
 def call_debrief_claude(prompt):
     """Call Claude Haiku for a single trade debrief. Returns parsed dict or None."""
 
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=30.0)
     msg = client.messages.create(
         model=DEBRIEF_MODEL,
         max_tokens=450,   # raised from 320 — prevents truncation mid-JSON on multi-field responses
@@ -456,7 +463,10 @@ def run_debrief(trades):
         now = bkk_now_str()
 
         # Skip if already debriefed (duplicate call guard)
-        if already_debriefed(memory, coin, direction, now):
+        # Use resolved_at or tp_hit as trade-unique key to avoid dropping
+        # 2nd trade for same coin+direction resolved in the same batch.
+        _trade_unique = trade.get("resolved_at", "") or trade.get("tp_hit", "") or ""
+        if already_debriefed(memory, coin, direction, now, _trade_unique):
             log(f"   Skip {coin} {direction} — already debriefed")
             continue
 
@@ -467,7 +477,11 @@ def run_debrief(trades):
         consensus_note = consensus_verdict(strat_decision, outcome)
 
         prompt = build_debrief_prompt(trade)
-        result = call_debrief_claude(prompt)
+        try:
+            result = call_debrief_claude(prompt)
+        except Exception as _e:
+            log(f"   ⚠ Claude call failed for {coin} {direction}: {_e}")
+            result = None  # will fall through to the fallback minimal entry
 
         if not result:
             log(f"   ✗ Claude parse failed for {coin} {direction}")
@@ -484,6 +498,7 @@ def run_debrief(trades):
             "direction":     direction,
             "outcome":       outcome,
             "tp_hit":        trade.get("tp_hit", ""),
+            "resolved_at":   trade.get("resolved_at", ""),   # stored for dedup uniqueness
             "pnl":           float(trade.get("pnl", 0) or 0),
             "pattern":       trade.get("pattern", ""),
             "confidence":    trade.get("confidence", 0),
@@ -542,7 +557,7 @@ def main():
     """
     print()
     print("╔══════════════════════════════════════════════════════╗")
-    print("║   🧠  WHALE-STREAM DEBRIEF AGENT v47.7              ║")
+    print("║   🧠  WHALE-STREAM DEBRIEF AGENT v47.8              ║")
     print("║   Post-Trade Learning — every loss teaches us        ║")
     print("╚══════════════════════════════════════════════════════╝")
     print()
@@ -553,7 +568,17 @@ def main():
         return
 
     try:
-        trades = json.loads(sys.argv[1])
+        if "--from-file" in sys.argv and len(sys.argv) > 2:
+            # New protocol: tracker writes JSON to a temp file to avoid Windows 8191-char CLI limit
+            _data_path = sys.argv[1]  # first positional arg is the .json temp file path
+            with open(_data_path, "r", encoding="utf-8") as _f:
+                trades = json.load(_f)
+            try:
+                os.remove(_data_path)  # clean up temp file
+            except Exception:
+                pass
+        else:
+            trades = json.loads(sys.argv[1])  # old protocol — backwards compat
         if not isinstance(trades, list):
             trades = [trades]
     except Exception as e:

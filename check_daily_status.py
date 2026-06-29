@@ -10,7 +10,7 @@
 ║    ✅ All green — all expected completions confirmed              ║
 ║    ⚠️  Gap alert — lists exactly which agents didn't tick         ║
 ║                                                                  ║
-║  Also pings localhost:8765 to verify status server is alive.     ║
+║  Also pings 127.0.0.1:8765 to verify status server is alive.    ║
 ║                                                                  ║
 ║  Schedule: ADD_STATUS_CHECK_TASK.bat (every 4h at :45)           ║
 ╚══════════════════════════════════════════════════════════════════╝
@@ -52,7 +52,7 @@ except ImportError:
 
 BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
 STATUS_FILE = os.path.join(BASE_DIR, "daily_status.json")
-STATUS_URL  = "http://localhost:8765/daily_status.json"
+STATUS_URL  = "http://127.0.0.1:8765/daily_status.json"  # explicit IPv4 — matches server bind (v47.7 fix)
 
 BKK = timezone(timedelta(hours=7))
 
@@ -97,7 +97,7 @@ def send_telegram(msg):
 
 # ── Status server health ───────────────────────────────────────────
 def check_status_server():
-    """Returns True if status_server.py is alive on localhost:8765."""
+    """Returns True if status_server.py is alive on 127.0.0.1:8765."""
     try:
         r = requests.get(STATUS_URL + "?ping=1", timeout=3)
         return r.status_code < 500

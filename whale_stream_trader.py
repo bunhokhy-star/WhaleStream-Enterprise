@@ -409,7 +409,6 @@ def get_wallet_balance():
         for c in coins:
             if c.get("coin") == "USDT":
                 avail = float(c.get("availableToWithdraw") or
-                              c.get("availableToBorrow") or
                               c.get("walletBalance") or 0)
                 total = float(c.get("walletBalance") or
                               c.get("equity") or avail)
@@ -1002,7 +1001,12 @@ def place_quad_tp_closes(symbol, entry_side, qty, tp_prices, info):
         oid = (r.get("result") or {}).get("orderId", "") if ok else r.get("retMsg", "?")
         results.append({"tp_label": label, "price": tp_price,
                         "qty": leg_qty, "ok": ok, "order_id": oid})
-        allocated += leg_qty  # advance regardless of success — prevents last leg from absorbing failed legs
+        if ok:
+            allocated += leg_qty
+
+    _fail_legs = [r for r in results if not r["ok"]]
+    if _fail_legs:
+        print(f"   ⚠ {len(_fail_legs)} TP leg(s) failed — position partially uncovered")
 
     return results
 
@@ -1197,7 +1201,7 @@ def main():
         pass
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🤖  WHALE-STREAM TRADER v47.7 — BYBIT DEMO    ║")
+    print("║   🤖  WHALE-STREAM TRADER v47.8 — BYBIT DEMO    ║")
     print(f"║   💰  ${TRADE_MARGIN_USDT} margin × {LEVERAGE}x = ${TRADE_MARGIN_USDT*LEVERAGE} per trade        ║")
     print("╚══════════════════════════════════════════════════╝")
     print()
@@ -1271,7 +1275,17 @@ def main():
         print(f"   {CIRCUIT_LOSSES} consecutive LOSSes were detected on a previous run.")
         print("   No new orders will be placed until you clear the pause.")
         print("   → Delete 'paused.flag' or run CLEAR_PAUSE.bat to resume.")
-        send_telegram_alert(msg)
+        # NOTE: CLEAR_PAUSE.bat must also delete cb_pause_alerted.flag so the alert fires again
+        # if the circuit breaker re-triggers after the next operator clear.
+        _alerted_file = os.path.join(SCRIPT_DIR, "cb_pause_alerted.flag")
+        if not os.path.exists(_alerted_file):
+            send_telegram_alert(msg)
+            try:
+                open(_alerted_file, "w").close()
+            except Exception:
+                pass
+        else:
+            print("[CB] Already alerted — skipping repeat Telegram")
         log("PAUSED — circuit breaker flag present, skipping all orders")
         _mark_done("trader", details={"placed": [], "skipped": ["PAUSED — circuit breaker active"]})
         return
@@ -1764,7 +1778,7 @@ def main():
 
         # ── Code-level confidence floor (belt+suspenders after Strategist) ──
         if side == "Sell" and conf_val < 95:
-            print(f"   ✗ {coin} SHORT: conf {conf_val:.0f}% < 95% floor (REPAIR MODE) — skipping")
+            print(f"   ✗ {coin} SHORT: conf {conf_val:.0f}% < 95% code floor — skipping")
             continue
         if side == "Buy" and conf_val < 88:
             print(f"   ✗ {coin} LONG: conf {conf_val:.0f}% < 88% floor — skipping")

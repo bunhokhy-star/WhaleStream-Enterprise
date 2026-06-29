@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║       WHALE-STREAM NEAR-REAL-TIME MONITOR                    ║
+║       WHALE-STREAM NEAR-REAL-TIME MONITOR          v47.8     ║
 ║                                                              ║
 ║  Polls Bybit every 2 minutes to detect position changes      ║
 ║  and fires immediate Telegram alerts.                        ║
@@ -296,9 +296,9 @@ def run_monitor():
     # Fetch current Bybit positions
     current_positions = get_all_positions()
     if current_positions is None:
-        log("   ⚠ Bybit API failure — skipping cycle (cannot diff positions safely)")
-        _mark_done("monitor", details={"positions": "API_ERROR", "alerts": 0,
-                                       "last_run": bkk.strftime("%H:%M") + " BKK"})
+        log("   ⚠ Bybit API failure — skipping cycle, NOT marking done")
+        # Don't call _mark_done here so gap checker detects the failure
+        # (check_daily_status.py checks for "monitor"=True to determine health)
         return
     log(f"   Bybit open positions: {len(current_positions)} ({', '.join(current_positions) or 'none'})")
 

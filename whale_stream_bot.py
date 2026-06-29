@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v47.7   —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v47.8   —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 coins from CoinGecko (free, no key)     ║
@@ -251,7 +251,7 @@ except ImportError:
     MISSION_PROMPT = ""
     def print_mission_banner(): pass
 
-WHALE_STREAM_PROMPT = """WHALE-STREAM v47.7 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
+WHALE_STREAM_PROMPT = """WHALE-STREAM v47.8 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
 ROLE:
 You are an Institutional Multi-Agent Trading Committee composed of:
 • Market Regime Analyst • Smart Money Concepts Specialist • Quantitative Momentum Analyst • Liquidity & Stop-Hunt Analyst • Wyckoff Structure Analyst • Relative Strength Analyst • Breakout Probability Engine • Reversal Probability Engine • Continuation Probability Engine • Risk Management Committee
@@ -287,7 +287,7 @@ The trend is not your enemy — fighting it is.
 
 LIVE REGIME: injected in MARKET REGIME section of user message below.
 ════════════════════════════════════════════════════════════
-ANALYSIS ENGINE (v47.7)
+ANALYSIS ENGINE (v47.8)
 Each call provides ONE self-contained batch of market data (up to 100 coins).
 Analyze ALL coins in the provided batch.
 TOURNAMENT PROCESS (per batch):
@@ -635,7 +635,7 @@ RULES:
     - JUP: 75% WR (3/4 trades) — good track record
     - EIGEN: 67% WR — acceptable
   LONG POOR COINS (blocked or weak — avoid as LONG signals):
-    - ZRO, HYPE, COMP, QNT, WIF: 0-25% WR → already code-blocked (v46.62)
+    - ZRO, HYPE, COMP, QNT, WIF, WLD: 0-25% WR → already code-blocked (v46.62/v47.5) — DO NOT generate LONG signals for these coins
     - XLM, SOL: 33% WR → use only with very strong pattern confluence
 
 {SIGNAL_GRAVEYARD}
@@ -921,6 +921,10 @@ def fetch_signal_graveyard():
                     continue  # malformed SHORT — SL below entry
                 if direction == "LONG" and status == "WIN" and pnl_val < 0:
                     continue  # malformed LONG — TP below entry
+                if direction == "SHORT" and status == "WIN" and pnl_val < 0:
+                    continue  # malformed SHORT WIN with negative P&L
+                if direction == "LONG" and status == "LOSS" and pnl_val > 0:
+                    continue  # malformed LONG LOSS with positive P&L
                 if abs(pnl_val) < 5:
                     continue  # fake instant resolution — too small to be real
             except (ValueError, TypeError):
@@ -1803,7 +1807,7 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     shorts = data.get("shorts", [])
 
     lines = []
-    lines.append(f"🐳 WHALE-STREAM v47.7")
+    lines.append(f"🐳 WHALE-STREAM v47.8")
     lines.append(f"📅 {ts}")
 
     # ── Market regime summary ─────────────────────────────────
@@ -2262,9 +2266,16 @@ def main():
         pass  # status missing → proceed normally
     # ── End cycle guard ─────────────────────────────────────────────
 
+    # Circuit breaker check — must be before any Claude call or signal work
+    _pause_file = os.path.join(SCRIPT_DIR, "paused.flag")
+    if os.path.exists(_pause_file):
+        print(f"[CIRCUIT BREAKER] paused.flag active — skipping Bot run")
+        _mark_done("sigbot", details={"paused": True})
+        return
+
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🐳  WHALE-STREAM v47.7  — AUTO BOT STARTING    ║")
+    print("║   🐳  WHALE-STREAM v47.8  — AUTO BOT STARTING    ║")
     print("╚══════════════════════════════════════════════════╝")
     # Check conservative flag early so we can show it in the startup banner
     _short_conservative_early = os.path.exists(os.path.join(SCRIPT_DIR, "short_conservative.flag"))
@@ -2427,24 +2438,27 @@ def main():
             seen_s.add(sym)
             merged_shorts.append(sig)
 
+    # ── Programmatic SHORT confidence filter (belt + suspenders) ──────────────
+    # ORDERING NOTE: This filter runs BEFORE the cross-direction conflict guard
+    # intentionally. A weak SHORT (e.g. 88% conf) must not kill a valid LONG via
+    # the conflict guard if that SHORT would be dropped here anyway. Filtering
+    # SHORTs first ensures the conflict guard only sees SHORTs that would survive.
+    min_short_conf = 95 if short_wr_recent <= 50 else 93  # 95% floor until SHORT WR recovers to >50% (v47.8)
+    before = len(merged_shorts)
+    merged_shorts = [s for s in merged_shorts if _parse_conf(s) >= min_short_conf]
+    dropped = before - len(merged_shorts)
+    if dropped:
+        print(f"   🛡  SHORT WR {short_wr_recent:.0f}% → AUTO-DROPPED {dropped} short(s) below {min_short_conf}% confidence")
+
     # ── Cross-direction conflict guard ─────────────────────────────────────────
     # A coin cannot be both LONG and SHORT simultaneously — drop both sides if conflict.
+    # Runs AFTER SHORT conf filter so low-confidence SHORTs cannot kill valid LONGs.
     _conflict_coins = {s.get("coin", "").upper() for s in merged_shorts} & \
                       {s.get("coin", "").upper() for s in merged_longs}
     if _conflict_coins:
         print(f"   ⚠ Cross-direction conflict removed (LONG+SHORT same coin): {_conflict_coins}")
         merged_longs  = [s for s in merged_longs  if s.get("coin", "").upper() not in _conflict_coins]
         merged_shorts = [s for s in merged_shorts if s.get("coin", "").upper() not in _conflict_coins]
-
-    # ── Programmatic SHORT confidence filter (belt + suspenders) ──────────────
-    # If SHORT WR is critical, strip any shorts Claude emitted below the threshold,
-    # even if Claude didn't obey the graveyard instruction.
-    min_short_conf = 95 if short_wr_recent < 50 else 93  # 95% floor until SHORT WR recovers to ≥50% (v47.7)
-    before = len(merged_shorts)
-    merged_shorts = [s for s in merged_shorts if _parse_conf(s) >= min_short_conf]
-    dropped = before - len(merged_shorts)
-    if dropped:
-        print(f"   🛡  SHORT WR {short_wr_recent:.0f}% → AUTO-DROPPED {dropped} short(s) below {min_short_conf}% confidence")
 
     # ── Programmatic LONG confidence filter (code-level floor) ──────────────
     # 85-87% LONG band: 39.1% WR, avg -12.5% P&L — confirmed loser tier (v46.62).

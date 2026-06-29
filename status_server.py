@@ -2,7 +2,7 @@
 ╔══════════════════════════════════════════════════════════════════╗
 ║  WHALE-STREAM STATUS SERVER                                      ║
 ║  Serves daily_status.json to the Daily Checklist HTML            ║
-║  Port  : localhost:8765  (local only — not exposed to internet)  ║
+║  Port  : 127.0.0.1:8765  (local only — not exposed to internet) ║
 ║  Run   : python status_server.py                                 ║
 ║  Task Scheduler: At system startup, run minimized / hidden       ║
 ╚══════════════════════════════════════════════════════════════════╝
@@ -54,6 +54,21 @@ class WhaleStreamStatusHandler(SimpleHTTPRequestHandler):
         self.send_header("Expires", "0")
         super().end_headers()
 
+    def do_GET(self):
+        # Only serve the two status files — block everything else for security
+        # (prevents local_config.py and other files from being exposed over HTTP)
+        import posixpath
+        allowed = {"daily_status.json", "daily_status.js"}
+        req_path = posixpath.basename(self.path.split("?")[0])
+        if req_path not in allowed:
+            self.send_response(403)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"403 Forbidden\n")
+            return
+        # Serve normally via the parent class
+        super().do_GET()
+
     def do_OPTIONS(self):
         self.send_response(200)
         self.end_headers()
@@ -68,7 +83,7 @@ if __name__ == "__main__":
     server = HTTPServer(("127.0.0.1", PORT), WhaleStreamStatusHandler)  # explicit IPv4 — avoids IPv6 mismatch on Windows
     print(f"╔══════════════════════════════════════════════════╗")
     print(f"║  WHALE-STREAM Status Server running              ║")
-    print(f"║  http://localhost:{PORT}/daily_status.json         ║")
+    print(f"║  http://127.0.0.1:{PORT}/daily_status.json         ║")
     print(f"║  Serving: {BASE_DIR[:38]:<38} ║")
     print(f"╚══════════════════════════════════════════════════╝")
     try:

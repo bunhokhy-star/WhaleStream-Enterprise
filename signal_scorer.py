@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM SIGNAL SCORER v47.5                           ║
+║   WHALE-STREAM SIGNAL SCORER v47.8                           ║
 ║                                                              ║
 ║  Pre-scores every signal 0–10 BEFORE sending to Strategist.  ║
 ║  Deterministic — no API calls, instant evaluation.           ║
@@ -77,8 +77,8 @@ def _score_confidence(confidence: float) -> tuple[int, str]:
     Dimension 1: Bot confidence alignment.
     Bot assigns confidence 0–100. Higher = more certain.
     """
-    if confidence >= 85:
-        return 2, f"conf {confidence:.0f}% (≥85) +2"
+    if confidence >= 88:
+        return 2, f"conf {confidence:.0f}% (≥88) +2"
     elif confidence >= 70:
         return 1, f"conf {confidence:.0f}% (≥70) +1"
     else:

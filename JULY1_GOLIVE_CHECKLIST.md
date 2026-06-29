@@ -5,12 +5,14 @@
 
 ## PRE-FLIGHT (do the night before, June 30)
 
-- [ ] Run `analyze_shorts.py` — confirm LONG WR ≥ 50% and SHORT WR ≥ 70% (current baselines; scale targets up as system matures)
+- [ ] Run `analyze_shorts.py` — confirm LONG WR ≥ 50% and SHORT WR ≥ 50% (Gate 3 threshold; target ≥70% for mature SHORT scaling)
 - [ ] Verify `gate4_breach.flag` does NOT exist in WhaleStream folder (Gate 4 = >15% drawdown — must be clear before going live)
 - [ ] Verify `paused.flag` does NOT exist (circuit breaker must be inactive)
 - [ ] Open Bybit Dashboard → check demo balance is healthy (not in drawdown >15%)
 - [ ] Confirm all 4 daily agents ran cleanly today (Daily Checklist.html all green)
 - [ ] Verify 6 Recheck/Reactive tasks are registered in Task Scheduler — if not, run `ADD_RECHECK_TASKS.bat` as Administrator
+- [ ] Verify `WhaleStream-StatusCheck` task is registered — if not, run `ADD_STATUS_CHECK_TASK.bat` as Administrator
+- [ ] Verify `WhaleStream-StatusServer` task is registered and running — open `http://127.0.0.1:8765/daily_status.json` in browser to confirm
 - [ ] Close any demo positions you don't want carrying into live (or accept they stay demo)
 - [ ] Confirm live Bybit account has been funded (suggest $500 minimum)
 - [ ] Generate Live API keys in Bybit → API Management:
@@ -31,8 +33,10 @@ Then manually pause it while you edit:
 - This stops Trader from placing orders while you're mid-edit
 
 ### Step 2 — Open Task Scheduler
-- Temporarily **disable** all 16 WhaleStream tasks so nothing fires mid-switch:
-  - WhaleStream-Bot, Strategist, Trader, Watchdog, Tracker, Monitor, Briefing, OrphanCheck, LogAnalyzer
+- Temporarily **disable** all WhaleStream tasks so nothing fires mid-switch:
+  - WhaleStream-Bot, WhaleStreamStrategist, WhaleStream-Trader, WhaleStreamWatchdog
+  - WhaleStream-Tracker, WhaleStream-Monitor, WhaleStream-Briefing
+  - WhaleStream-OrphanCheck, WhaleStream-LogAnalyzer, WhaleStream-StatusCheck, WhaleStream-StatusServer
   - WhaleStream-Recheck-A/B/C, WhaleStream-Reactive-A/B/C
 
 ### Step 3 — Edit local_config.py (THE ONLY FILE YOU TOUCH)
@@ -68,7 +72,8 @@ If `TRADE_MARGIN_USDT` is not already in `local_config.py`, add it as a new line
 The system reads it via `try: from local_config import TRADE_MARGIN_USDT except ImportError: ...`
 
 Also update `BYBIT_START_BALANCE` in both `whale_stream_trader.py` and `whale_stream_tracker.py`
-to match your actual funded live balance (default: 500.0).
+to match your actual funded live balance (default: 500.0). Search for `BYBIT_START_BALANCE = 500.0`
+in both files and update it. *(v47.9 goal: move this to local_config.py so only one file needs editing)*
 
 Recommended for go-live: **$10–$25 per trade** (you can scale up after Gate 1).
 
@@ -78,7 +83,7 @@ Run: CLEAR_PAUSE.bat
 ```
 
 ### Step 7 — Re-enable Task Scheduler tasks
-Re-enable all 15 WhaleStream tasks you disabled in Step 2.
+Re-enable all WhaleStream tasks you disabled in Step 2 (all 15 main + StatusCheck + StatusServer).
 
 ### Step 8 — Force a manual first cycle to verify
 Run in this order (wait 30s between each):
@@ -136,4 +141,4 @@ No code changes needed to roll back.
 
 ---
 
-*Generated: 2026-06-28 | WHALE-STREAM v46.94*
+*Generated: 2026-06-28 | Updated: 2026-06-29 | WHALE-STREAM v47.8*

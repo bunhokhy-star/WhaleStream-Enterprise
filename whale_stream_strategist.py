@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM STRATEGIST v47.7 — SIGNAL QUALITY COUNCIL    ║
+║   WHALE-STREAM STRATEGIST v47.8 — SIGNAL QUALITY COUNCIL    ║
 ║                                                              ║
 ║  Team role: runs at :10 (Bot fires :00, Trader fires :20)   ║
 ║                                                              ║
@@ -799,7 +799,7 @@ def _get_cycle_id():
 def main():
     print()
     print("╔══════════════════════════════════════════════════════╗")
-    print("║   🧠  WHALE-STREAM STRATEGIST v47.7                 ║")
+    print("║   🧠  WHALE-STREAM STRATEGIST v47.8                 ║")
     print("║   Signal Quality Council — APPROVE / VETO / REDUCE  ║")
     print("╚══════════════════════════════════════════════════════╝")
     print()
@@ -828,6 +828,13 @@ def main():
         except Exception:
             pass  # status missing → proceed normally
     # ── End cycle guard ─────────────────────────────────────────────
+
+    # Circuit breaker — must be checked before ANY work including --recheck
+    _pause_file = os.path.join(SCRIPT_DIR, "paused.flag")
+    if os.path.exists(_pause_file):
+        print(f"[CIRCUIT BREAKER] paused.flag active — Strategist skipping (including recheck)")
+        _mark_done("strategist", details={"paused": True})
+        return
 
     # ════════════════════════════════════════════════════════════════
     # RE-CHECK MODE — rules-only intra-cycle evaluation (no Claude)
@@ -1018,13 +1025,6 @@ def main():
         print(f"\n✅ Re-check #{_recheck_num} complete.")
         return
     # ── End re-check mode ────────────────────────────────────────────
-
-    # ── Circuit breaker: skip all work when paused.flag exists ──────────────────
-    if os.path.exists(PAUSED_FILE):
-        log("⚠ Circuit breaker ACTIVE — Strategist paused (no Claude call, no decisions written)")
-        print("   ⚠ paused.flag found — Strategist is paused. Skipping signal review to save tokens.")
-        _mark_done("strategist", details={"approved": [], "vetoed": [], "skipped": "PAUSED — circuit breaker active"})
-        return
 
     # ── Load portfolio state ─────────────────────────────────────
     print("📊 Loading portfolio state...")

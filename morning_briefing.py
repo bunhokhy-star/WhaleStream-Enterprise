@@ -555,8 +555,16 @@ def _agent_coverage_section():
             _lines.append(f"  ❌ {_hh}:xx — MISSED: {', '.join(_missing)}")
             _lines.append(f"     → Task Scheduler → find the agent → right-click → Run")
 
-    # Always-running
-    _static_gaps = [_a for _a in ["tracker", "monitor"] if not _data.get(_a)]
+    # Always-running (briefing excluded — it calls _mark_done AFTER this function runs,
+    # so it would always appear as "not seen today" if included here)
+    _static_agents_to_check = ["tracker", "monitor"]
+    _static_gaps = []
+    for _a in _static_agents_to_check:
+        # Skip checking briefing — it hasn't called _mark_done yet when this runs
+        if _a == "briefing":
+            continue
+        if not _data.get(_a):
+            _static_gaps.append(_a)
     if not _static_gaps:
         _lines.append("  ✅ Tracker & Monitor active")
     else:
@@ -762,7 +770,7 @@ def build_message():
         f"  Available:  ${available_bal:,.2f}",
         f"  In Margin:  ${margin_in_use:,.2f}",
         f"  Unreal P&L: {pnl_sign}${unreal_pnl:,.2f}",
-        f"  Size scale: {size_scale_pct}%  (v47.7 drawdown protection)",
+        f"  Size scale: {size_scale_pct}%  (v47.8 drawdown protection)",
         f"  Updated:    {bal_updated}",
         "",
         "📊 GATE PROGRESS",
