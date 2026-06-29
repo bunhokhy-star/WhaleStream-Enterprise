@@ -5,81 +5,53 @@
       "direction": "LONG",
       "decision": "VETO",
       "grade": "D",
-      "reason": "Already holding AAVE LONG with -$4.23 P&L; last trade unresolved on this coin+direction violates re-entry discipline"
-    },
-    {
-      "coin": "XPL",
-      "direction": "LONG",
-      "decision": "VETO",
-      "grade": "D",
-      "reason": "Already holding XPL LONG with -$3.09 P&L; adding to unresolved losing position violates capital protection gate 4"
-    },
-    {
-      "coin": "JUP",
-      "direction": "LONG",
-      "decision": "VETO",
-      "grade": "D",
-      "reason": "Already holding JUP LONG with -$1.15 P&L; multiple JUP signals competing while position unresolved violates discipline"
-    },
-    {
-      "coin": "SPX",
-      "direction": "SHORT",
-      "decision": "VETO",
-      "grade": "D",
-      "reason": "Already holding SPX SHORT with -$0.58 P&L; adding to unresolved losing position violates capital protection"
-    },
-    {
-      "coin": "FF",
-      "direction": "SHORT",
-      "decision": "VETO",
-      "grade": "D",
-      "reason": "Already holding FF SHORT with +$1.07 P&L (single winner); multiple new FF SHORT signals compete with open position"
+      "reason": "BTC -9.59% (bear confirmed) + LONG confidence 92% < 97% threshold = auto-veto rule 4; already holding AAVEUSDT at -$3.62, adding increases drawdown risk"
     },
     {
       "coin": "TIA",
       "direction": "LONG",
       "decision": "VETO",
       "grade": "D",
-      "reason": "Already holding TIA LONG with -$1.12 P&L; star coin status cannot override unresolved drawdown on same direction"
+      "reason": "BTC -9.59% (bear confirmed) + LONG confidence 90% < 97% threshold = auto-veto rule 4; compounding alts in bear market is our #1 loss pattern"
     },
     {
-      "coin": "NEAR",
+      "coin": "JUP",
       "direction": "LONG",
       "decision": "VETO",
-      "grade": "C",
-      "reason": "Portfolio already 7/7 long-heavy in drawdown; adding 8th long position violates concentration risk during 34% recovery"
-    },
-    {
-      "coin": "LIT",
-      "direction": "LONG",
-      "decision": "VETO",
-      "grade": "C",
-      "reason": "Portfolio already severely long-biased with -$18.24 net long exposure; adding LIT LONG deepens drawdown concentration"
+      "grade": "D",
+      "reason": "BTC -9.59% (bear confirmed) + LONG confidence 89% < 97% threshold = auto-veto rule 4; already holding JUPUSDT at -$1.77, adding exposure violates capital protection gate"
     },
     {
       "coin": "H",
       "direction": "SHORT",
       "decision": "APPROVE",
       "grade": "A+",
-      "reason": "Stage 5 catastrophic distribution with proven 19W/0L graveyard dominance; no conflict with open positions; SHORT flows with neutral regime"
+      "reason": "Stage 5 catastrophic distribution, 97% confidence, 19W/0L proven short pattern, aligns with bear regime, no open position conflict"
     },
     {
-      "coin": "MNT",
+      "coin": "FF",
       "direction": "SHORT",
       "decision": "APPROVE",
-      "grade": "A",
-      "reason": "Stage 5 catastrophic distribution with -20% 7d structural breakdown and proven graveyard WIN; SHORT aligns with market regime"
+      "grade": "A+",
+      "reason": "Stage 5 catastrophic distribution, 96% confidence, 19/20 graveyard wins, chronic bleed structure, flows with bear regime; already holding FF short at +$1.28 (winning) \u2014 add to proven winner"
+    },
+    {
+      "coin": "SPX",
+      "direction": "SHORT",
+      "decision": "VETO",
+      "grade": "D",
+      "reason": "Pattern mentions 'dead-cat rejection' AND 'meme sector' \u2014 auto-veto rule 2 (dead cat bounce language); despite 95% confidence, pattern descriptor violates non-negotiable filter"
     }
   ],
-  "regime_note": "BTC -6.51% 7d = neutral regime; portfolio drowning in 7 long positions (-$18.24 net) during drawdown; SHORT the proven stage 5 coins (H, MNT) to hedge and recover; stop adding LONGs until winners materialize",
+  "regime_note": "Bear market confirmed (BTC -9.59%); LONG signals fighting downtrend are high-drawdown traps; SHORT flows with regime and must have 97%+ quality or be avoided.",
   "approved_count": 2,
-  "vetoed_count": 8,
+  "vetoed_count": 4,
   "reduced_count": 0,
-  "run_at": "2026-06-28 20:10 BKK",
-  "signal_count": 18,
-  "btc_7d_pct": -6.511126587505305,
+  "run_at": "2026-06-29 21:09 BKK",
+  "signal_count": 6,
+  "btc_7d_pct": -9.58895170939051,
   "market_bias": "NEUTRAL",
-  "cycle_id": "2026-06-28_2000",
+  "cycle_id": "2026-06-29_2000",
   "recheck_count": 0,
   "recheck_changes": []
 }

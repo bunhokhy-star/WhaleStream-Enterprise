@@ -1,3 +1,4 @@
+from __future__ import annotations   # PEP 563 — lazy annotations, Python 3.7+ compatible
 """
 ╔══════════════════════════════════════════════════════════════╗
 ║   WHALE-STREAM SIGNAL SCORER v47.9                           ║
@@ -301,7 +302,9 @@ def format_score_for_prompt(signal: dict) -> str:
 # ── Self-test (run directly for verification) ──────────────────
 if __name__ == "__main__":
     import io, sys
-    if hasattr(sys.stdout, "buffer"):
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+    elif hasattr(sys.stdout, "buffer"):
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
 
     print("\n🧪 SIGNAL SCORER — Self Test\n")

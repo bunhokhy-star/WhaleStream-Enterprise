@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM STRATEGIST v47.10 — SIGNAL QUALITY COUNCIL    ║
+║   WHALE-STREAM STRATEGIST v47.14 — SIGNAL QUALITY COUNCIL    ║
 ║                                                              ║
 ║  Team role: runs at :10 (Bot fires :00, Trader fires :20)   ║
 ║                                                              ║
@@ -46,9 +46,15 @@ from datetime import datetime, timezone, timedelta
 BKK = timezone(timedelta(hours=7))   # Bangkok timezone (UTC+7) — used everywhere
 
 # ── Force UTF-8 output (prevents crash in Task Scheduler) ─────
-if hasattr(sys.stdout, "buffer"):
+# Use reconfigure() — changes encoding in-place without double-wrapping the buffer,
+# which avoids "ValueError: I/O operation on closed file" at Python shutdown.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+elif hasattr(sys.stdout, "buffer"):   # Python < 3.7 fallback (very unlikely)
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
-if hasattr(sys.stderr, "buffer"):
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+elif hasattr(sys.stderr, "buffer"):
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True)
 
 
@@ -480,7 +486,7 @@ except ImportError:
 try:
     from signal_scorer import score_all_signals, format_score_for_prompt
     _SCORER_AVAILABLE = True
-except ImportError:
+except Exception:   # catches ImportError AND TypeError (Python<3.9 tuple[...] annotations)
     _SCORER_AVAILABLE = False
     def score_all_signals(signals, bias, history, positions):
         return signals, [], []
@@ -491,7 +497,7 @@ except ImportError:
 try:
     from trade_logger import _load_local_log as _tl_load_log
     _LOGGER_AVAILABLE = True
-except ImportError:
+except Exception:   # catches ImportError AND any other import-time error
     _LOGGER_AVAILABLE = False
 
 STRATEGIST_SYSTEM = (MISSION_PROMPT + """You are the WHALE-STREAM Trading Strategist — the second layer of review between signal generation and execution.
@@ -799,7 +805,7 @@ def _get_cycle_id():
 def main():
     print()
     print("╔══════════════════════════════════════════════════════╗")
-    print("║   🧠  WHALE-STREAM STRATEGIST v47.10                 ║")
+    print("║   🧠  WHALE-STREAM STRATEGIST v47.14                 ║")
     print("║   Signal Quality Council — APPROVE / VETO / REDUCE  ║")
     print("╚══════════════════════════════════════════════════════╝")
     print()

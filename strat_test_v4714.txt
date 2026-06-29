@@ -1,0 +1,78 @@
+
+╔══════════════════════════════════════════════════════╗
+║   🧠  WHALE-STREAM STRATEGIST v47.10                 ║
+║   Signal Quality Council — APPROVE / VETO / REDUCE  ║
+╚══════════════════════════════════════════════════════╝
+
+
+┌─────────────────────────────────────────────────────┐
+│  🐋 WHALE-STREAM MISSION                            │
+│  Build trust through discipline. Earn live capital. │
+│  This system belongs to the whole team.             │
+└─────────────────────────────────────────────────────┘
+   Balance: $331.18  |  1d to Go-Live  |  Target: $425 (Gate 4)
+
+[2026-06-29 21:09 BKK] === Strategist run started 2026-06-29 21:09 BKK ===
+📊 Loading portfolio state...
+   Balance: $331.18  Drawdown: 33.8%
+   Open positions: 6
+
+📋 Loading signals from Google Sheets...
+   ✓ Found 6 OPEN signal(s) from last bot run (within 26h)
+
+📚 Analysing trade history per coin (Sheet — last 60 rows)...
+   JUP LONG: 0W / 0L (0 sample(s) from sheet)
+   H SHORT: 0W / 0L (0 sample(s) from sheet)
+   FF SHORT: 0W / 0L (0 sample(s) from sheet)
+   AAVE LONG: 0W / 0L (0 sample(s) from sheet)
+   SPX SHORT: 0W / 0L (0 sample(s) from sheet)
+   TIA LONG: 0W / 0L (0 sample(s) from sheet)
+
+📊 Loading full trade history from trade_logger...
+   📊 Logger: 206 total trades  |  6/6 signal coin(s) have history
+      JUP LONG: 5W / 2L  (7 trade(s))
+      H SHORT: 33W / 2L  (35 trade(s))
+      FF SHORT: 4W / 0L  (4 trade(s))
+      AAVE LONG: 5W / 0L  (5 trade(s))
+      SPX SHORT: 3W / 0L  (3 trade(s))
+      TIA LONG: 4W / 2L  (6 trade(s))
+
+📈 Fetching BTC 7-day change...
+   BTC 7d: -9.59%  (Bear regime)
+
+📊 BTC Market Regime Filter...
+   BTC price: $59,247  |  20-period 4h SMA: $60,077  |  -1.4% from SMA
+   😐 MARKET BIAS: NEUTRAL
+[2026-06-29 21:09 BKK] Market bias: NEUTRAL  BTC $59,247  SMA $60,077  (-1.4%)
+
+🎯 Scoring signals (pre-Claude quality gate)...
+   ⚠️ AAVE LONG — Score: 5/10 [REVIEW] | Conf:+2 Regime:+1 WR:+2 Corr:+0 Pat:+0
+   ⚠️ TIA LONG — Score: 6/10 [REVIEW] | Conf:+2 Regime:+1 WR:+2 Corr:+0 Pat:+1
+   ⚠️ JUP LONG — Score: 5/10 [REVIEW] | Conf:+2 Regime:+1 WR:+2 Corr:+0 Pat:+0
+   ⚠️ H SHORT — Score: 6/10 [REVIEW] | Conf:+2 Regime:+1 WR:+2 Corr:+1 Pat:+0
+   ⚠️ FF SHORT — Score: 5/10 [REVIEW] | Conf:+2 Regime:+1 WR:+2 Corr:+0 Pat:+0
+   ⚠️ SPX SHORT — Score: 6/10 [REVIEW] | Conf:+2 Regime:+1 WR:+2 Corr:+1 Pat:+0
+   → Sending 6 signal(s) to Claude (0 STRONG + 6 REVIEW, 0 auto-skipped)
+
+📚 Loading pattern memory...
+
+🧠 Calling Strategist Claude...
+   🧠 Model: claude-haiku-4-5-20251001
+   ✓ Response received (2001 chars)
+
+   Results: 2 APPROVED  4 VETOED  0 REDUCE_SIZE
+
+   ⛔  AAVE LONG [D]  BTC -9.59% (bear confirmed) + LONG confidence 92% < 97% threshold = auto-veto rule 4; already holding AAVEUSDT at -$3.62, adding increases drawdown risk
+   ⛔  TIA LONG [D]  BTC -9.59% (bear confirmed) + LONG confidence 90% < 97% threshold = auto-veto rule 4; compounding alts in bear market is our #1 loss pattern
+   ⛔  JUP LONG [D]  BTC -9.59% (bear confirmed) + LONG confidence 89% < 97% threshold = auto-veto rule 4; already holding JUPUSDT at -$1.77, adding exposure violates capital protection gate
+   ✅  H SHORT [A+]  Stage 5 catastrophic distribution, 97% confidence, 19W/0L proven short pattern, aligns with bear regime, no open position conflict
+   ✅  FF SHORT [A+]  Stage 5 catastrophic distribution, 96% confidence, 19/20 graveyard wins, chronic bleed structure, flows with bear regime; already holding FF short at +$1.28 (winning) — add to proven winner
+   ⛔  SPX SHORT [D]  Pattern mentions 'dead-cat rejection' AND 'meme sector' — auto-veto rule 2 (dead cat bounce language); despite 95% confidence, pattern descriptor violates non-negotiable filter
+
+   Regime: Bear market confirmed (BTC -9.59%); LONG signals fighting downtrend are high-drawdown traps; SHORT flows with regime and must have 97%+ quality or be avoided.
+
+   ✓ Decisions written → strategist_decisions.json
+[2026-06-29 21:09 BKK] Decisions: 2 APPROVED, 4 VETOED, 0 REDUCE_SIZE — signals reviewed: 6
+
+✅ Strategist complete.
+
