@@ -21,12 +21,11 @@ LOCAL_JSON  = os.path.join(BASE_DIR, "daily_status.json")
 CHECKLIST   = os.path.join(BASE_DIR, "To do list", "Daily Checklist.html")
 TIMEOUT_SEC = 10
 
-# ── Fetch from server ─────────────────────────────────────────────────────────
+# ── Fetch from server status server ──────────────────────────────────────────
 def fetch_status():
     try:
         with urllib.request.urlopen(SERVER_URL, timeout=TIMEOUT_SEC) as r:
-            raw = r.read().decode("utf-8")
-            return json.loads(raw)
+            return json.loads(r.read().decode("utf-8"))
     except Exception as e:
         print(f"[sync_status] ERROR fetching {SERVER_URL}: {e}", file=sys.stderr)
         return None
