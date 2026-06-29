@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║       WHALE-STREAM NEAR-REAL-TIME MONITOR          v47.13     ║
+║       WHALE-STREAM NEAR-REAL-TIME MONITOR          v47.15     ║
 ║                                                              ║
 ║  Polls Bybit every 2 minutes to detect position changes      ║
 ║  and fires immediate Telegram alerts.                        ║
@@ -135,7 +135,7 @@ def log(msg):
 # ─────────────────────────────────────────────────────────────
 def bybit_request(method, endpoint, params=None, body=None):
     """Authenticated Bybit V5 API request (Demo account)."""
-    timestamp   = str(int(time.time() * 1000))
+    timestamp   = str(int(time.time() * 1000) - 3000)  # 3s pre-compensation matches tracker.py auth
     recv_window = "20000"
 
     if method == "GET":

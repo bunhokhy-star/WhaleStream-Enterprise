@@ -1,5 +1,68 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.15 — 2026-06-29 — Comprehensive clean-system pass: 12 fixes across 8 files
+
+### `whale_stream_trader.py` (5 fixes)
+- **HIGH: Fix stdout double-wrap crash** — Replaced `TextIOWrapper` double-wrap with
+  `reconfigure()` pattern (matching strategist.py). The old code created a second wrapper
+  around an already-wrapped stdout, causing `ValueError: I/O operation on closed file` on
+  shutdown.
+- **HIGH: Fix REDUCE_SIZE log/clamp ordering** — `_MIN_SIZE_MULT` clamp was applied AFTER
+  the log message, so printed size was pre-clamp while actual order was post-clamp. Fixed
+  by applying clamp first, then logging.
+- **MEDIUM: Fix veto match to require coin+direction** — Veto lookup was matching open
+  positions only by coin, ignoring direction. A LONG veto could incorrectly block a SHORT
+  on the same coin. Now requires both coin and direction to match.
+- **LOW: Remove stale "July 1 go-live" reference** — `"→ Review July 1 go-live decision."`
+  replaced with `"→ Review live trading readiness."` (date-agnostic).
+- **LOW: Version banner updated** v47.10 → v47.15.
+
+### `whale_stream_strategist.py` (1 fix)
+- **MEDIUM: Fix cycle guard midnight-boundary split** — `datetime.now()` was called twice
+  (once for `_cg_hour`, once for the date check), so a run spanning midnight would compare
+  today's hour against yesterday's date and skip the cycle incorrectly. Fixed by capturing
+  `_cg_now` once before both uses.
+
+### `whale_stream_tracker.py` (1 fix)
+- **MEDIUM: Fix Gate 6 streak display** — Checklist string showed `max_consec` (all-time
+  peak) instead of `consec` (current trailing streak). Gate 6 checks the *current* trailing
+  streak, not the historical max, so the wrong variable was displayed.
+
+### `whale_stream_watchdog.py` (1 fix)
+- **LOW: Version banner updated** v47.10 → v47.15.
+
+### `whale_stream_monitor.py` (2 fixes)
+- **MEDIUM: Add Bybit auth clock-skew compensation** — Bybit rejects requests whose
+  timestamp is ahead of server time. Tracker.py already subtracts 3000ms; monitor.py was
+  missing this, causing intermittent auth failures. Fixed to match tracker.py pattern.
+- **LOW: Version banner updated** v47.13 → v47.15.
+
+### `whale_stream_debrief.py` (1 fix)
+- **LOW: Version banner updated** v47.13 → v47.15.
+
+### `whale_stream_bot.py` (1 fix)
+- **LOW: Version banner updated** v47.10 → v47.15.
+
+### `trade_logger.py` (2 fixes)
+- **HIGH: Fix pnl_pct falsy bug** — `if pnl_pct:` evaluated False for 0.0 (breakeven
+  trades), causing them to log pnl_usd=0.0 even when pnl_pct was explicitly 0.0. Changed
+  to `if pnl_pct is not None:`.
+- **MEDIUM: Fix trade_id collision** — Same coin+direction closing at the same minute
+  generated identical IDs, causing Google Sheets duplicate-key conflicts. Fixed by appending
+  the sheet row index `_r{i}` to guarantee uniqueness.
+
+### `morning_briefing.py` (2 fixes)
+- **HIGH: Fix Gate 1 division-by-zero** — `g1_target` can be 0 on the first cycle before
+  any target is set. Division was unguarded; now checks `g1_target > 0` before dividing.
+- **MEDIUM: Fix BTC price truthiness** — `if btc_price and btc_sma:` evaluated False when
+  either was 0.0. Changed to `if btc_price is not None and btc_sma is not None:`.
+
+### `check_daily_status.py` (1 fix)
+- **LOW: Health check now requires HTTP 200** — Was returning True for any status < 500
+  (e.g. 301 redirect, 404 not found). Changed to `return r.status_code == 200`.
+
+---
+
 ## v47.13 — 2026-06-29 — Full audit pass: 10 fixes across 6 files
 
 ### `whale_stream_trader.py`

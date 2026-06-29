@@ -821,14 +821,15 @@ def main():
     # ── Cycle guard: skip if already done this 4h slot ──────────────
     import json as _jcg, datetime as _dcg
     _cg_path  = os.path.join(SCRIPT_DIR, "daily_status.json")
-    _cg_hour  = _dcg.datetime.now(_dcg.timezone(_dcg.timedelta(hours=7))).hour
+    _cg_now   = _dcg.datetime.now(_dcg.timezone(_dcg.timedelta(hours=7)))   # single capture avoids midnight split
+    _cg_hour  = _cg_now.hour
     _cg_cycle = str((_cg_hour // 4) * 4).zfill(2)
     _cg_key   = f"strategist_{_cg_cycle}"
     if not _is_recheck:   # re-checks always bypass the guard
         try:
             with open(_cg_path, encoding="utf-8") as _cgf:
                 _cg_data = _jcg.load(_cgf)
-            if _cg_data.get("date") == _dcg.datetime.now(_dcg.timezone(_dcg.timedelta(hours=7))).date().isoformat() and _cg_data.get(_cg_key):
+            if _cg_data.get("date") == _cg_now.date().isoformat() and _cg_data.get(_cg_key):
                 print(f"[CYCLE GUARD] {_cg_key} already completed today — skipping duplicate run.")
                 return
         except Exception:

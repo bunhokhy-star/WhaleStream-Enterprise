@@ -45,9 +45,15 @@ from urllib.parse import urlencode
 BKK = timezone(timedelta(hours=7))   # Bangkok timezone (UTC+7) — used everywhere
 
 # Force UTF-8 output — prevents UnicodeEncodeError on Windows CP1252 consoles / Task Scheduler.
-if hasattr(sys.stdout, "buffer"):
+# Use reconfigure() — changes encoding in-place without double-wrapping the buffer,
+# which avoids "ValueError: I/O operation on closed file" at Python shutdown.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+elif hasattr(sys.stdout, "buffer"):
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
-if hasattr(sys.stderr, "buffer"):
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+elif hasattr(sys.stderr, "buffer"):
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True)
 
 
@@ -282,7 +288,7 @@ def write_balance_file(balance, open_positions=0):
             f"🟢 GATE 4 CLEARED!\n"
             f"Balance: ${balance:.2f} recovered above $425\n"
             f"Drawdown back below 15% ✅\n"
-            f"→ Review July 1 go-live decision."
+            f"→ Review live trading readiness."
         )
         send_telegram_alert(_g4_recovery_msg)
         log(f"GATE 4 CLEARED — balance crossed $425 (was ${_old_balance:.2f}, now ${balance:.2f})")
@@ -1200,7 +1206,7 @@ def main():
         pass
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🤖  WHALE-STREAM TRADER v47.10 — BYBIT DEMO    ║")
+    print("║   🤖  WHALE-STREAM TRADER v47.15 — BYBIT DEMO    ║")
     print(f"║   💰  ${TRADE_MARGIN_USDT} margin × {LEVERAGE}x = ${TRADE_MARGIN_USDT*LEVERAGE} per trade        ║")
     print("╚══════════════════════════════════════════════════╝")
     print()
@@ -1742,7 +1748,8 @@ def main():
             _veto_reason = "Strategist veto"
             try:
                 for _d in _strat_data.get("decisions", []):
-                    if _d.get("coin","").upper() == coin.upper():
+                    if (_d.get("coin","").upper() == coin.upper()
+                            and _d.get("direction","").upper() == _strat_key[1].upper()):
                         _veto_reason = _d.get("reason", "Strategist veto")
                         break
             except Exception:
@@ -1755,17 +1762,19 @@ def main():
         if _strat_key in _strat_reduces:
             # Half-size trade — use local multiplier so other coins are unaffected
             _coin_size_mult = round(_size_mult * 0.5, 3)
-            print(f"   ⚠️ STRATEGIST REDUCE: {coin} {_strat_key[1]} — trading at {_coin_size_mult:.2f}x size (was {_size_mult:.2f}x)")
-            log(f"STRATEGIST REDUCE: {coin} {_strat_key[1]} — size {_size_mult:.2f}x → {_coin_size_mult:.2f}x")
         else:
             _coin_size_mult = _size_mult
         # Minimum size floor — Gate 4 (0.40×) + REDUCE_SIZE (×0.5) = 0.20×, which can
         # fall below Bybit's minimum order value. Floor at 0.25× to stay safely above.
+        # Apply clamp BEFORE logging so printed values reflect actual order size.
         _MIN_SIZE_MULT = 0.25
         if _coin_size_mult < _MIN_SIZE_MULT:
             log(f"SIZE FLOOR: {coin} — {_coin_size_mult:.3f}x below minimum {_MIN_SIZE_MULT}x floor → clamped to {_MIN_SIZE_MULT}x")
             print(f"   ⚠️ SIZE FLOOR: {coin} multiplier {_coin_size_mult:.2f}x → clamped to {_MIN_SIZE_MULT}x (Bybit min order protection)")
             _coin_size_mult = _MIN_SIZE_MULT
+        if _strat_key in _strat_reduces:
+            print(f"   ⚠️ STRATEGIST REDUCE: {coin} {_strat_key[1]} — trading at {_coin_size_mult:.2f}x size (was {_size_mult:.2f}x)")
+            log(f"STRATEGIST REDUCE: {coin} {_strat_key[1]} — size {_size_mult:.2f}x → {_coin_size_mult:.2f}x")
         # ── end Strategist check ───────────────────────────────────────────────
 
         # Skip if already have a position OR an unfilled order

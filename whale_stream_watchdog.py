@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM WATCHDOG v47.10                                ║
+║   WHALE-STREAM WATCHDOG v47.15                                ║
 ║                                                              ║
 ║  ROLE (Principle 1): System health guardian.                 ║
 ║  Runs at :30 of every 4h cycle. Confirms all agents ran.     ║
@@ -70,6 +70,7 @@ def _write_html_snapshot():
         with open(_html_path, encoding="utf-8") as _hf:
             _html = _hf.read()
         _inject = "var WS_EMBEDDED=" + json.dumps(_data, separators=(',', ':'), ensure_ascii=False) + ";"
+        # Replace existing WS_EMBEDDED assignment; DOTALL non-greedy stops at first ';' after '}'
         _new_html = re.sub(r'var WS_EMBEDDED=\{[\s\S]*?\};', _inject, _html)
         if _new_html == _html:
             # Pattern not matched (first run or HTML was reset) — inject before </script>

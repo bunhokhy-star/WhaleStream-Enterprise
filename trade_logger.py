@@ -265,7 +265,7 @@ def sync_from_sheets() -> int:
 
         # Estimate USD P&L (margin $20 by default; refined if we know margin)
         margin   = 20.0   # Phase 1 default — future: read from dedicated column
-        pnl_usd  = round((pnl_pct / 100.0) * margin, 4) if pnl_pct else 0.0
+        pnl_usd  = round((pnl_pct / 100.0) * margin, 4) if pnl_pct is not None else 0.0
 
         # Extract hour from opened_at for time-of-day analysis
         hour = None
@@ -276,7 +276,7 @@ def sync_from_sheets() -> int:
         except Exception:
             pass
 
-        trade_id = f"{coin}_{direction}_{closed_at}".replace(" ", "_").replace(":", "")
+        trade_id = f"{coin}_{direction}_{closed_at}_r{i}".replace(" ", "_").replace(":", "")  # row index prevents same-minute collisions
 
         trades.append({
             "id":            trade_id,

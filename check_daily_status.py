@@ -100,7 +100,7 @@ def check_status_server():
     """Returns True if status_server.py is alive on 127.0.0.1:8765."""
     try:
         r = requests.get(STATUS_URL + "?ping=1", timeout=3)
-        return r.status_code < 500
+        return r.status_code == 200
     except Exception:
         return False
 

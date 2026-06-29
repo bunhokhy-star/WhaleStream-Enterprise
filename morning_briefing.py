@@ -594,17 +594,17 @@ def build_message():
         bias_emoji   = "🐻"
         bias_action  = "SHORT mode — trade only SHORTs today"
         bias_detail  = (f"BTC ${btc_price:,.0f} is {abs(btc_pct):.1f}% BELOW 20-period 4h SMA (${btc_sma:,.0f})"
-                        if btc_price and btc_sma else "BTC data unavailable (Bybit offline?)")
+                        if btc_price is not None and btc_sma is not None else "BTC data unavailable (Bybit offline?)")
     elif bias == "BULLISH":
         bias_emoji   = "🐂"
         bias_action  = "LONG mode — trade only LONGs today"
         bias_detail  = (f"BTC ${btc_price:,.0f} is {abs(btc_pct):.1f}% ABOVE 20-period 4h SMA (${btc_sma:,.0f})"
-                        if btc_price and btc_sma else "BTC data unavailable (Bybit offline?)")
+                        if btc_price is not None and btc_sma is not None else "BTC data unavailable (Bybit offline?)")
     else:
         bias_emoji   = "😐"
         bias_action  = "NEUTRAL — both directions allowed"
         bias_detail  = (f"BTC ${btc_price:,.0f} within ±2% of 4h SMA (${btc_sma:,.0f})"
-                        if btc_price and btc_sma else "BTC SMA unavailable (Bybit offline?)")
+                        if btc_price is not None and btc_sma is not None else "BTC SMA unavailable (Bybit offline?)")
 
     # ── Data ──
     bal      = parse_balance()
@@ -688,9 +688,9 @@ def build_message():
     # ── Gate 1 bar ──
     g1_done   = analysis["gate1_done"]
     g1_target = analysis["gate1_target"]
-    bar_filled = int(g1_done / g1_target * 10)
+    bar_filled = int(g1_done / g1_target * 10) if g1_target > 0 else 0
     g1_bar    = progress_bar(bar_filled)
-    g1_pct    = f"{g1_done / g1_target * 100:.0f}%"
+    g1_pct    = f"{g1_done / g1_target * 100:.0f}%" if g1_target > 0 else "0%"
 
     # ── Gate 2 ──
     if analysis["gate2_pass"]:

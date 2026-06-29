@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM DEBRIEF AGENT v47.13 — POST-TRADE LEARNING    ║
+║   WHALE-STREAM DEBRIEF AGENT v47.15 — POST-TRADE LEARNING    ║
 ║                                                              ║
 ║  Called automatically by whale_stream_tracker.py after      ║
 ║  each WIN or LOSS resolution.                                ║

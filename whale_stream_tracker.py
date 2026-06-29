@@ -1295,7 +1295,7 @@ def _update_gate_checklist(all_rows):
     # Check if LAST 3 weeks are all profitable
     last3_weeks = sorted_weeks[-3:] if len(sorted_weeks) >= 3 else []
     g6_ok  = len(last3_weeks) == 3 and all(week_pnl[w] > 0 for w in last3_weeks)
-    g6_str = f"{'✅' if g6_ok else '❌'} {max_consec}/3 wks"
+    g6_str = f"{'✅' if g6_ok else '❌'} {consec}/3 wks"
 
     overall_ok = all([g1_ok, g2_ok, g3_ok, bybit_ok, g5_ok, g6_ok])
     result_str = "**PASS ✅**" if overall_ok else "**FAIL**"
