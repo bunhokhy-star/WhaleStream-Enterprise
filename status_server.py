@@ -80,10 +80,10 @@ class WhaleStreamStatusHandler(SimpleHTTPRequestHandler):
 
 # ── Entry point ───────────────────────────────────────────────────
 if __name__ == "__main__":
-    server = HTTPServer(("127.0.0.1", PORT), WhaleStreamStatusHandler)  # explicit IPv4 — avoids IPv6 mismatch on Windows
+    server = HTTPServer(("0.0.0.0", PORT), WhaleStreamStatusHandler)  # bind all interfaces — accessible from Windows checklist
     print(f"╔══════════════════════════════════════════════════╗")
     print(f"║  WHALE-STREAM Status Server running              ║")
-    print(f"║  http://127.0.0.1:{PORT}/daily_status.json         ║")
+    print(f"║  http://0.0.0.0:{PORT}/daily_status.json           ║")
     print(f"║  Serving: {BASE_DIR[:38]:<38} ║")
     print(f"╚══════════════════════════════════════════════════╝")
     try:
