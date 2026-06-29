@@ -1,5 +1,19 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.16 — 2026-06-30 — TP auto-placement: monitor places TP orders after entry fills
+
+### `whale_stream_monitor.py`
+- **CRITICAL FIX: Auto-place TP orders when new position detected** — Trader.py places 4
+  reduce-only limit TP orders immediately after the entry order, but since the entry is a
+  LIMIT order the position doesn't exist yet → Bybit rejects with "current position is zero".
+  Monitor.py now detects the fill (~2 min later) and places the 4×25% TP orders automatically.
+  Workflow: (1) check Bybit for existing reduce-only orders (skip if trader somehow succeeded),
+  (2) read TP1-TP4 from Google Sheets for that coin+direction, (3) place 4 reduce-only GTC
+  limit orders, (4) send Telegram with result. Errors are caught per-leg and reported.
+- **Version bump**: v47.15 → v47.16
+
+---
+
 ## v47.15 — 2026-06-29 — Comprehensive clean-system pass: 12 fixes across 8 files
 
 ### `whale_stream_trader.py` (5 fixes)

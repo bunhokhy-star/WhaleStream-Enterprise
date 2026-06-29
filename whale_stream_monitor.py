@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║       WHALE-STREAM NEAR-REAL-TIME MONITOR          v47.15     ║
+║       WHALE-STREAM NEAR-REAL-TIME MONITOR          v47.16     ║
 ║                                                              ║
 ║  Polls Bybit every 2 minutes to detect position changes      ║
 ║  and fires immediate Telegram alerts.                        ║
@@ -109,6 +109,18 @@ except ImportError:
 SCRIPT_DIR      = os.path.dirname(os.path.abspath(__file__))
 STATE_FILE      = os.path.join(SCRIPT_DIR, "monitor_state.json")
 LOG_FILE        = os.path.join(SCRIPT_DIR, "monitor_log.txt")
+
+# ── Google Sheets (must match whale_stream_trader.py) ─────────
+GOOGLE_SHEET_ID         = "1R21mkduSpbki2HmlNJMHM95-LkGS0q-AKHE1HVIfMmI"
+GOOGLE_CREDENTIALS_FILE = "google_credentials.json"
+# Sheet column indices (0-based) — must stay in sync with trader.py
+_COL_COIN   = 0
+_COL_SIGNAL = 1
+_COL_TP1    = 5
+_COL_TP2    = 6
+_COL_TP3    = 7
+_COL_TP4    = 8
+_COL_STATUS = 11
 
 # Threshold: if remaining size / previous size <= this, treat as partial close (TP1)
 # Quad-TP: 25% close leaves 75% remaining.  Need ratio > 0.75 to detect it.
@@ -283,6 +295,273 @@ def save_state(state):
 
 
 # ─────────────────────────────────────────────────────────────
+# TP AUTO-PLACEMENT  (called when monitor detects a new position)
+# ─────────────────────────────────────────────────────────────
+
+def _connect_sheet_for_tp():
+    """Connect to Google Sheets (for TP price lookup). Returns sheet1 or None."""
+    try:
+        creds_path = os.path.join(SCRIPT_DIR, GOOGLE_CREDENTIALS_FILE)
+        if not os.path.exists(creds_path):
+            log("   ⚠ google_credentials.json not found — TP lookup skipped")
+            return None
+        from google.oauth2.service_account import Credentials as _GCreds
+        try:
+            from gspread.client import Client as _GClient
+        except ImportError:
+            log("   ⚠ gspread not installed — TP lookup skipped")
+            return None
+        _SCOPES = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive",
+        ]
+        creds  = _GCreds.from_service_account_file(creds_path, scopes=_SCOPES)
+        client = _GClient(auth=creds)
+        return client.open_by_key(GOOGLE_SHEET_ID).sheet1
+    except Exception as e:
+        log(f"   ⚠ Sheets connect failed (TP lookup): {e}")
+        return None
+
+
+def _get_tp_prices_from_sheet(coin, direction):
+    """
+    Find the most recent OPEN row matching coin+direction in Google Sheets.
+    Returns {tp1, tp2, tp3, tp4} (floats, 0 if missing) or None on failure.
+    """
+    sheet = _connect_sheet_for_tp()
+    if sheet is None:
+        return None
+    try:
+        rows = sheet.get_all_values()[1:]   # skip header
+    except Exception as e:
+        log(f"   ⚠ Sheets read failed (TP lookup): {e}")
+        return None
+
+    def _fp(s):
+        try:
+            v = float(s.strip()) if s and s.strip() else 0.0
+            return v if v > 0 else 0.0
+        except Exception:
+            return 0.0
+
+    best = None
+    for row in rows:
+        while len(row) < 12:
+            row.append("")
+        if row[_COL_STATUS].strip().upper() != "OPEN":
+            continue
+        if row[_COL_COIN].strip().upper() != coin.upper():
+            continue
+        if row[_COL_SIGNAL].strip().upper() != direction.upper():
+            continue
+        best = {
+            "tp1": _fp(row[_COL_TP1] if len(row) > _COL_TP1 else ""),
+            "tp2": _fp(row[_COL_TP2] if len(row) > _COL_TP2 else ""),
+            "tp3": _fp(row[_COL_TP3] if len(row) > _COL_TP3 else ""),
+            "tp4": _fp(row[_COL_TP4] if len(row) > _COL_TP4 else ""),
+        }
+    return best   # None if no matching row found
+
+
+def _has_reduce_only_orders(symbol):
+    """
+    Return True if symbol already has reduce-only orders on Bybit.
+    Returns None on API failure (caller retries next monitor run).
+    """
+    r = bybit_request("GET", "/v5/order/realtime",
+                      {"category": BYBIT_CATEGORY, "symbol": symbol, "limit": "50"})
+    if r.get("retCode") != 0:
+        return None
+    for order in r.get("result", {}).get("list", []):
+        if (order.get("reduceOnly") is True
+                or str(order.get("reduceOnly", "")).lower() == "true"):
+            return True
+    return False
+
+
+def _get_instrument_info_tp(symbol):
+    """Return {tick_size, qty_step, min_qty} for a symbol."""
+    r = bybit_request("GET", "/v5/market/instruments-info",
+                      {"category": BYBIT_CATEGORY, "symbol": symbol})
+    if r.get("retCode") == 0:
+        items = r["result"].get("list", [])
+        if items:
+            lot_f   = items[0]["lotSizeFilter"]
+            price_f = items[0]["priceFilter"]
+            return {
+                "tick_size": float(price_f["tickSize"]),
+                "qty_step":  float(lot_f["qtyStep"]),
+                "min_qty":   float(lot_f["minOrderQty"]),
+            }
+    return None
+
+
+def _tp_round_to_step(value, step):
+    if step <= 0:
+        return value
+    return round(round(value / step) * step, 10)
+
+
+def _tp_round_price(price, tick):
+    if tick is None or tick <= 0:
+        return price
+    decimals = max(0, -int(math.floor(math.log10(tick))))
+    return round(round(price / tick) * tick, decimals)
+
+
+def _tp_fmt_price(price, tick):
+    if tick is None or tick <= 0:
+        return str(price)
+    decimals = max(0, -int(math.floor(math.log10(tick))))
+    return f"{price:.{decimals}f}"
+
+
+def _place_tps_for_new_position(symbol, side, size):
+    """
+    Called when monitor detects a brand-new position that wasn't in state.
+    Workflow:
+      1. Check Bybit for existing reduce-only orders — if found, skip (trader placed them).
+      2. Look up TP1-TP4 from Google Sheets for coin+direction.
+      3. Place 4 reduce-only GTC limit orders at 25% each.
+      4. Send Telegram with result.
+
+    side: "Buy" (LONG) or "Sell" (SHORT)
+    size: float — position size in contracts
+    """
+    coin      = symbol.replace("USDT", "").replace("PERP", "").upper()
+    direction = "LONG" if side == "Buy" else "SHORT"
+
+    log(f"   🎯 New position {coin} {direction} size={size} — checking TP orders...")
+
+    # ── Step 1: already have TPs on Bybit? ────────────────────
+    has_tps = _has_reduce_only_orders(symbol)
+    if has_tps is None:
+        log(f"   ⚠ {coin}: Bybit API failure checking TP orders — will retry next monitor run")
+        return False
+    if has_tps:
+        log(f"   ✓ {coin}: reduce-only orders already on Bybit — TP placement skipped")
+        return True
+
+    log(f"   📋 {coin}: no TP orders found — reading prices from Google Sheets...")
+
+    # ── Step 2: look up TP prices from Google Sheets ──────────
+    tp_data = _get_tp_prices_from_sheet(coin, direction)
+    if tp_data is None:
+        log(f"   ⚠ {coin}: Sheets lookup failed — TP orders NOT placed")
+        send_alert(
+            f"⚠️ <b>MONITOR — TP Placement Failed</b>\n"
+            f"  {coin} {direction} position opened (size={size})\n"
+            f"  Could not read TP prices from Google Sheets\n"
+            f"  ⚠️ Position has NO take-profit protection!\n"
+            f"  → Manual TP placement required on Bybit"
+        )
+        return False
+
+    tp_prices = [tp_data["tp1"], tp_data["tp2"], tp_data["tp3"], tp_data["tp4"]]
+    if not any(p > 0 for p in tp_prices):
+        log(f"   ⚠ {coin}: all TP prices are zero in sheet — TP orders NOT placed")
+        send_alert(
+            f"⚠️ <b>MONITOR — TP Placement Failed</b>\n"
+            f"  {coin} {direction}: no valid TP prices in sheet (all zero)\n"
+            f"  → Manual TP placement required on Bybit"
+        )
+        return False
+
+    log(f"   TP prices from sheet: TP1={tp_prices[0]} TP2={tp_prices[1]} "
+        f"TP3={tp_prices[2]} TP4={tp_prices[3]}")
+
+    # ── Step 3: get instrument info ────────────────────────────
+    info = _get_instrument_info_tp(symbol)
+    if info is None:
+        log(f"   ⚠ {coin}: instrument info unavailable — TP orders NOT placed")
+        return False
+
+    tick       = info["tick_size"]
+    step       = info["qty_step"]
+    min_q      = info["min_qty"]
+    close_side = "Sell" if side == "Buy" else "Buy"
+
+    # ── Step 4: build legs (up to 4 × 25%) ────────────────────
+    valid_legs = [(f"TP{i+1}", p) for i, p in enumerate(tp_prices) if p > 0]
+    n = len(valid_legs)
+    if size < n * min_q:
+        n         = max(1, int(size // min_q))
+        valid_legs = valid_legs[:n]
+
+    base_qty  = _tp_round_to_step(size / n, step) if n > 0 else min_q
+    base_qty  = max(base_qty, min_q)
+    allocated = 0.0
+    placed    = []
+    failed    = []
+
+    for idx, (label, tp_price) in enumerate(valid_legs):
+        if idx == n - 1:
+            # Last leg absorbs any rounding remainder
+            leg_qty = _tp_round_to_step(size - allocated, step)
+            leg_qty = max(leg_qty, min_q)
+        else:
+            leg_qty = base_qty
+
+        if leg_qty < min_q:
+            failed.append(f"{label}(qty_too_small)")
+            allocated += leg_qty
+            continue
+
+        tp_r = _tp_round_price(tp_price, tick)
+        body = {
+            "category":       BYBIT_CATEGORY,
+            "symbol":         symbol,
+            "side":           close_side,
+            "orderType":      "Limit",
+            "qty":            str(leg_qty),
+            "price":          _tp_fmt_price(tp_r, tick),
+            "timeInForce":    "GTC",
+            "positionIdx":    0,
+            "reduceOnly":     True,
+            "closeOnTrigger": False,
+        }
+        r  = bybit_request("POST", "/v5/order/create", body=body)
+        ok = r.get("retCode") == 0
+        if ok:
+            oid = (r.get("result") or {}).get("orderId", "?")
+            log(f"   ✓ {label} @ {tp_r} × {leg_qty}  → orderId={oid}")
+            placed.append(label)
+        else:
+            err = r.get("retMsg", "?")
+            log(f"   ✗ {label} @ {tp_r} FAILED: {err}")
+            failed.append(f"{label}({err[:40]})")
+        allocated += leg_qty
+
+    # ── Step 5: Telegram summary ───────────────────────────────
+    bkk_now = datetime.now(BKK)
+    if placed:
+        tp_lines = "\n".join(
+            f"  {lbl} @ {tp_prices[i]}"
+            for i, lbl in enumerate(["TP1", "TP2", "TP3", "TP4"])
+            if tp_prices[i] > 0
+        )
+        fail_note = f"\n  ⚠ Failed legs: {', '.join(failed)}" if failed else ""
+        send_alert(
+            f"✅ <b>MONITOR — TP Orders Placed</b>\n"
+            f"  {coin} {direction}  |  size={size}\n"
+            f"{tp_lines}"
+            f"{fail_note}\n"
+            f"  🕐 {bkk_now.strftime('%H:%M BKK')}"
+        )
+        log(f"   ✅ TP auto-placement complete: {len(placed)} placed, {len(failed)} failed")
+        return True
+    else:
+        send_alert(
+            f"🚨 <b>MONITOR — ALL TP Orders FAILED</b>\n"
+            f"  {coin} {direction} (size={size})\n"
+            f"  Errors: {', '.join(failed)}\n"
+            f"  → Manual TP placement required on Bybit!"
+        )
+        log(f"   ✗ All TP orders failed for {coin} {direction}")
+        return False
+
+
+# ─────────────────────────────────────────────────────────────
 # MAIN MONITOR LOGIC
 # ─────────────────────────────────────────────────────────────
 def run_monitor():
@@ -400,11 +679,19 @@ def run_monitor():
                     curr["be_set"] = True
                 state["positions"][symbol] = curr
 
-    # ── Add newly opened positions to state ───────────────────
+    # ── Add newly opened positions to state + place TP orders ─
     for symbol, curr in current_positions.items():
         if symbol not in state["positions"]:
             log(f"   ➕ New position tracked: {symbol} {curr['side']} {curr['size']} @ {curr['avgPrice']:.6g}")
             state["positions"][symbol] = curr
+            # Auto-place 4×25% reduce-only TP limit orders.
+            # Trader.py tries this immediately after the entry order but always
+            # fails ("current position is zero") because the limit hasn't filled
+            # yet. Monitor.py detects the fill ~2 min later and places them here.
+            try:
+                _place_tps_for_new_position(symbol, curr["side"], curr["size"])
+            except Exception as _tpe:
+                log(f"   ⚠ TP auto-placement error for {symbol}: {_tpe}")
 
     save_state(state)
 
