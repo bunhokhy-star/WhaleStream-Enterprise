@@ -1,0 +1,34 @@
+============================================================
+  WHALE-STREAM SERVER SETUP COMMANDS
+  Run these ONE BY ONE in your PowerShell SSH window
+  (copy each block, paste with right-click or Ctrl+V)
+============================================================
+
+--- COMMAND 1: Install Python 3.11 ---
+apt-get update -qq && apt-get install -y python3.11 python3.11-venv python3-pip git curl && python3.11 --version
+
+(Wait for it to finish, takes ~1 min. Should end with "Python 3.11.x")
+
+--- COMMAND 2: Clone your code from GitHub ---
+git clone https://github.com/bunhokhy-star/WhaleStream-Enterprise.git /opt/whalestream
+
+(Should end with "done.")
+
+--- COMMAND 3: Install Python packages ---
+pip3 install anthropic requests gspread google-auth google-auth-oauthlib google-auth-httplib2 --break-system-packages
+
+(Takes ~30 seconds)
+
+--- COMMAND 4: Create logs folder + set Bangkok timezone ---
+mkdir -p /opt/whalestream/logs && timedatectl set-timezone Asia/Bangkok && echo "Timezone: $(timedatectl | grep 'Time zone')"
+
+--- COMMAND 5: Verify setup ---
+python3.11 /opt/whalestream/whale_stream_strategist.py 2>&1 | head -20
+
+(Should show WHALE-STREAM STRATEGIST banner)
+
+============================================================
+  AFTER ALL 5 COMMANDS WORK:
+  Next step = upload google_credentials.json
+  (I will guide you through that after)
+============================================================
