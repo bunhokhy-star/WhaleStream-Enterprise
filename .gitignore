@@ -1,6 +1,7 @@
 # ─── Secrets (NEVER commit) ──────────────────────────────────────
 google_credentials.json
 local_config.py
+local_config_server.py
 
 # ─── Large auto-generated logs ───────────────────────────────────
 tracker_log.txt
