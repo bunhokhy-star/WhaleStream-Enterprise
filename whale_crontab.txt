@@ -1,0 +1,37 @@
+# WHALE-STREAM Cron Schedule
+# Timezone: server is set to Asia/Bangkok (UTC+7)
+# So cron times below are Bangkok time directly.
+#
+# Install with: crontab /opt/whalestream/whale_crontab.txt
+# Verify with:  crontab -l
+#
+# Format: MIN HOUR DAY MONTH WEEKDAY command
+# ─────────────────────────────────────────────────────────────
+
+# ── 4h Cycle: runs 6x per day ──────────────────────────────
+# Bot     at :00 (00:00, 04:00, 08:00, 12:00, 16:00, 20:00 BKK)
+0 0,4,8,12,16,20 * * * cd /opt/whalestream && python3.11 whale_stream_bot.py >> logs/bot.log 2>&1
+
+# Strategist at :10
+10 0,4,8,12,16,20 * * * cd /opt/whalestream && python3.11 whale_stream_strategist.py >> logs/strategist.log 2>&1
+
+# Trader  at :20
+20 0,4,8,12,16,20 * * * cd /opt/whalestream && python3.11 whale_stream_trader.py >> logs/trader.log 2>&1
+
+# Watchdog at :30
+30 0,4,8,12,16,20 * * * cd /opt/whalestream && python3.11 whale_stream_watchdog.py >> logs/watchdog.log 2>&1
+
+# ── Tracker: every 30 minutes ──────────────────────────────
+*/30 * * * * cd /opt/whalestream && python3.11 whale_stream_tracker.py >> logs/tracker.log 2>&1
+
+# ── Monitor: every 2 minutes ───────────────────────────────
+*/2 * * * * cd /opt/whalestream && python3.11 whale_stream_monitor.py >> logs/monitor.log 2>&1
+
+# ── Morning Briefing: 07:00 BKK daily ──────────────────────
+0 7 * * * cd /opt/whalestream && python3.11 morning_briefing.py >> logs/briefing.log 2>&1
+
+# ── Status Server: start at reboot (stays running) ─────────
+@reboot cd /opt/whalestream && python3.11 status_server.py >> logs/status_server.log 2>&1 &
+
+# ── Log rotation: clear old logs every Sunday midnight ─────
+0 0 * * 0 find /opt/whalestream/logs -name "*.log" -size +10M -exec truncate -s 5M {} \;
