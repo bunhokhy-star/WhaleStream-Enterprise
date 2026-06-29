@@ -59,7 +59,7 @@ class WhaleStreamStatusHandler(SimpleHTTPRequestHandler):
         # (prevents local_config.py and other files from being exposed over HTTP)
         import posixpath
         allowed = {"daily_status.json", "daily_status.js"}
-        req_path = posixpath.basename(self.path.split("?")[0])
+        req_path = posixpath.basename(posixpath.normpath(self.path.split("?")[0]))
         if req_path not in allowed:
             self.send_response(403)
             self.send_header("Content-Type", "text/plain")

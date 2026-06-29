@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║       WHALE-STREAM NEAR-REAL-TIME MONITOR          v47.8     ║
+║       WHALE-STREAM NEAR-REAL-TIME MONITOR          v47.10     ║
 ║                                                              ║
 ║  Polls Bybit every 2 minutes to detect position changes      ║
 ║  and fires immediate Telegram alerts.                        ║
@@ -367,13 +367,14 @@ def run_monitor():
                 else:
                     sl_note = f"\n  ✓ SL already at/above breakeven ({curr_sl:.6g})"
 
+                _remaining_pct = round(curr_size / prev_size * 100) if prev_size else 0
                 msg = (
-                    f"🎯 <b>TP1 PARTIAL CLOSE — {symbol}</b>\n"
+                    f"🎯 <b>PARTIAL CLOSE — {symbol}</b>\n"
                     f"  {direction}  |  {reduction_pct:.0f}% closed\n"
-                    f"  Size: {prev_size} → {curr_size}\n"
+                    f"  Size: {prev_size} → {curr_size}  ({_remaining_pct}% remains)\n"
                     f"  Entry (avg): {prev_avg:.6g}"
                     f"{sl_note}\n"
-                    f"  Remaining 75% riding to TP2/TP3/TP4\n"
+                    f"  {_remaining_pct}% riding to next TP\n"
                     f"  🕐 {bkk.strftime('%H:%M BKK')}"
                 )
                 send_alert(msg)
@@ -434,7 +435,9 @@ if __name__ == "__main__":
         run_monitor()
     except Exception as e:
         log(f"❌ Monitor crashed: {e}")
-        _mark_done("monitor", details={"error": str(e)[:200]})
+        # NOTE: Do NOT call _mark_done() here — a crash must surface as a gap
+        # in check_daily_status.py so the operator is alerted. Marking done on
+        # crash would silently hide the failure from the gap detector.
         send_alert(
             f"❌ <b>WHALE-STREAM MONITOR CRASHED</b>\n"
             f"Error: {str(e)[:300]}\n"

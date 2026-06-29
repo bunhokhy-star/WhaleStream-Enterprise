@@ -1232,11 +1232,12 @@ def _update_gate_checklist(all_rows):
     g2_str    = f"{'✅' if g2_ok else '❌'} {g2_wr:.1f}%"
 
     # ── Gate 3: SHORT WR ≥ 50% over last 20 real SHORT trades ────
+    # Uses _is_real_pnl (abs >= 1.5) to match dashboard Gate 3 card — was wrongly >= 5
     def _is_real_short(r):
         pnl = r.get("pnl")
         if pnl is None: return False
         if r.get("status") == "LOSS" and pnl > 0: return False  # wrong sign
-        return abs(pnl) >= 5
+        return abs(pnl) >= 1.5
 
     shorts_real = [r for r in resolved
                    if ("SHORT" in r.get("signal","").upper() or "🔴" in r.get("signal",""))
@@ -1781,6 +1782,7 @@ def main():
                 "outcome":     res_status,
                 "tp_hit":      tp_hit or "",
                 "pnl":         pnl,
+                "resolved_at": now_str,  # needed by debrief dedup key
             })
         else:
             pct_from_entry = (current - entry) / entry * 100 if entry else 0

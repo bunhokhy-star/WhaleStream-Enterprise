@@ -1,5 +1,67 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.10 — 2026-06-29 — 11 bugs fixed: CRITICAL monitor crash hidden, HIGH trader SHORT floor, HIGH bot short_wr neutral fallback, HIGH SL sweep during CB, HIGH debrief dedup key, HIGH balance alert spam, MEDIUM partial close label, MEDIUM status_server path, MEDIUM gap checker midnight, MEDIUM tracker Gate3 pnl threshold, LOW version strings + CHECKLIST
+
+### `whale_stream_monitor.py` — 3 fixes
+- **CRITICAL: Crash handler called `_mark_done()`** — A monitor crash silently marked itself "done",
+  hiding the failure from `check_daily_status.py`. Removed `_mark_done()` from crash handler; crash
+  now surfaces correctly as a gap in the 4h status check.
+- **MEDIUM: Partial close Telegram alert hardcoded "TP1 PARTIAL CLOSE" and "Remaining 75%"** —
+  The alert always said TP1/75% even when TP2 or TP3 was the trigger. Now computes
+  actual `_remaining_pct = curr_size/prev_size*100` and displays a generic "PARTIAL CLOSE" label.
+- **LOW: Banner version stuck at v47.8** — bumped to v47.10.
+
+### `whale_stream_trader.py` — 3 fixes
+- **HIGH: SHORT confidence floor hardcoded at 95% unconditionally** — Code always enforced 95%
+  regardless of whether REPAIR MODE was active. Fix: `95 if SHORT_REPAIR_FILE exists else 93`.
+  This matches the bot.py and system spec (93% floor when WR is healthy).
+- **HIGH: `_sweep_missing_sl()` skipped when circuit breaker is active** — The SL sweep ran after
+  the `paused.flag` early-return, leaving live positions unprotected during CB pauses. Added a
+  Google Sheets load + SL sweep inside the CB pause branch (non-blocking: Sheets failure is logged
+  but does not prevent the CB pause exit).
+- **HIGH: Low balance alert fires every 4h when balance below $450** — No sentinel file meant 6
+  Telegram alerts per day when already in drawdown. Added `balance_warn_alerted.flag` sentinel:
+  fires once on breach, auto-clears when balance recovers above threshold.
+
+### `whale_stream_bot.py` — 1 fix
+- **HIGH: `short_wr_recent` defaults to 0 when no recent SHORT trades** — When the last 20
+  resolved trades had no SHORTs, `short_wr = 0` triggering the 95% floor (as if SHORT WR is
+  critically low). Fixed fallback to 50 (neutral): no recent SHORTs = neutral, not worst-case.
+
+### `whale_stream_tracker.py` — 1 fix
+- **MEDIUM: Gate 3 `_is_real_short()` used `abs(pnl) >= 5` instead of `>= 1.5`** — The checklist
+  Gate 3 WR was computed on a stricter filter than the dashboard Gate 3 card, producing different
+  PASS/FAIL results. Fixed to use `abs(pnl) >= 1.5` matching `_is_real_pnl`.
+- **HIGH: `resolved_at` missing from debrief payload** — `_newly_resolved` dicts did not include
+  `resolved_at`, making the debrief dedup key fall back to `tp_hit`. Two same-coin same-direction
+  same-TP trades resolved in one tracker run had identical dedup keys → second debrief silently
+  dropped. Added `"resolved_at": now_str`.
+
+### `status_server.py` — 1 fix
+- **MEDIUM: Path allowlist missing `posixpath.normpath()`** — `basename()` alone allowed theoretical
+  traversal via `/./daily_status.json`. Added `normpath()` before `basename()` extraction.
+
+### `check_daily_status.py` — 2 fixes
+- **MEDIUM: Midnight arithmetic wrong** — `elapsed = (h - slot) * 60 + m` produced negative values
+  for slots later than current hour, causing past-midnight cycles to be incorrectly expected. Added
+  `if slot > h: continue` guard.
+- **LOW: Briefing gap fires at exactly 07:00** — Gap checker would false-alarm on briefing immediately
+  at 07:00 before the briefing script had time to run. Extended grace window to 07:10.
+
+### `JULY1_GOLIVE_CHECKLIST.md` — 2 fixes
+- **MEDIUM: Pre-flight demo balance check would fail** — Step said "check demo balance is healthy
+  (not in drawdown >15%)" but demo is already at 34% drawdown. Updated to clarify this is
+  informational only; live account is funded fresh.
+- **MEDIUM: BYBIT_START_BALANCE update buried as prose** — Promoted to a `[ ] MANDATORY` checkbox
+  item with explicit "update BOTH files" instruction and explanation of why it matters.
+
+### Version bumps to v47.10
+- `whale_stream_bot.py`, `whale_stream_strategist.py`, `whale_stream_trader.py`,
+  `whale_stream_tracker.py`, `whale_stream_watchdog.py`, `whale_stream_monitor.py`,
+  `whale_stream_debrief.py`, `morning_briefing.py` (removed hardcoded version from Telegram msg)
+
+---
+
 ## v47.9 — 2026-06-29 — 3 safety + ops fixes (CLEAR_BREACH_NOW confirmation, log scan limits, version bumps)
 
 ### `CLEAR_BREACH_NOW.bat` — 1 fix

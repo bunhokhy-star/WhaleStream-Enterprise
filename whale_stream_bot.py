@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v47.8   —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v47.10   —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 coins from CoinGecko (free, no key)     ║
@@ -251,7 +251,7 @@ except ImportError:
     MISSION_PROMPT = ""
     def print_mission_banner(): pass
 
-WHALE_STREAM_PROMPT = """WHALE-STREAM v47.8 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
+WHALE_STREAM_PROMPT = """WHALE-STREAM v47.10 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
 ROLE:
 You are an Institutional Multi-Agent Trading Committee composed of:
 • Market Regime Analyst • Smart Money Concepts Specialist • Quantitative Momentum Analyst • Liquidity & Stop-Hunt Analyst • Wyckoff Structure Analyst • Relative Strength Analyst • Breakout Probability Engine • Reversal Probability Engine • Continuation Probability Engine • Risk Management Committee
@@ -984,7 +984,7 @@ def fetch_signal_graveyard():
         recent_longs  = [r for r in recent if r["direction"] == "LONG"]
         short_wins    = sum(1 for r in recent_shorts if r["status"] == "WIN")
         long_wins     = sum(1 for r in recent_longs  if r["status"] == "WIN")
-        short_wr = (short_wins / len(recent_shorts) * 100) if recent_shorts else 0
+        short_wr = (short_wins / len(recent_shorts) * 100) if recent_shorts else 50  # 50=neutral when no recent shorts (prevents false 95% floor)
         long_wr  = (long_wins  / len(recent_longs)  * 100) if recent_longs  else 0
 
         # Auto-blacklist: coins with 3+ SHORT losses and 0 SHORT wins (ALL resolved, not just recent 20)
@@ -1807,7 +1807,7 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     shorts = data.get("shorts", [])
 
     lines = []
-    lines.append(f"🐳 WHALE-STREAM v47.8")
+    lines.append(f"🐳 WHALE-STREAM v47.10")
     lines.append(f"📅 {ts}")
 
     # ── Market regime summary ─────────────────────────────────
@@ -2275,7 +2275,7 @@ def main():
 
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🐳  WHALE-STREAM v47.8  — AUTO BOT STARTING    ║")
+    print("║   🐳  WHALE-STREAM v47.10  — AUTO BOT STARTING    ║")
     print("╚══════════════════════════════════════════════════╝")
     # Check conservative flag early so we can show it in the startup banner
     _short_conservative_early = os.path.exists(os.path.join(SCRIPT_DIR, "short_conservative.flag"))

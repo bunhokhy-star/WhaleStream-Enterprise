@@ -1201,7 +1201,7 @@ def main():
         pass
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🤖  WHALE-STREAM TRADER v47.8 — BYBIT DEMO    ║")
+    print("║   🤖  WHALE-STREAM TRADER v47.10 — BYBIT DEMO    ║")
     print(f"║   💰  ${TRADE_MARGIN_USDT} margin × {LEVERAGE}x = ${TRADE_MARGIN_USDT*LEVERAGE} per trade        ║")
     print("╚══════════════════════════════════════════════════╝")
     print()
@@ -1287,25 +1287,50 @@ def main():
         else:
             print("[CB] Already alerted — skipping repeat Telegram")
         log("PAUSED — circuit breaker flag present, skipping all orders")
+        # SL guard still runs during CB pause — positions need stop-loss protection
+        # even when we're not placing new orders. Load sheet data for sweep only.
+        try:
+            _cb_sheet    = connect_sheet()
+            _cb_all_rows = _cb_sheet.get_all_values()
+            _cb_rows     = _cb_all_rows[1:] if len(_cb_all_rows) > 1 else []
+            _sweep_missing_sl(_cb_rows)
+        except Exception as _cbse:
+            log(f"SL sweep during CB pause failed (non-critical): {_cbse}")
         _mark_done("trader", details={"placed": [], "skipped": ["PAUSED — circuit breaker active"]})
         return
 
-    # ── Low balance warning ────────────────────────────────────
+    # ── Low balance warning (sentinel: fires once per breach, not every run) ──
     _BALANCE_GATE4_FLOOR    = BYBIT_START_BALANCE * 0.85  # Gate 4 = 15% drawdown ($500×0.85=$425)
     _BALANCE_WARN_THRESHOLD = _BALANCE_GATE4_FLOOR + 25   # warn $25 above Gate 4 floor
+    _BALANCE_WARN_FLAG      = os.path.join(SCRIPT_DIR, "balance_warn_alerted.flag")
     if balance < _BALANCE_WARN_THRESHOLD:
-        _dd_pct = (BYBIT_START_BALANCE - balance) / BYBIT_START_BALANCE * 100
-        _remaining = balance - _BALANCE_GATE4_FLOOR
-        _warn_level = "🚨 CRITICAL" if balance < _BALANCE_GATE4_FLOOR + 10 else "⚠️ WARNING"
-        _breach_note = " ⚡ Gate 4 active now!" if balance < _BALANCE_GATE4_FLOOR else ""
-        send_telegram_alert(
-            f"{_warn_level} <b>BYBIT BALANCE LOW</b>\n"
-            f"  Current balance : ${balance:,.2f}\n"
-            f"  Drawdown        : {_dd_pct:.1f}% from ${BYBIT_START_BALANCE:.0f} start\n"
-            f"  Gate 4 floor    : ${_BALANCE_GATE4_FLOOR:.0f} (15% drawdown threshold)\n"
-            f"  Remaining margin: ${_remaining:,.2f} before Gate 4 breach{_breach_note}"
-        )
-        log(f"LOW BALANCE WARNING — ${balance:,.2f} ({_dd_pct:.1f}% drawdown)")
+        if not os.path.exists(_BALANCE_WARN_FLAG):
+            _dd_pct = (BYBIT_START_BALANCE - balance) / BYBIT_START_BALANCE * 100
+            _remaining = balance - _BALANCE_GATE4_FLOOR
+            _warn_level = "🚨 CRITICAL" if balance < _BALANCE_GATE4_FLOOR + 10 else "⚠️ WARNING"
+            _breach_note = " ⚡ Gate 4 active now!" if balance < _BALANCE_GATE4_FLOOR else ""
+            send_telegram_alert(
+                f"{_warn_level} <b>BYBIT BALANCE LOW</b>\n"
+                f"  Current balance : ${balance:,.2f}\n"
+                f"  Drawdown        : {_dd_pct:.1f}% from ${BYBIT_START_BALANCE:.0f} start\n"
+                f"  Gate 4 floor    : ${_BALANCE_GATE4_FLOOR:.0f} (15% drawdown threshold)\n"
+                f"  Remaining margin: ${_remaining:,.2f} before Gate 4 breach{_breach_note}"
+            )
+            log(f"LOW BALANCE WARNING — ${balance:,.2f} ({_dd_pct:.1f}% drawdown)")
+            try:
+                open(_BALANCE_WARN_FLAG, "w").close()
+            except Exception:
+                pass
+        else:
+            log(f"LOW BALANCE (${balance:,.2f}) — already alerted, skipping repeat Telegram")
+    else:
+        # Balance recovered above threshold — clear sentinel so it can re-alert if it drops again
+        if os.path.exists(_BALANCE_WARN_FLAG):
+            try:
+                os.remove(_BALANCE_WARN_FLAG)
+                log(f"Balance ${balance:,.2f} recovered above warn threshold — clearing balance_warn_alerted.flag")
+            except Exception:
+                pass
 
     if balance < TRADE_MARGIN_USDT:
         print(f"   ✗ Balance too low. Need at least ${TRADE_MARGIN_USDT} to place one trade.")
@@ -1777,8 +1802,10 @@ def main():
             conf_val = 0
 
         # ── Code-level confidence floor (belt+suspenders after Strategist) ──
-        if side == "Sell" and conf_val < 95:
-            print(f"   ✗ {coin} SHORT: conf {conf_val:.0f}% < 95% code floor — skipping")
+        # SHORT floor: 95% when REPAIR MODE active (WR recovering), 93% when healthy
+        _short_floor = 95 if os.path.exists(SHORT_REPAIR_FILE) else 93
+        if side == "Sell" and conf_val < _short_floor:
+            print(f"   ✗ {coin} SHORT: conf {conf_val:.0f}% < {_short_floor}% code floor — skipping")
             continue
         if side == "Buy" and conf_val < 88:
             print(f"   ✗ {coin} LONG: conf {conf_val:.0f}% < 88% floor — skipping")

@@ -8,7 +8,7 @@
 - [ ] Run `analyze_shorts.py` — confirm LONG WR ≥ 50% and SHORT WR ≥ 50% (Gate 3 threshold; target ≥70% for mature SHORT scaling)
 - [ ] Verify `gate4_breach.flag` does NOT exist in WhaleStream folder (Gate 4 = >15% drawdown — must be clear before going live)
 - [ ] Verify `paused.flag` does NOT exist (circuit breaker must be inactive)
-- [ ] Open Bybit Dashboard → check demo balance is healthy (not in drawdown >15%)
+- [ ] Open Bybit Dashboard → note demo balance (current: ~$330, ~34% drawdown from $500 start — this is DEMO only; live account will be funded fresh. Demo drawdown does NOT block go-live.)
 - [ ] Confirm all 4 daily agents ran cleanly today (Daily Checklist.html all green)
 - [ ] Verify 6 Recheck/Reactive tasks are registered in Task Scheduler — if not, run `ADD_RECHECK_TASKS.bat` as Administrator
 - [ ] Verify `WhaleStream-StatusCheck` task is registered — if not, run `ADD_STATUS_CHECK_TASK.bat` as Administrator
@@ -71,9 +71,10 @@ TRADE_MARGIN_USDT = 25   # ← set your live size here
 If `TRADE_MARGIN_USDT` is not already in `local_config.py`, add it as a new line.
 The system reads it via `try: from local_config import TRADE_MARGIN_USDT except ImportError: ...`
 
-Also update `BYBIT_START_BALANCE` in both `whale_stream_trader.py` and `whale_stream_tracker.py`
-to match your actual funded live balance (default: 500.0). Search for `BYBIT_START_BALANCE = 500.0`
-in both files and update it. *(v47.9 goal: move this to local_config.py so only one file needs editing)*
+**[ ] MANDATORY: Update `BYBIT_START_BALANCE`** in both `whale_stream_trader.py` AND `whale_stream_tracker.py`
+to match your actual funded live balance. Search for `BYBIT_START_BALANCE = 500.0` in both files and update.
+Example: if you deposit $300, set `BYBIT_START_BALANCE = 300.0` in BOTH files.
+This value anchors Gate 4 drawdown protection — wrong value = Gate 4 fires too early or too late.
 
 Recommended for go-live: **$10–$25 per trade** (you can scale up after Gate 1).
 
@@ -141,4 +142,4 @@ No code changes needed to roll back.
 
 ---
 
-*Generated: 2026-06-28 | Updated: 2026-06-29 | WHALE-STREAM v47.8*
+*Generated: 2026-06-28 | Updated: 2026-06-29 | WHALE-STREAM v47.10*

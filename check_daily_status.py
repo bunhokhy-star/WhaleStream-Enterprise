@@ -129,6 +129,9 @@ def expected_cycles(now_bkk):
     h, m = now_bkk.hour, now_bkk.minute
     done = []
     for slot in [0, 4, 8, 12, 16, 20]:
+        # Skip cycles that haven't started yet (handles midnight boundary correctly)
+        if slot > h:
+            continue
         # minutes elapsed since this cycle started
         elapsed = (h - slot) * 60 + m
         if elapsed >= 35:
@@ -162,8 +165,8 @@ def run_check():
     # ── Check always-running agents ────────────────────────────────
     for agent in STATIC_AGENTS:
         # Briefing only runs at 07:00 BKK — don't flag as gap before it's scheduled
-        if agent == "briefing" and now.hour < 7:
-            ok.append(agent)   # treat as OK until 07:00
+        if agent == "briefing" and (now.hour < 7 or (now.hour == 7 and now.minute < 10)):
+            ok.append(agent)   # give briefing a 10-min window before flagging as missing
             continue
         if data.get(agent):
             ok.append(agent)

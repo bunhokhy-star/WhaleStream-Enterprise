@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM DEBRIEF AGENT v47.8 — POST-TRADE LEARNING    ║
+║   WHALE-STREAM DEBRIEF AGENT v47.10 — POST-TRADE LEARNING    ║
 ║                                                              ║
 ║  Called automatically by whale_stream_tracker.py after      ║
 ║  each WIN or LOSS resolution.                                ║
@@ -557,7 +557,7 @@ def main():
     """
     print()
     print("╔══════════════════════════════════════════════════════╗")
-    print("║   🧠  WHALE-STREAM DEBRIEF AGENT v47.8              ║")
+    print("║   🧠  WHALE-STREAM DEBRIEF AGENT v47.10              ║")
     print("║   Post-Trade Learning — every loss teaches us        ║")
     print("╚══════════════════════════════════════════════════════╝")
     print()

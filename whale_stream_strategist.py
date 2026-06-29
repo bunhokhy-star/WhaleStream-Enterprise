@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM STRATEGIST v47.8 — SIGNAL QUALITY COUNCIL    ║
+║   WHALE-STREAM STRATEGIST v47.10 — SIGNAL QUALITY COUNCIL    ║
 ║                                                              ║
 ║  Team role: runs at :10 (Bot fires :00, Trader fires :20)   ║
 ║                                                              ║
@@ -799,7 +799,7 @@ def _get_cycle_id():
 def main():
     print()
     print("╔══════════════════════════════════════════════════════╗")
-    print("║   🧠  WHALE-STREAM STRATEGIST v47.8                 ║")
+    print("║   🧠  WHALE-STREAM STRATEGIST v47.10                 ║")
     print("║   Signal Quality Council — APPROVE / VETO / REDUCE  ║")
     print("╚══════════════════════════════════════════════════════╝")
     print()
