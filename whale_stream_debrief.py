@@ -580,8 +580,9 @@ def run_debrief(trades):
         flag_icon = "🔁" if d["flag"] == "REINFORCE" else ("🚫" if d["flag"] == "AVOID" else "➡️")
         pnl_str   = f"{d['pnl']:+.1f}%" if d.get("pnl") is not None else ""
         consensus = d.get("consensus", "")
+        mtf_tag   = f" [{d['mtf_bias']}]" if d.get("mtf_bias") else ""
         lines.append(
-            f"  {icon} <b>{d['coin']} {d['direction']}</b> [{d['entry_quality']}] {pnl_str}\n"
+            f"  {icon} <b>{d['coin']} {d['direction']}</b> [{d['entry_quality']}]{mtf_tag} {pnl_str}\n"
             f"  Why: {d['why']}\n"
             f"  {flag_icon} Lesson: {d['lesson']}\n"
             f"  🤝 {consensus}"
@@ -596,7 +597,7 @@ def main():
     """
     print()
     print("╔══════════════════════════════════════════════════════╗")
-    print("║   🧠  WHALE-STREAM DEBRIEF AGENT v47.18              ║")
+    print("║   🧠  WHALE-STREAM DEBRIEF AGENT v47.19              ║")
     print("║   Post-Trade Learning — every loss teaches us        ║")
     print("╚══════════════════════════════════════════════════════╝")
     print()

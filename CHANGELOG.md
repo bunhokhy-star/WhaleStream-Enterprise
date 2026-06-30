@@ -1,5 +1,24 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.19 — 2026-06-30 — MTF intelligence loop complete: scorer dimension 6; Strategist reads mtf_stats; debrief Telegram shows bias tag
+
+### `signal_scorer.py`
+- **NEW: Dimension 6 — MTF structure alignment** — `_extract_mtf_bias()` parses `[4H_BULL_1H_PULLBACK]` from the pattern string. `_score_mtf_bias()` returns a signed adjustment (-2 to +2) applied to the base 0-10 score (clamped). Ideal LONG entry (4H_BULL + 1H pullback) = +2. 4H_SIDEWAYS = -2. Counter-trend = -1. Basic trend alignment = +1. No bias = ±0.
+- **Updated: `score_signal()` breakdown** — new `"mtf_bias"` key with signed value. Final score = clamp(base + MTF adj, 0, 10).
+- **Updated: `format_score_for_prompt()`** — appends `MTF:+N` or `MTF:-N` to the one-line summary Claude sees.
+- **Updated: header docstring** — reflects 6-dimension scoring and MTF adjustment semantics.
+- **Version bump**: v47.9 → v47.19
+
+### `whale_stream_strategist.py`
+- **NEW: mtf_stats block in PATTERN MEMORY section** — after coin_lessons/avoid/prefer injection, reads `mtf_stats` from pattern_memory.json. For biases present in current signals, shows per-bias WR (`✅/⚠️/🚫`). Also flags globally weak biases (≥3 trades, <35% WR) not in current signals as `🚫 KNOWN WEAK BIAS`. Instructs Claude to VETO or REDUCE_SIZE when bias appears weak.
+- **Version bump**: v47.17 → v47.19
+
+### `whale_stream_debrief.py`
+- **NEW: MTF bias tag in Telegram debrief messages** — `[4H_BULL_1H_PULLBACK]` (or relevant bias) now appears inline after the entry quality bracket: `✅ ETH LONG [A+][4H_BULL_1H_PULLBACK] +4.2%`. Makes post-mortem reading on phone immediate — see outcome vs MTF structure at a glance.
+- **Version bump**: v47.18 → v47.19
+
+---
+
 ## v47.18 — 2026-06-30 — MTF learning loop: debrief records mtf_bias outcomes; graveyard shows MTF WR; calc_qty overdeploy fix; orphaned TP auto-cancel
 
 ### `whale_stream_debrief.py`

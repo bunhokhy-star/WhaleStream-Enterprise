@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM STRATEGIST v47.17 — SIGNAL QUALITY COUNCIL    ║
+║   WHALE-STREAM STRATEGIST v47.19 — SIGNAL QUALITY COUNCIL    ║
 ║                                                              ║
 ║  Team role: runs at :10 (Bot fires :00, Trader fires :20)   ║
 ║                                                              ║
@@ -661,6 +661,47 @@ def build_strategist_user_message(signals, history, positions, balance, drawdown
             if prefer_patterns:
                 lines.append(f"\n  ✅ Prefer these patterns (proven winners): {', '.join(prefer_patterns[:6])}")
 
+        # ── MTF bias historical win rates ──────────────────────────
+        mtf_stats = memory.get("mtf_stats", {})
+        if mtf_stats:
+            import re as _re
+
+            def _get_bias(sig):
+                m = _re.search(r'\[([A-Z0-9_]{5,30})\]', str(sig.get("pattern", "")))
+                if m and m.group(1).startswith(("4H_", "MTF_")):
+                    return m.group(1)
+                return ""
+
+            signal_biases = {_get_bias(s) for s in signals if _get_bias(s)}
+            mtf_lines = []
+
+            # Show WR for biases present in current signals
+            for bias in sorted(signal_biases):
+                cnts = mtf_stats.get(bias, {})
+                w = cnts.get("wins", 0)
+                l = cnts.get("losses", 0)
+                tot = w + l
+                if tot >= 2:
+                    wr = 100 * w / tot
+                    flag = "✅" if wr >= 60 else ("⚠️" if wr >= 45 else "🚫")
+                    mtf_lines.append(f"    {flag} {bias}: {w}W/{l}L = {wr:.0f}% WR")
+                else:
+                    mtf_lines.append(f"    ❓ {bias}: <2 resolved trades (new territory)")
+
+            # Always warn about globally weak biases (even if not in current signals)
+            weak = [(b, d) for b, d in mtf_stats.items()
+                    if d.get("wins", 0) + d.get("losses", 0) >= 3
+                    and d["wins"] / (d["wins"] + d["losses"]) < 0.35
+                    and b not in signal_biases]
+            for bias, d in sorted(weak):
+                tot = d["wins"] + d["losses"]
+                mtf_lines.append(f"    🚫 {bias}: {d['wins']}W/{d['losses']}L = {100*d['wins']/tot:.0f}% WR — KNOWN WEAK BIAS")
+
+            if mtf_lines:
+                lines.append("\n  📊 MTF Bias WR (4H+1H structure at signal time):")
+                lines.extend(mtf_lines)
+                lines.append("  ↳ VETO or REDUCE_SIZE if signal bias appears weak above.")
+
     lines.append("\n=== PORTFOLIO STATE ===")
     lines.append(f"  Balance    : ${balance:,.2f}  (drawdown {drawdown_pct:.1f}%)")
     lines.append(f"  Open positions: {len(positions)}")
@@ -809,7 +850,7 @@ def _get_cycle_id():
 def main():
     print()
     print("╔══════════════════════════════════════════════════════╗")
-    print("║   🧠  WHALE-STREAM STRATEGIST v47.17                 ║")
+    print("║   🧠  WHALE-STREAM STRATEGIST v47.19                 ║")
     print("║   Signal Quality Council — APPROVE / VETO / REDUCE  ║")
     print("╚══════════════════════════════════════════════════════╝")
     print()

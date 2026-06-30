@@ -1,17 +1,24 @@
 from __future__ import annotations   # PEP 563 — lazy annotations, Python 3.7+ compatible
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM SIGNAL SCORER v47.9                           ║
+║   WHALE-STREAM SIGNAL SCORER v47.19                          ║
 ║                                                              ║
 ║  Pre-scores every signal 0–10 BEFORE sending to Strategist.  ║
 ║  Deterministic — no API calls, instant evaluation.           ║
 ║                                                              ║
-║  Scoring dimensions (2 pts each, max 10):                    ║
+║  Scoring dimensions (2 pts each, base max 10):               ║
 ║    [1] Bot confidence alignment    (0–2)                     ║
 ║    [2] Market regime match         (0–2)                     ║
 ║    [3] Coin historical win rate    (0–2)                     ║
 ║    [4] Portfolio correlation       (0–2)                     ║
 ║    [5] Pattern strength            (0–2)                     ║
+║  MTF bias adjustment (applied after, clamped 0–10):          ║
+║    [6] MTF structure alignment     (-2 to +2)                ║
+║       +2 = ideal entry (4H_BULL+1H_PULLBACK or mirror)      ║
+║       +1 = 4H trend confirms direction                       ║
+║        0 = no MTF bias or neutral                            ║
+║       -1 = 4H trend opposes direction (counter-trend)        ║
+║       -2 = 4H_SIDEWAYS (structural indecision, VETO risk)   ║
 ║                                                              ║
 ║  Verdict thresholds:                                         ║
 ║    Score ≥ 7  → STRONG  (send to Claude for final review)    ║
@@ -71,6 +78,65 @@ MODERATE_PATTERNS = {
 # Verdict thresholds (names match verdicts: STRONG_MIN = floor for STRONG, REVIEW_MIN = floor for REVIEW)
 STRONG_MIN  = 7   # score ≥ 7 → STRONG (high priority, send to Claude)
 REVIEW_MIN  = 4   # score ≥ 4 → REVIEW (send to Claude, flag low score); below 4 → SKIP
+
+# ── MTF bias classification tables ────────────────────────────
+# Ideal LONG entry: 4H bullish structure, 1H pulling back (best timing)
+MTF_IDEAL_LONG  = {"4H_BULL_1H_PULLBACK", "4H_BULL_1H_RANGE", "4H_BULL_1H_BOT"}
+# Ideal SHORT entry: 4H bearish structure, 1H bouncing up (best timing)
+MTF_IDEAL_SHORT = {"4H_BEAR_1H_BOUNCE",   "4H_BEAR_1H_RANGE", "4H_BEAR_1H_TOP"}
+
+
+def _extract_mtf_bias(pattern_str: str) -> str:
+    """Extract MTF bias like '4H_BULL_1H_PULLBACK' from pattern '[4H_BULL_1H_PULLBACK]'."""
+    import re as _re
+    m = _re.search(r'\[([A-Z0-9_]{5,30})\]', str(pattern_str))
+    if m:
+        candidate = m.group(1)
+        if candidate.startswith(("4H_", "MTF_")):
+            return candidate
+    return ""
+
+
+def _score_mtf_bias(direction: str, pattern: str) -> tuple[int, str]:
+    """
+    MTF structure alignment adjustment (-2 to +2).
+    Applied to base score after all 5 dimensions; final score clamped 0-10.
+
+    +2 — ideal entry: 4H trend confirmed, 1H pulling back into it (best timing)
+    +1 — basic alignment: 4H trend confirms direction
+     0 — no MTF data or neutral structure
+    -1 — counter-trend: 4H opposes direction
+    -2 — 4H_SIDEWAYS: structural indecision, Strategist VETO likely
+    """
+    bias = _extract_mtf_bias(pattern)
+    if not bias:
+        return 0, "MTF no bias found ±0"
+
+    direction_up = direction.upper()
+
+    # Ideal entries — 4H trend + 1H setting up entry timing
+    if bias in MTF_IDEAL_LONG and direction_up == "LONG":
+        return 2, f"MTF ideal LONG ({bias}) +2"
+    if bias in MTF_IDEAL_SHORT and direction_up == "SHORT":
+        return 2, f"MTF ideal SHORT ({bias}) +2"
+
+    # Sideways = no structural edge (Strategist VETO rule already exists)
+    if "SIDEWAYS" in bias:
+        return -2, f"MTF sideways ({bias}) no trend edge -2"
+
+    # 4H confirms direction (not ideal timing but aligned)
+    if bias.startswith("4H_BULL") and direction_up == "LONG":
+        return 1, f"MTF 4H bull, LONG aligned ({bias}) +1"
+    if bias.startswith("4H_BEAR") and direction_up == "SHORT":
+        return 1, f"MTF 4H bear, SHORT aligned ({bias}) +1"
+
+    # Counter-trend — 4H opposes trade direction
+    if bias.startswith("4H_BULL") and direction_up == "SHORT":
+        return -1, f"MTF 4H bull but SHORT — counter-trend ({bias}) -1"
+    if bias.startswith("4H_BEAR") and direction_up == "LONG":
+        return -1, f"MTF 4H bear but LONG — counter-trend ({bias}) -1"
+
+    return 0, f"MTF {bias} neutral alignment ±0"
 
 
 def _score_confidence(confidence: float) -> tuple[int, str]:
@@ -212,8 +278,10 @@ def score_signal(signal: dict, market_bias: str, history: dict, positions: dict)
     d3_pts, d3_reason = _score_win_rate(coin, direction, history)
     d4_pts, d4_reason = _score_correlation(coin, direction, positions)
     d5_pts, d5_reason = _score_pattern(pattern)
+    d6_pts, d6_reason = _score_mtf_bias(direction, pattern)   # MTF adjustment (-2 to +2)
 
-    total_score = d1_pts + d2_pts + d3_pts + d4_pts + d5_pts
+    base_score  = d1_pts + d2_pts + d3_pts + d4_pts + d5_pts
+    total_score = max(0, min(10, base_score + d6_pts))   # clamp to 0-10 after MTF adj
 
     if total_score >= STRONG_MIN:
         verdict = "STRONG"
@@ -228,11 +296,13 @@ def score_signal(signal: dict, market_bias: str, history: dict, positions: dict)
         "win_rate":    (d3_pts, d3_reason),
         "correlation": (d4_pts, d4_reason),
         "pattern":     (d5_pts, d5_reason),
+        "mtf_bias":    (d6_pts, d6_reason),   # signed: can be negative
     }
 
+    mtf_sign = f"+{d6_pts}" if d6_pts >= 0 else str(d6_pts)
     summary = (
         f"{coin} {direction} — Score {total_score}/10 [{verdict}] | "
-        f"Conf:{d1_pts} Regime:{d2_pts} WR:{d3_pts} Corr:{d4_pts} Pat:{d5_pts}"
+        f"Conf:{d1_pts} Regime:{d2_pts} WR:{d3_pts} Corr:{d4_pts} Pat:{d5_pts} MTF:{mtf_sign}"
     )
 
     return {
@@ -288,14 +358,17 @@ def format_score_for_prompt(signal: dict) -> str:
     if not bd:
         return f"Score: {score}/10 [{verdict}]"
 
-    pts = lambda key: bd.get(key, (0, ""))[0]
+    pts     = lambda key: bd.get(key, (0, ""))[0]
+    mtf_raw = pts('mtf_bias')
+    mtf_fmt = f"+{mtf_raw}" if mtf_raw >= 0 else str(mtf_raw)
     return (
         f"Score: {score}/10 [{verdict}] | "
         f"Conf:+{pts('confidence')} "
         f"Regime:+{pts('regime')} "
         f"WR:+{pts('win_rate')} "
         f"Corr:+{pts('correlation')} "
-        f"Pat:+{pts('pattern')}"
+        f"Pat:+{pts('pattern')} "
+        f"MTF:{mtf_fmt}"
     )
 
 
