@@ -2750,24 +2750,81 @@ def main():
     }
     print(f"   ✓ Merged: {len(merged_longs)} LONG + {len(merged_shorts)} SHORT signals from 2 batches")
 
-    # ── TOP-3 FILTER (main): trim signal_data BEFORE Telegram + Sheets ──────
+    # ── DYNAMIC SIGNAL COUNT based on BTC 4H regime (v47.22) ────────────────
+    # Re-check BTC 4H bias (cheap public API, no auth) to adjust how many
+    # signals we keep. Sideways market = fewer signals = less noise.
+    # Strong trending market = more signals = more opportunities.
+    # Fails silently — defaults to 3+3 if API is unreachable.
+    def _get_btc_regime_bot():
+        try:
+            import requests as _req
+            r = _req.get(
+                "https://api.bybit.com/v5/market/kline",
+                params={"category": "linear", "symbol": "BTCUSDT",
+                        "interval": "240", "limit": "22"},
+                timeout=6,
+            )
+            d = r.json()
+            if d.get("retCode") != 0:
+                return "NEUTRAL", 0.0
+            cs = d["result"]["list"]
+            if len(cs) < 21:
+                return "NEUTRAL", 0.0
+            closes = [float(c[4]) for c in cs[1:21]]
+            sma20  = sum(closes) / 20
+            cur    = float(cs[0][4])
+            pct    = (cur - sma20) / sma20 * 100
+            bias   = "BEAR" if pct < -2.0 else ("BULL" if pct > 2.0 else "NEUTRAL")
+            return bias, round(pct, 2)
+        except Exception:
+            return "NEUTRAL", 0.0
+
+    _btc_regime, _btc_regime_pct = _get_btc_regime_bot()
+    # Signal count rules:
+    #   NEUTRAL (sideways):       2 LONG + 2 SHORT  — fewer bets in choppy market
+    #   BULL (weak, 2-5%):        3 LONG + 2 SHORT  — favour trend direction
+    #   BEAR (weak, -5 to -2%):   2 LONG + 3 SHORT
+    #   Strong BULL (abs>5%):     4 LONG + 2 SHORT  — strong trend = more LONG opportunity
+    #   Strong BEAR (abs>5%):     2 LONG + 4 SHORT
+    _abs_pct = abs(_btc_regime_pct)
+    if _btc_regime == "NEUTRAL":
+        _n_long, _n_short = 2, 2
+        _regime_note = f"SIDEWAYS ({_btc_regime_pct:+.1f}%) — conservative 2+2"
+    elif _btc_regime == "BULL":
+        if _abs_pct > 5.0:
+            _n_long, _n_short = 4, 2
+            _regime_note = f"STRONG BULL ({_btc_regime_pct:+.1f}%) — aggressive 4+2"
+        else:
+            _n_long, _n_short = 3, 2
+            _regime_note = f"BULL ({_btc_regime_pct:+.1f}%) — standard 3+2"
+    else:  # BEAR
+        if _abs_pct > 5.0:
+            _n_long, _n_short = 2, 4
+            _regime_note = f"STRONG BEAR ({_btc_regime_pct:+.1f}%) — aggressive 2+4"
+        else:
+            _n_long, _n_short = 2, 3
+            _regime_note = f"BEAR ({_btc_regime_pct:+.1f}%) — standard 2+3"
+    print(f"   📡 BTC 4H Regime: {_regime_note} → keeping top {_n_long}🟢 + {_n_short}🔴")
+    # ── end dynamic count ─────────────────────────────────────────────────────
+
+    # ── TOP-N FILTER (main): trim signal_data BEFORE Telegram + Sheets ───────
     # This is the authoritative filter. The filter inside log_to_google_sheets()
     # is a safety backstop only. signal_data is the single source of truth for
-    # Telegram, Sheets, and the trader. All three must see only top 3+3.
+    # Telegram, Sheets, and the trader.
     def _top3_key(sig):
         raw = str(sig.get("conf", sig.get("confidence", "0")))
         nums = re.findall(r'[\d]+\.?[\d]*', raw)
         return float(nums[0]) if nums else 0.0
     _raw_n_long  = len(signal_data["longs"])
     _raw_n_short = len(signal_data["shorts"])
-    signal_data["longs"]  = sorted(signal_data["longs"],  key=_top3_key, reverse=True)[:3]
-    signal_data["shorts"] = sorted(signal_data["shorts"], key=_top3_key, reverse=True)[:3]
+    signal_data["longs"]  = sorted(signal_data["longs"],  key=_top3_key, reverse=True)[:_n_long]
+    signal_data["shorts"] = sorted(signal_data["shorts"], key=_top3_key, reverse=True)[:_n_short]
     _n_top_dropped = (_raw_n_long - len(signal_data["longs"])) + (_raw_n_short - len(signal_data["shorts"]))
     if _n_top_dropped > 0:
-        print(f"   🎯 TOP-3 FILTER: {_raw_n_long}🟢 + {_raw_n_short}🔴 raw → kept top {len(signal_data['longs'])}🟢 + {len(signal_data['shorts'])}🔴 ({_n_top_dropped} dropped)")
+        print(f"   🎯 TOP-N FILTER: {_raw_n_long}🟢 + {_raw_n_short}🔴 raw → kept top {len(signal_data['longs'])}🟢 + {len(signal_data['shorts'])}🔴 ({_n_top_dropped} dropped)")
     else:
-        print(f"   🎯 TOP-3 FILTER: already within 3+3 limit — no signals dropped")
-    # ── end top-3 filter ─────────────────────────────────────────────────────
+        print(f"   🎯 TOP-N FILTER: already within limit — no signals dropped")
+    # ── end top-N filter ──────────────────────────────────────────────────────
 
     tg_msg = build_telegram_message(signal_data, bkk_time, graveyard_text=graveyard)
     print("\n" + "─"*60)

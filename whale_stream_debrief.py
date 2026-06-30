@@ -258,6 +258,29 @@ def save_memory(memory):
             mtf_stats[mtf]["losses"] += 1
     memory["mtf_stats"] = mtf_stats
 
+    # Compute signal score tier win rates (v47.22)
+    # Tiers: 0-4 (weak), 5-6 (below floor / marginal), 7-8 (good), 9-10 (elite)
+    score_tier_stats = {
+        "0-4":  {"wins": 0, "losses": 0},
+        "5-6":  {"wins": 0, "losses": 0},
+        "7-8":  {"wins": 0, "losses": 0},
+        "9-10": {"wins": 0, "losses": 0},
+    }
+    for d in memory.get("debriefs", []):
+        _sc = d.get("score")
+        if _sc is None:
+            continue
+        try:
+            _sc = float(_sc)
+        except (TypeError, ValueError):
+            continue
+        _tier = "0-4" if _sc <= 4 else ("5-6" if _sc <= 6 else ("7-8" if _sc <= 8 else "9-10"))
+        if d.get("outcome", "").upper() == "WIN":
+            score_tier_stats[_tier]["wins"] += 1
+        else:
+            score_tier_stats[_tier]["losses"] += 1
+    memory["score_tier_stats"] = score_tier_stats
+
     try:
         _tmp = MEMORY_FILE + ".tmp"
         with open(_tmp, "w", encoding="utf-8") as f:
@@ -546,6 +569,8 @@ def run_debrief(trades):
             "lesson":        result.get("lesson", ""),
             "flag":          result.get("flag", "NEUTRAL"),
             "debrief_at":    now,
+            # Signal scorer quality score (v47.22) — from strategist_decisions.json
+            "score":         strat_decision.get("score") if strat_decision else None,
             # Multi-agent consensus (Principle 5)
             "strat_action":  strat_decision.get("action", "") if strat_decision else "",
             "consensus":     consensus_note,

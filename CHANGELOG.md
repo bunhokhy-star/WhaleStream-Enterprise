@@ -1,5 +1,20 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.22 — 2026-06-30 — Scorer feedback loop; dynamic signal count; entry hit-rate analysis
+
+### `whale_stream_debrief.py`
+- **NEW: `"score"` field in debrief entry** — reads `score` from `strategist_decisions.json` (loaded via existing `load_strategist_decision()`) and saves it alongside the debrief entry in `pattern_memory.json`. Enables score-vs-outcome correlation over time. Null when Strategist data is unavailable (pre-v47.21 trades).
+- **NEW: `score_tier_stats` in `save_memory()`** — rebuilt on every save across all debriefs. Counts wins/losses in four tiers: `0-4` (weak), `5-6` (marginal), `7-8` (good), `9-10` (elite). Stored in `pattern_memory.json` as `score_tier_stats`. Used by `analyze_shorts.py` to validate scorer effectiveness.
+
+### `analyze_shorts.py`
+- **NEW: SIGNAL SCORE TIER WIN RATES section** — loads `score_tier_stats` from `pattern_memory.json`, displays per-tier WR with coloured progress bars. Prints validation verdict: if elite (9-10) tier WR ≥ good (7-8) tier WR, scorer is validated; otherwise flags for review.
+- **NEW: ENTRY ZONE HIT-RATE — CHRONIC MISS COINS section** — groups EXPIRED signals by coin, computes per-coin expiry rate and average entry zone width. Flags coins with ≥70% expiry rate as `CHRONIC MISS`. Collected entry zone string added to `expired_longs` dict at parse time (`COL_ENTRY = 3`).
+
+### `whale_stream_bot.py`
+- **NEW: Dynamic signal count based on BTC 4H regime** — `_get_btc_regime_bot()` fetches BTC 4H klines from Bybit public API at end of each run. Regime determines how many signals to keep: NEUTRAL/SIDEWAYS → 2+2 (conservative), BULL → 3+2, BEAR → 2+3, Strong BULL (>5%) → 4+2, Strong BEAR (>5%) → 2+4. Replaces hardcoded `[:3]` slice with dynamic `[:_n_long]` / `[:_n_short]`. Fails silently (defaults to 3+3 if API unreachable). Logged on every run: `📡 BTC 4H Regime: BULL (+3.1%) — standard 3+2`.
+
+---
+
 ## v47.21 — 2026-06-30 — Signal score gate; adaptive confidence floors; MTF freshness re-check
 
 ### `whale_stream_strategist.py`

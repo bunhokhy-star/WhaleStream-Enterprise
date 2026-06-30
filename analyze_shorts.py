@@ -88,11 +88,14 @@ def main():
                     exp_pnl = float(pnl_str)
                 except Exception:
                     exp_pnl = None
+                # Also capture entry zone for hit-rate analysis (Option C)
+                entry_zone_raw = row[COL_ENTRY].strip() if len(row) > COL_ENTRY else ""
                 expired_longs.append({
-                    "coin":   row[COL_COIN].strip(),
-                    "ts":     row[COL_TIMESTAMP].strip(),
-                    "tp_hit": row[COL_TP_HIT].strip() if len(row) > COL_TP_HIT else "",
-                    "pnl":    exp_pnl,
+                    "coin":       row[COL_COIN].strip(),
+                    "ts":         row[COL_TIMESTAMP].strip(),
+                    "tp_hit":     row[COL_TP_HIT].strip() if len(row) > COL_TP_HIT else "",
+                    "pnl":        exp_pnl,
+                    "entry_zone": entry_zone_raw,
                 })
 
         if status not in ("WIN", "LOSS"):
@@ -790,6 +793,128 @@ def main():
     else:
         p("  ✅ Last-20 WR ≥50% — Gate 3 recovery target MET!")
     p("")
+
+    # ── SIGNAL SCORE TIER WIN RATES (v47.22) ─────────────────────
+    p()
+    p("═" * 58)
+    p("  SIGNAL SCORE TIER WIN RATES (validates scorer)")
+    p("  Scores written by Strategist → saved in pattern_memory.json by Debrief")
+    p("═" * 58)
+    _mem_path = os.path.join(SCRIPT_DIR, "pattern_memory.json")
+    if os.path.exists(_mem_path):
+        try:
+            with open(_mem_path, "r", encoding="utf-8") as _mf:
+                _mem = json.load(_mf)
+            _sts = _mem.get("score_tier_stats", {})
+            _total_scored = sum(
+                _sts.get(t, {}).get("wins", 0) + _sts.get(t, {}).get("losses", 0)
+                for t in ("0-4", "5-6", "7-8", "9-10")
+            )
+            if _total_scored == 0:
+                p("  No scored debriefs yet — scores will populate as trades resolve.")
+                p("  (Requires v47.22+ Debrief and v47.21+ Strategist to write scores)")
+            else:
+                p(f"  {'Tier':<10} {'W':>4} {'L':>4} {'Tot':>5} {'WR':>7}  Verdict")
+                p("  " + "-" * 46)
+                _tier_order = [("0-4", "❌ WEAK — below score gate floor"),
+                               ("5-6", "⚠️  MARGINAL — passes gate, review"),
+                               ("7-8", "✅ GOOD — reliable quality band"),
+                               ("9-10","⭐ ELITE — highest conviction")]
+                for _tier, _verdict in _tier_order:
+                    _tw = _sts.get(_tier, {}).get("wins", 0)
+                    _tl = _sts.get(_tier, {}).get("losses", 0)
+                    _tt = _tw + _tl
+                    _twr = f"{_tw/_tt*100:.1f}%" if _tt > 0 else "N/A"
+                    _bar = ""
+                    if _tt > 0:
+                        _wr_f = _tw / _tt
+                        _bar = "🟩" * int(_wr_f * 5) + "🟥" * (5 - int(_wr_f * 5))
+                    p(f"  {_tier:<10} {_tw:>4} {_tl:>4} {_tt:>5} {_twr:>7}  {_bar}  {_verdict}")
+                p()
+                # Validation verdict
+                _e9 = _sts.get("9-10", {})
+                _e7 = _sts.get("7-8", {})
+                _e5 = _sts.get("5-6", {})
+                _wr9 = _e9.get("wins",0)/(_e9.get("wins",0)+_e9.get("losses",0)) if (_e9.get("wins",0)+_e9.get("losses",0))>0 else None
+                _wr7 = _e7.get("wins",0)/(_e7.get("wins",0)+_e7.get("losses",0)) if (_e7.get("wins",0)+_e7.get("losses",0))>0 else None
+                _wr5 = _e5.get("wins",0)/(_e5.get("wins",0)+_e5.get("losses",0)) if (_e5.get("wins",0)+_e5.get("losses",0))>0 else None
+                if _wr9 is not None and _wr7 is not None and _wr9 >= _wr7:
+                    p(f"  ✅ SCORER VALIDATED: elite tier (9-10) WR {_wr9*100:.1f}% ≥ good tier (7-8) {_wr7*100:.1f}%")
+                    p(f"     Higher scores ARE predicting better outcomes — scorer is working.")
+                elif _wr9 is not None and _wr7 is not None:
+                    p(f"  ⚠️  SCORER NEEDS REVIEW: elite tier (9-10) WR {_wr9*100:.1f}% < good tier (7-8) {_wr7*100:.1f}%")
+                    p(f"     Higher scores not consistently outperforming — check scorer dimensions.")
+                else:
+                    p(f"  ℹ️  Need more scored trades to validate (aim for 5+ per tier)")
+        except Exception as _e:
+            p(f"  Could not load pattern_memory.json: {_e}")
+    else:
+        p("  pattern_memory.json not found — run a few cycles to accumulate debriefs.")
+    p()
+
+    # ── ENTRY ZONE HIT-RATE: CHRONIC MISS COINS (Option C v47.22) ────────
+    p("═" * 58)
+    p("  ENTRY ZONE HIT-RATE — CHRONIC MISS COINS")
+    p("  Coins where price never reaches our entry zone (signal expires)")
+    p("═" * 58)
+    if expired_longs or longs:
+        # Compute per-coin: expired count + total signals (resolved + expired)
+        _expired_by_coin = defaultdict(list)
+        for _e in expired_longs:
+            _expired_by_coin[_e["coin"]].append(_e)
+        _resolved_by_coin = defaultdict(list)
+        for _r in longs:
+            _resolved_by_coin[_r["coin"]].append(_r)
+        _all_coins = set(list(_expired_by_coin.keys()) + list(_resolved_by_coin.keys()))
+        _coin_rows = []
+        for _cn in _all_coins:
+            _exp_n  = len(_expired_by_coin.get(_cn, []))
+            _res_n  = len(_resolved_by_coin.get(_cn, []))
+            _total  = _exp_n + _res_n
+            if _total < 2:
+                continue
+            _exp_rate = _exp_n / _total
+            # Compute avg entry zone width (e.g. "1800-1820" → width = 20 / midpoint = 1.1%)
+            _widths = []
+            for _ex in _expired_by_coin.get(_cn, []):
+                _ez = _ex.get("entry_zone", "")
+                import re as _re2
+                _prices = [float(x) for x in _re2.findall(r'[\d]+\.?[\d]*', _ez) if float(x) > 0]
+                if len(_prices) >= 2:
+                    _lo, _hi = min(_prices), max(_prices)
+                    _mid = (_lo + _hi) / 2
+                    if _mid > 0:
+                        _widths.append((_hi - _lo) / _mid * 100)
+            _avg_width = sum(_widths) / len(_widths) if _widths else None
+            _coin_rows.append((_cn, _exp_n, _res_n, _total, _exp_rate, _avg_width))
+        _coin_rows.sort(key=lambda x: -x[4])  # sort by expiry rate desc
+        if _coin_rows:
+            p(f"  {'COIN':<12} {'Exp':>4} {'Res':>4} {'Tot':>4} {'Exp%':>6}  {'Avg Zone Width':>16}  Verdict")
+            p("  " + "-" * 62)
+            for _cn, _en, _rn, _tn, _er, _aw in _coin_rows:
+                _icon = "🚨" if _er >= 0.70 else ("⚠️ " if _er >= 0.40 else "✅ ")
+                _aw_str = f"{_aw:.2f}% wide" if _aw is not None else "zone N/A"
+                _verdict = ""
+                if _er >= 0.70:
+                    _verdict = "CHRONIC MISS — widen entry zone or skip"
+                elif _er >= 0.40:
+                    _verdict = "High miss rate — consider wider zone"
+                else:
+                    _verdict = "OK"
+                p(f"  {_icon} {_cn:<10} {_en:>4} {_rn:>4} {_tn:>4} {_er*100:>5.0f}%  {_aw_str:>16}  {_verdict}")
+            p()
+            _chronic = [r for r in _coin_rows if r[4] >= 0.70]
+            if _chronic:
+                p(f"  → {len(_chronic)} coin(s) have ≥70% expiry rate.")
+                p(f"     Prompt guidance: for these coins, widen entry zone by 0.5-1% OR skip generating signals.")
+                p(f"     Chronic miss coins: {', '.join(r[0] for r in _chronic)}")
+            else:
+                p("  ✅ No coins with ≥70% expiry rate — entry zones are adequate.")
+        else:
+            p("  Not enough data per coin (need 2+ signals each).")
+    else:
+        p("  No data yet.")
+    p()
 
     with open(OUT_FILE, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
