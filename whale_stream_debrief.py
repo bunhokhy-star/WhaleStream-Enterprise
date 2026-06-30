@@ -370,8 +370,66 @@ def save_memory(memory):
 
     memory["dim_correlation"] = _dim_corr
 
+    # ── Dim health → scorer_tune.json (v47.32) ───────────────────────────────
+    # When MTF dims underperform, escalate signal_scorer.py penalties automatically.
+    # MTF counter: WR ≤ 30% over ≥15 trades → MTF_COUNTER_PENALTY -1 → -2
+    # MTF sideways: WR ≤ 20% over ≥15 trades → MTF_SIDEWAYS_PENALTY -2 → -3
+    # signal_scorer.py reads this file at import time.
+    try:
+        _st_path    = os.path.join(SCRIPT_DIR, "scorer_tune.json")
+        _st_overrides: dict = {}
+        _dc_now     = memory.get("dim_correlation", {})
+
+        _mtf_ctr   = _dc_now.get("mtf_counter", {})
+        _ctr_total = _mtf_ctr.get("wins", 0) + _mtf_ctr.get("losses", 0)
+        if _ctr_total >= 15:
+            _ctr_wr = _mtf_ctr.get("wins", 0) / _ctr_total
+            if _ctr_wr <= 0.30:
+                _st_overrides["MTF_COUNTER_PENALTY"] = -2
+                log(f"   🎛 SCORER_TUNE: MTF_COUNTER_PENALTY → -2 "
+                    f"(WR={_ctr_wr*100:.1f}% over {_ctr_total} trades)")
+
+        _mtf_sw   = _dc_now.get("mtf_sideways", {})
+        _sw_total = _mtf_sw.get("wins", 0) + _mtf_sw.get("losses", 0)
+        if _sw_total >= 15:
+            _sw_wr = _mtf_sw.get("wins", 0) / _sw_total
+            if _sw_wr <= 0.20:
+                _st_overrides["MTF_SIDEWAYS_PENALTY"] = -3
+                log(f"   🎛 SCORER_TUNE: MTF_SIDEWAYS_PENALTY → -3 "
+                    f"(WR={_sw_wr*100:.1f}% over {_sw_total} trades)")
+
+        if _st_overrides:
+            _st_overrides["tuned_at"] = bkk_now_str()
+            _st_overrides["note"] = "Auto-tuned by debrief — MTF dim underperformance escalation"
+            _old_st: dict = {}
+            try:
+                with open(_st_path, "r", encoding="utf-8") as _stf_r:
+                    _old_st = json.load(_stf_r)
+            except Exception:
+                pass
+            _st_changed = any(
+                _old_st.get(k) != v for k, v in _st_overrides.items()
+                if k not in ("tuned_at", "note")
+            )
+            if _st_changed:
+                with open(_st_path, "w", encoding="utf-8") as _stf_w:
+                    json.dump(_st_overrides, _stf_w, indent=2)
+                log(f"   🎛 scorer_tune.json written: {_st_overrides}")
+        else:
+            # No escalation needed — remove file so scorer reverts to defaults
+            try:
+                if os.path.exists(_st_path):
+                    os.remove(_st_path)
+                    log("   🎛 scorer_tune.json cleared — MTF dims within normal range")
+            except Exception:
+                pass
+    except Exception as _st_e:
+        log(f"   ⚠ scorer_tune.json write failed (non-critical): {_st_e}")
+
     # Auto-blocklist: coins with ≥3 losses + 0 wins per direction (v47.28 LONG / v47.29 SHORT)
     # Writes coin_blocklist_auto.json — read by bot.py at startup.
+    _aged_out_longs:  list = []   # initialised here; populated inside try below
+    _aged_out_shorts: list = []   # used by probation block after the except
     try:
         _bl_long_wins: dict   = {}
         _bl_long_losses: dict  = {}
@@ -501,6 +559,132 @@ def save_memory(memory):
             log(f"   🚫 AUTO-BLOCKLIST SHORT: {', '.join(_auto_blocked_shorts)}")
     except Exception as _bl_e:
         log(f"   ⚠ Auto-blocklist write failed (non-critical): {_bl_e}")
+
+    # ── Probation watchlist (v47.32) ─────────────────────────────────────────
+    # Coins that expire from the auto-blocklist enter a 3-trade probation period.
+    # Any WIN clears probation. All losses re-block the coin immediately.
+    # File: blocklist_watchlist.json — read by strategist (warning) + morning briefing.
+    try:
+        _wl_path = os.path.join(SCRIPT_DIR, "blocklist_watchlist.json")
+        _existing_wl: dict = {}
+        try:
+            if os.path.exists(_wl_path):
+                with open(_wl_path, "r", encoding="utf-8") as _wlf_r:
+                    _existing_wl = json.load(_wlf_r)
+        except Exception:
+            pass
+        _watchlist: dict = _existing_wl.get("watchlist", {})
+
+        # ── Add newly expired coins to watchlist ──────────────────────────────
+        for _agc in _aged_out_longs:
+            _wkey = f"{_agc}_LONG"
+            if _wkey not in _watchlist:
+                _watchlist[_wkey] = {
+                    "coin": _agc, "direction": "LONG",
+                    "probation_trades": 3,
+                    "probation_started": bkk_now_str(),
+                }
+                log(f"   🔶 PROBATION: {_agc} LONG — 3 trades to prove itself (expired from blocklist)")
+        for _agc in _aged_out_shorts:
+            _wkey = f"{_agc}_SHORT"
+            if _wkey not in _watchlist:
+                _watchlist[_wkey] = {
+                    "coin": _agc, "direction": "SHORT",
+                    "probation_trades": 3,
+                    "probation_started": bkk_now_str(),
+                }
+                log(f"   🔶 PROBATION: {_agc} SHORT — 3 trades to prove itself (expired from blocklist)")
+
+        # ── Review existing watchlist entries ─────────────────────────────────
+        _to_clear_wl: list   = []
+        _to_reblock_long_wl: list  = []
+        _to_reblock_short_wl: list = []
+        for _wkey, _wentry in list(_watchlist.items()):
+            _wc  = _wentry.get("coin", "")
+            _wdr = _wentry.get("direction", "")
+            _wst = _wentry.get("probation_started", "")
+            _wpt = int(_wentry.get("probation_trades", 3))
+            if not (_wc and _wdr and _wst):
+                continue
+            # Count WIN / LOSS debriefs since probation started
+            _prob_wins   = 0
+            _prob_losses = 0
+            for _dbl in memory.get("debriefs", []):
+                if (_dbl.get("coin", "").upper()      != _wc or
+                    _dbl.get("direction", "").upper()  != _wdr):
+                    continue
+                _dbl_ts = _dbl.get("debrief_at", "") or _dbl.get("ts", "")
+                if _dbl_ts < _wst:
+                    continue  # trade was before probation started
+                _dbl_out = _dbl.get("outcome", "").upper()
+                if _dbl_out == "WIN":
+                    _prob_wins += 1
+                elif _dbl_out == "LOSS":
+                    _prob_losses += 1
+            if _prob_wins > 0:
+                # Any win → coin proved itself → clear probation
+                _to_clear_wl.append(_wkey)
+                log(f"   ✅ PROBATION CLEARED: {_wc} {_wdr} — {_prob_wins}W on probation")
+                try:
+                    send_telegram(
+                        f"✅ <b>PROBATION CLEARED</b> — {_wc} {_wdr}\n"
+                        f"Won on probation ({_prob_wins}W / {_prob_losses}L). Full trading resumed."
+                    )
+                except Exception:
+                    pass
+            elif _prob_losses >= _wpt:
+                # Used all probation trades, all losses → re-block
+                _to_clear_wl.append(_wkey)
+                if _wdr == "LONG":
+                    _to_reblock_long_wl.append(_wc)
+                else:
+                    _to_reblock_short_wl.append(_wc)
+                log(f"   🔴 PROBATION FAILED: {_wc} {_wdr} — {_prob_losses}L, re-blocked")
+                try:
+                    send_telegram(
+                        f"🔴 <b>PROBATION FAILED</b> — {_wc} {_wdr} re-BLOCKED\n"
+                        f"All {_prob_losses} probation trades were losses. Added back to auto-blocklist."
+                    )
+                except Exception:
+                    pass
+
+        for _wkey in _to_clear_wl:
+            _watchlist.pop(_wkey, None)
+
+        # Re-add failed probation coins back to coin_blocklist_auto.json
+        if _to_reblock_long_wl or _to_reblock_short_wl:
+            try:
+                _rbl_path = os.path.join(SCRIPT_DIR, "coin_blocklist_auto.json")
+                _rbl_data: dict = {}
+                if os.path.exists(_rbl_path):
+                    with open(_rbl_path, "r", encoding="utf-8") as _rblf:
+                        _rbl_data = json.load(_rblf)
+                for _rc in _to_reblock_long_wl:
+                    if _rc not in _rbl_data.get("blocked_longs", []):
+                        _rbl_data.setdefault("blocked_longs", []).append(_rc)
+                    _rbl_data.setdefault("blocked_since", {})[f"{_rc}_LONG"] = bkk_now_str()
+                for _rc in _to_reblock_short_wl:
+                    if _rc not in _rbl_data.get("blocked_shorts", []):
+                        _rbl_data.setdefault("blocked_shorts", []).append(_rc)
+                    _rbl_data.setdefault("blocked_since", {})[f"{_rc}_SHORT"] = bkk_now_str()
+                _rbl_data["updated_at"] = bkk_now_str()
+                with open(_rbl_path, "w", encoding="utf-8") as _rblf:
+                    json.dump(_rbl_data, _rblf, indent=2)
+            except Exception as _rbl_e:
+                log(f"   ⚠ Probation re-block write failed: {_rbl_e}")
+
+        # Write updated watchlist
+        _wl_out = {
+            "watchlist": _watchlist,
+            "updated_at": bkk_now_str(),
+            "note": "Coins on probation after auto-blocklist expiry — 3 trades to prove or re-block",
+        }
+        with open(_wl_path, "w", encoding="utf-8") as _wlf_w:
+            json.dump(_wl_out, _wlf_w, indent=2)
+        if _watchlist:
+            log(f"   🔶 PROBATION watchlist: {', '.join(_watchlist.keys())}")
+    except Exception as _wl_e:
+        log(f"   ⚠ Probation watchlist write failed (non-critical): {_wl_e}")
 
     # Auto-tune score floor (v47.23): if tier 5-6 underperforms, raise gate to 6
     # Threshold: ≥8 trades in tier 5-6 AND WR < 45% → write scorer_config.json

@@ -562,6 +562,95 @@ if __name__ == "__main__":
 
     _watchdog_health = "CRITICAL" if trader_critical else ("AMBER" if issues_with_fixes else "GREEN")
 
+    # ── Sunday scorer health digest (v47.32) ─────────────────────────────────
+    # Every Sunday :30 cycle → send weekly dim-health + score accuracy Telegram.
+    if datetime.now(BKK).weekday() == 6:   # Sunday = 6
+        try:
+            _pm_path_wd = os.path.join(BASE_DIR, "pattern_memory.json")
+            with open(_pm_path_wd, "r", encoding="utf-8") as _pmf_wd:
+                _pm_wd = json.load(_pmf_wd)
+            _dc_wd = _pm_wd.get("dim_correlation", {})
+            _sa_wd = _pm_wd.get("score_accuracy", {})
+
+            _dc_labels_wd = {
+                "conf_high":   "Conf ≥90%  ",
+                "conf_med":    "Conf 75-89%",
+                "conf_low":    "Conf <75%  ",
+                "mtf_ideal":   "MTF ideal  ",
+                "mtf_aligned": "MTF aligned",
+                "mtf_neutral": "MTF neutral",
+                "mtf_counter": "MTF counter",
+                "mtf_sideways":"MTF sideway",
+            }
+            _dim_lines_wd = []
+            for _dk_wd, _dlbl_wd in _dc_labels_wd.items():
+                _dv_wd  = _dc_wd.get(_dk_wd, {})
+                _dw_wd  = _dv_wd.get("wins", 0)
+                _dl_wd  = _dv_wd.get("losses", 0)
+                _dn_wd  = _dw_wd + _dl_wd
+                if _dn_wd < 10:
+                    continue
+                _dwr_wd = _dw_wd / _dn_wd * 100
+                _dic_wd = "✅" if _dwr_wd >= 60 else ("⚠️" if _dwr_wd >= 45 else "❌")
+                _dim_lines_wd.append(
+                    f"  {_dic_wd} {_dlbl_wd}: {_dwr_wd:.0f}% WR ({_dn_wd} trades)"
+                )
+
+            _sa_lines_wd = []
+            for _tier_wd, _rng_wd in [("ELITE","9-10"),("GOOD","7-8"),("MARGINAL","5-6"),("LOW","0-4")]:
+                _tv_wd = _sa_wd.get(_tier_wd, {})
+                _tc_wd = _tv_wd.get("correct", 0)
+                _ti_wd = _tv_wd.get("incorrect", 0)
+                _tn_wd = _tc_wd + _ti_wd
+                if _tn_wd == 0:
+                    continue
+                _tpct_wd  = _tc_wd / _tn_wd * 100
+                _ticon_wd = "✅" if _tpct_wd >= 55 else ("⚠️" if _tpct_wd >= 45 else "❌")
+                _sa_lines_wd.append(
+                    f"  {_ticon_wd} {_tier_wd} ({_rng_wd}): {_tpct_wd:.0f}% accuracy ({_tn_wd} trades)"
+                )
+
+            # Active scorer_tune escalations?
+            _st_note_wd = ""
+            try:
+                _stp_wd = os.path.join(BASE_DIR, "scorer_tune.json")
+                if os.path.exists(_stp_wd):
+                    with open(_stp_wd, "r", encoding="utf-8") as _stf_wd:
+                        _ste_wd = json.load(_stf_wd)
+                    _escl_wd = []
+                    if "MTF_COUNTER_PENALTY" in _ste_wd:
+                        _escl_wd.append(f"MTF counter penalty → {_ste_wd['MTF_COUNTER_PENALTY']}")
+                    if "MTF_SIDEWAYS_PENALTY" in _ste_wd:
+                        _escl_wd.append(f"MTF sideways penalty → {_ste_wd['MTF_SIDEWAYS_PENALTY']}")
+                    if _escl_wd:
+                        _st_note_wd = (
+                            "\n\n🔧 <b>Active scorer escalations:</b>\n"
+                            + "\n".join(f"  • {e}" for e in _escl_wd)
+                        )
+            except Exception:
+                pass
+
+            _dim_block_wd = "\n".join(_dim_lines_wd) if _dim_lines_wd else "  (fewer than 10 trades per bucket)"
+            _sa_block_wd  = "\n".join(_sa_lines_wd)  if _sa_lines_wd  else "  (no score data yet)"
+
+            _sunday_msg = (
+                f"📊 <b>WEEKLY SCORER HEALTH DIGEST</b>\n"
+                f"🗓 {now_str}\n"
+                f"\n"
+                f"<b>🔬 Dim Correlation (win rate per signal proxy):</b>\n"
+                f"{_dim_block_wd}\n"
+                f"\n"
+                f"<b>🎯 Score Prediction Accuracy:</b>\n"
+                f"{_sa_block_wd}"
+                f"{_st_note_wd}\n"
+                f"\n"
+                f"✅ = ≥60% WR  ⚠️ = 45-59%  ❌ = &lt;45%"
+            )
+            send_telegram(_sunday_msg)
+            print("   📊 Sunday scorer health digest sent.")
+        except Exception as _sund_e:
+            print(f"   ⚠ Sunday digest failed: {_sund_e}")
+
     # Build per-agent cycle summary for Daily Checklist hint
     try:
         _wh   = datetime.now(BKK).hour

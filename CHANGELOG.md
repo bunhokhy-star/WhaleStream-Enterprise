@@ -1,5 +1,23 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.32 — 2026-06-30 — Probation system; scorer_tune.json; Sunday health digest
+
+### `whale_stream_debrief.py`
+- **NEW: Probation system (Option A)** — after the auto-blocklist aging block, coins that expire from the blocklist are added to `blocklist_watchlist.json` with `probation_trades: 3`. Any WIN on probation clears the coin (Telegram: `✅ PROBATION CLEARED`). All 3 probation trades lost → coin is re-added to `coin_blocklist_auto.json` (Telegram: `🔴 PROBATION FAILED`). File: `blocklist_watchlist.json` → `{watchlist: {key: {coin, direction, probation_trades, probation_started}}}`.
+- **NEW: scorer_tune.json writer (Option B)** — immediately after `memory["dim_correlation"]` is written, computes MTF counter and MTF sideways bucket WRs. If MTF counter WR ≤ 30% over ≥15 trades → writes `MTF_COUNTER_PENALTY: -2` to `scorer_tune.json`. If MTF sideways WR ≤ 20% over ≥15 trades → writes `MTF_SIDEWAYS_PENALTY: -3`. File is deleted (penalties revert to defaults) when both dims are back within normal range. Only writes when content changes.
+
+### `signal_scorer.py`
+- **NEW: scorer_tune.json reader (Option B)** — at module import, reads `scorer_tune.json` (if present) and loads `MTF_COUNTER_PENALTY` (default -1) and `MTF_SIDEWAYS_PENALTY` (default -2). `_score_mtf_bias()` now uses these variables instead of hardcoded literals — debrief-detected underperformance automatically escalates MTF penalties without any manual config change.
+
+### `whale_stream_strategist.py`
+- **NEW: Probation watchlist load + per-signal warning (Option A)** — `build_strategist_user_message()` reads `blocklist_watchlist.json` once before the signal loop. For each signal coin on probation (not blocked outright), appends `🔶 ON PROBATION — expired from auto-blocklist; monitor closely` after the AUTO-BLOCKED check. Fails silently.
+
+### `morning_briefing.py`
+- **NEW: Probation watchlist section (Option A)** — after the Score Gate override block, reads `blocklist_watchlist.json`. If any coins are on probation, adds `🔶 PROBATION WATCHLIST` section showing coin, direction, probation trades remaining, and start date. Fails silently when file is absent.
+
+### `whale_stream_watchdog.py`
+- **NEW: Sunday scorer health digest (Option C)** — on every Sunday :30 cycle, reads `pattern_memory.json` and sends a weekly Telegram with dim correlation WR per bucket (✅/⚠️/❌) and score prediction accuracy per tier (ELITE/GOOD/MARGINAL/LOW). Also reports any active `scorer_tune.json` escalations. Fails silently if pattern_memory is missing.
+
 ## v47.31 — 2026-06-30 — Score gate status in briefing; blocklist aging; dim correlation
 
 ### `morning_briefing.py`

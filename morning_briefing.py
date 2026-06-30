@@ -1164,6 +1164,28 @@ def build_message():
     except Exception:
         pass  # non-critical
 
+    # ── Probation watchlist (v47.32) ──────────────────────────────────────────
+    # Coins that expired from auto-blocklist — on 3-trade probation.
+    try:
+        _wl_path_mb = os.path.join(BASE_DIR, "blocklist_watchlist.json")
+        if os.path.exists(_wl_path_mb):
+            with open(_wl_path_mb, "r", encoding="utf-8") as _wlf_mb:
+                _wl_mb = json.load(_wlf_mb)
+            _wl_rows = []
+            for _wentry_mb in _wl_mb.get("watchlist", {}).values():
+                _wc_mb  = _wentry_mb.get("coin", "")
+                _wdr_mb = _wentry_mb.get("direction", "")
+                _wpt_mb = _wentry_mb.get("probation_trades", 3)
+                _wst_mb = (_wentry_mb.get("probation_started", "") or "")[:10]
+                if _wc_mb and _wdr_mb:
+                    _wl_rows.append(
+                        f"  🔶 {_wc_mb} {_wdr_mb} — {_wpt_mb} probation trade(s) left (since {_wst_mb})"
+                    )
+            if _wl_rows:
+                lines += ["", "🔶 PROBATION WATCHLIST (expired from auto-blocklist):"] + _wl_rows
+    except Exception:
+        pass  # non-critical
+
     lines += [
         "",
         f"🔄 Monitor: {monitor_status}",

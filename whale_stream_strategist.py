@@ -670,6 +670,18 @@ def build_strategist_user_message(signals, history, positions, balance, drawdown
     except Exception:
         pass  # fail silently — non-critical
 
+    # ── Load probation watchlist (v47.32) ────────────────────────────────────
+    _probation_set: set = set()   # entries like "BTCUSDT_LONG"
+    try:
+        _wl_path_st = os.path.join(os.path.dirname(os.path.abspath(__file__)), "blocklist_watchlist.json")
+        if os.path.exists(_wl_path_st):
+            with open(_wl_path_st, "r", encoding="utf-8") as _wlf_st:
+                _wl_data_st = json.load(_wlf_st)
+            for _wkey_st in _wl_data_st.get("watchlist", {}):
+                _probation_set.add(_wkey_st.upper())
+    except Exception:
+        pass  # fail silently — non-critical
+
     for s in signals:
         key   = (s["coin"], s["direction"])
         trades = history.get(key, [])
@@ -698,6 +710,11 @@ def build_strategist_user_message(signals, history, positions, balance, drawdown
             lines.append(f"  ⚠️ AUTO-BLOCKED (LONG) — ≥3 losses / 0 wins in debrief history")
         elif _is_bl_short:
             lines.append(f"  ⚠️ AUTO-BLOCKED (SHORT) — ≥3 losses / 0 wins in debrief history")
+
+        # ── Probation warning (v47.32) ────────────────────────────────────────
+        _pb_key = f"{_coin_up}_{s['direction'].upper()}"
+        if not _is_bl_long and not _is_bl_short and _pb_key in _probation_set:
+            lines.append(f"  🔶 ON PROBATION — expired from auto-blocklist; monitor closely")
 
         if not trades:
             lines.append(f"  History    : No resolved trades yet on this coin+direction")

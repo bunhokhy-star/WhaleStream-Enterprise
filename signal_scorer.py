@@ -90,6 +90,24 @@ MTF_IDEAL_LONG  = {"4H_BULL_1H_PULLBACK", "4H_BULL_1H_RANGE", "4H_BULL_1H_BOT"}
 MTF_IDEAL_SHORT = {"4H_BEAR_1H_BOUNCE",   "4H_BEAR_1H_RANGE", "4H_BEAR_1H_TOP"}
 
 
+# ── scorer_tune.json overrides (v47.32) ───────────────────────
+# Written by debrief when MTF dims underperform; escalates penalties.
+# MTF counter default -1 → escalated -2 when WR ≤ 30% over ≥15 trades
+# MTF sideways default -2 → escalated -3 when WR ≤ 20% over ≥15 trades
+_SCORER_TUNE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scorer_tune.json")
+_MTF_COUNTER_PENALTY:  int = -1   # default
+_MTF_SIDEWAYS_PENALTY: int = -2   # default
+try:
+    if os.path.exists(_SCORER_TUNE_PATH):
+        with open(_SCORER_TUNE_PATH, "r", encoding="utf-8") as _stf_init:
+            _tune_init = _stf_init.read()
+        import json as _json_init
+        _tune_data = _json_init.loads(_tune_init)
+        _MTF_COUNTER_PENALTY  = int(_tune_data.get("MTF_COUNTER_PENALTY",  _MTF_COUNTER_PENALTY))
+        _MTF_SIDEWAYS_PENALTY = int(_tune_data.get("MTF_SIDEWAYS_PENALTY", _MTF_SIDEWAYS_PENALTY))
+except Exception:
+    pass   # fail silently — defaults already set
+
 # ── Pattern WR cache (dimension 7, v47.26) ────────────────────
 # Loaded once at scorer import time from pattern_memory.json.
 # Maps normalised pattern_key → {wins, losses} from live debrief history.
@@ -205,9 +223,9 @@ def _score_mtf_bias(direction: str, pattern: str) -> tuple[int, str]:
     if bias in MTF_IDEAL_SHORT and direction_up == "SHORT":
         return 2, f"MTF ideal SHORT ({bias}) +2"
 
-    # Sideways = no structural edge (Strategist VETO rule already exists)
+    # Sideways = no structural edge (v47.32: penalty may be escalated via scorer_tune.json)
     if "SIDEWAYS" in bias:
-        return -2, f"MTF sideways ({bias}) no trend edge -2"
+        return _MTF_SIDEWAYS_PENALTY, f"MTF sideways ({bias}) no trend edge {_MTF_SIDEWAYS_PENALTY}"
 
     # 4H confirms direction (not ideal timing but aligned)
     if bias.startswith("4H_BULL") and direction_up == "LONG":
@@ -215,11 +233,11 @@ def _score_mtf_bias(direction: str, pattern: str) -> tuple[int, str]:
     if bias.startswith("4H_BEAR") and direction_up == "SHORT":
         return 1, f"MTF 4H bear, SHORT aligned ({bias}) +1"
 
-    # Counter-trend — 4H opposes trade direction
+    # Counter-trend — 4H opposes trade direction (v47.32: penalty may be escalated)
     if bias.startswith("4H_BULL") and direction_up == "SHORT":
-        return -1, f"MTF 4H bull but SHORT — counter-trend ({bias}) -1"
+        return _MTF_COUNTER_PENALTY, f"MTF 4H bull but SHORT — counter-trend ({bias}) {_MTF_COUNTER_PENALTY}"
     if bias.startswith("4H_BEAR") and direction_up == "LONG":
-        return -1, f"MTF 4H bear but LONG — counter-trend ({bias}) -1"
+        return _MTF_COUNTER_PENALTY, f"MTF 4H bear but LONG — counter-trend ({bias}) {_MTF_COUNTER_PENALTY}"
 
     return 0, f"MTF {bias} neutral alignment ±0"
 
