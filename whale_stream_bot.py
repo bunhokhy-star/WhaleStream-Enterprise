@@ -1109,6 +1109,34 @@ def fetch_signal_graveyard():
             lines.append(f"🚫 L_AVOID(0%WR≥2T): {', '.join(_long_avoid_extra)} — skip unless conf≥97%")
 
         graveyard_text = "\n".join(lines)
+
+        # ── Task 2: MTF bias win-rate table from pattern_memory.json ────────
+        try:
+            _mem_path = os.path.join(os.path.dirname(__file__), "pattern_memory.json")
+            if os.path.exists(_mem_path):
+                with open(_mem_path, "r", encoding="utf-8") as _mf:
+                    _mem = json.load(_mf)
+                _mtf_stats = _mem.get("mtf_stats", {})
+                if _mtf_stats:
+                    _mtf_rows = []
+                    for _bias, _cnts in sorted(_mtf_stats.items()):
+                        _w = _cnts.get("wins", 0)
+                        _l = _cnts.get("losses", 0)
+                        _tot = _w + _l
+                        if _tot < 3:
+                            continue          # not enough data yet
+                        _wr = 100 * _w / _tot
+                        _flag = "✅" if _wr >= 60 else ("⚠️" if _wr >= 45 else "🚫")
+                        _mtf_rows.append(f"  {_flag} {_bias:<28s} {_w}W/{_l}L  {_wr:.0f}% WR")
+                    if _mtf_rows:
+                        graveyard_text += (
+                            "\n\nMTF_BIAS WIN RATE (4H+1H structure at signal time):\n"
+                            + "\n".join(_mtf_rows)
+                            + "\n  ✅≥60% = favour  ⚠️=neutral  🚫<45% = avoid"
+                        )
+        except Exception as _mtf_e:
+            pass   # non-critical — graveyard still works without mtf table
+
         print(f"   ✓ Signal Graveyard: {len(recent)} trades (overall {win_rate:.0f}% WR | long {long_wr:.0f}% | short {short_wr:.0f}%)")
         if blacklisted:
             print(f"   🚫 Short blacklist: {', '.join(blacklisted)}")

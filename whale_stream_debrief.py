@@ -244,6 +244,20 @@ def save_memory(memory):
         coin_stats[c] = {"consecutive_losses": consec}
     memory["coin_stats"] = coin_stats
 
+    # Compute MTF bias win rates across all debriefs
+    mtf_stats = {}
+    for d in memory.get("debriefs", []):
+        mtf = d.get("mtf_bias", "")
+        if not mtf or mtf in ("", "MTF_UNKNOWN"):
+            continue
+        if mtf not in mtf_stats:
+            mtf_stats[mtf] = {"wins": 0, "losses": 0}
+        if d.get("outcome", "").upper() == "WIN":
+            mtf_stats[mtf]["wins"] += 1
+        else:
+            mtf_stats[mtf]["losses"] += 1
+    memory["mtf_stats"] = mtf_stats
+
     try:
         _tmp = MEMORY_FILE + ".tmp"
         with open(_tmp, "w", encoding="utf-8") as f:
@@ -343,6 +357,21 @@ def consensus_verdict(strat_decision, outcome):
     return f"Strategist action: {action} | Outcome: {outcome}"
 
 
+def _extract_mtf_bias(pattern_str):
+    """
+    Extract mtf_bias from pattern string like "Bull flag [4H_BULL_1H_PULLBACK]".
+    Returns the bias string or "" if not found.
+    """
+    import re as _re
+    m = _re.search(r'\[([A-Z0-9_]{5,30})\]', str(pattern_str))
+    if m:
+        candidate = m.group(1)
+        # Only accept known MTF bias format strings
+        if candidate.startswith(("4H_", "MTF_")):
+            return candidate
+    return ""
+
+
 def build_debrief_prompt(trade):
     """Build the user message for Claude Haiku debrief."""
     coin      = trade.get("coin", "?")
@@ -351,6 +380,7 @@ def build_debrief_prompt(trade):
     tp_hit    = trade.get("tp_hit", "")
     pnl       = float(trade.get("pnl", 0) or 0)           # sheet may send as string; cast to float
     pattern   = trade.get("pattern", "unknown")
+    mtf_bias  = trade.get("mtf_bias", "") or _extract_mtf_bias(pattern)
     confidence= float(trade.get("confidence", 0) or 0)   # tracker sends as string; cast to float
     entry     = trade.get("entry", 0)
     exit_price= trade.get("exit_price", 0)
@@ -360,6 +390,8 @@ def build_debrief_prompt(trade):
         outcome_detail += f" — {tp_hit} hit"
     if pnl is not None:  # include 0.0 breakeven closes
         outcome_detail += f" — P&L: {pnl:+.1f}%"
+
+    mtf_note = f"\n  MTF Bias:   {mtf_bias} (4H+1H chart structure at signal time)" if mtf_bias else ""
 
     # ── Multi-agent consensus layer (Principle 5) ─────────────
     strat_decision = load_strategist_decision(coin, direction)
@@ -378,7 +410,7 @@ def build_debrief_prompt(trade):
     return f"""Trade to debrief:
   Coin:       {coin}
   Direction:  {direction}
-  Pattern:    {pattern}
+  Pattern:    {pattern}{mtf_note}
   Confidence: {confidence:.0f}%
   Entry:      {entry:.6g}
   Exit:       {exit_price:.6g}
@@ -389,7 +421,10 @@ Context:
   A+ entries move immediately to TP2+. Poor entries sit near entry or reverse before recovering.
   Our known loser patterns: RS failure, dead cat bounce, meme continuation, "Continuation breakout" standalone.
   Our known winner patterns: Stage 5 distribution collapse (SHORT), Stage 2 expansion (LONG).
+  MTF bias context: 4H_BULL_1H_PULLBACK = ideal LONG entry. 4H_BEAR_1H_BOUNCE = ideal SHORT entry.
+  4H_SIDEWAYS = structural indecision — these should rarely win.
   If Strategist was WRONG (approved a loser / vetoed a winner), your lesson should address WHY.
+  If mtf_bias was 4H_SIDEWAYS and trade lost — lesson should flag "avoid 4H_SIDEWAYS entries".
 
 Analyse this trade including the Strategist consensus. Return JSON only."""
 
@@ -493,6 +528,9 @@ def run_debrief(trades):
                 "flag":   "NEUTRAL",
             }
 
+        _pattern_str = trade.get("pattern", "")
+        _mtf_bias_parsed = _extract_mtf_bias(_pattern_str)
+
         entry = {
             "coin":          coin,
             "direction":     direction,
@@ -500,7 +538,8 @@ def run_debrief(trades):
             "tp_hit":        trade.get("tp_hit", ""),
             "resolved_at":   trade.get("resolved_at", ""),   # stored for dedup uniqueness
             "pnl":           float(trade.get("pnl", 0) or 0),
-            "pattern":       trade.get("pattern", ""),
+            "pattern":       _pattern_str,
+            "mtf_bias":      _mtf_bias_parsed,               # e.g. "4H_BULL_1H_PULLBACK"
             "confidence":    trade.get("confidence", 0),
             "entry_quality": result.get("entry_quality", "?"),
             "why":           result.get("why", ""),
@@ -557,7 +596,7 @@ def main():
     """
     print()
     print("╔══════════════════════════════════════════════════════╗")
-    print("║   🧠  WHALE-STREAM DEBRIEF AGENT v47.13              ║")
+    print("║   🧠  WHALE-STREAM DEBRIEF AGENT v47.18              ║")
     print("║   Post-Trade Learning — every loss teaches us        ║")
     print("╚══════════════════════════════════════════════════════╝")
     print()

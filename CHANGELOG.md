@@ -1,5 +1,24 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.18 — 2026-06-30 — MTF learning loop: debrief records mtf_bias outcomes; graveyard shows MTF WR; calc_qty overdeploy fix; orphaned TP auto-cancel
+
+### `whale_stream_debrief.py`
+- **NEW: `_extract_mtf_bias()` helper** — parses `[4H_BULL_1H_PULLBACK]` from pattern string via regex.
+- **NEW: `mtf_bias` field in entry dict** — stored in `pattern_memory.json` debriefs alongside pattern, outcome, flag.
+- **NEW: `mtf_bias` context in `build_debrief_prompt()`** — Claude Haiku sees the 4H+1H structure at signal time. Prompt notes 4H_SIDEWAYS should rarely win and flags it in lessons.
+- **NEW: `mtf_stats` in `save_memory()`** — computes per-bias `{"wins": N, "losses": N}` across all debriefs. Written to `pattern_memory.json` as `mtf_stats` dict. Closes the MTF learning loop.
+- **Version bump**: v47.13 → v47.18
+
+### `whale_stream_bot.py`
+- **NEW: MTF_BIAS WR table in signal graveyard** — after `graveyard_text` is built, loads `pattern_memory.json`, reads `mtf_stats`, appends a compact per-bias WR table (only biases with ≥3 trades). ✅ = ≥60% WR, ⚠️ = 45–60%, 🚫 = <45%. Claude uses this for self-reinforcement. Fails silently if file not yet available.
+
+### `whale_stream_trader.py`
+- **FIX #299 — `calc_qty()` minimum floor** — `max(qty, info["min_qty"])` previously always returned >0, so the caller's `if qty <= 0: skip` check never fired. Fix: if `round_to_step()` gives qty < min_qty, check whether forcing to min_qty would deploy >150% of intended capital (`min_qty * entry_price > position_value * 1.5`). If so, return 0 (caller skips the order). Prevents silent overdeploy on expensive coins with REDUCE_SIZE scaling.
+- **NEW #300 — `cancel_orphaned_tp_orders()`** — fetches all reduce-only (TP) open orders from Bybit, checks each against live positions via `get_position_for_coin()`. Any TP order with no matching position is orphaned (position was closed by SL). Auto-cancels all orphans, logs each, sends Telegram summary. Called in `main()` after stale entry order cleanup. Prevents indefinite accumulation of dangling TP orders.
+- **Version bump**: v47.15 → v47.18
+
+---
+
 ## v47.17 — 2026-06-30 — MTF chart pattern analysis: real 4H+1H OHLCV candles injected into signals
 
 ### `whale_stream_bot.py`

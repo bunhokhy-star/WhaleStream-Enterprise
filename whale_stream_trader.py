@@ -574,6 +574,75 @@ def get_stale_entry_orders(sheet_open_coins, min_age_hours=72):
     return stale
 
 
+def cancel_orphaned_tp_orders():
+    """
+    Fix #300 — Orphaned TP order auto-cancel.
+
+    When a position is closed by SL, the 4 reduce-only TP limit orders are
+    explicitly excluded from stale_entry_orders cleanup (they're never >72h old
+    at SL hit time). They accumulate indefinitely on Bybit.
+
+    Logic:
+      1. Fetch all active reduce-only orders (these are our TP partial-close orders)
+      2. For each, check if there is an open position for that symbol
+      3. If no position → the TP order is orphaned → cancel it
+    Returns count of orders cancelled.
+    """
+    try:
+        result = bybit_request("GET", "/v5/order/realtime",
+                               {"category": BYBIT_CATEGORY, "settleCoin": "USDT"})
+        if result.get("retCode") != 0:
+            return 0
+
+        orders = result["result"].get("list", [])
+        orphans = []
+
+        for order in orders:
+            # Only process reduce-only (TP) orders
+            is_reduce = (order.get("reduceOnly") is True
+                         or str(order.get("reduceOnly", "")).lower() == "true")
+            if not is_reduce:
+                continue
+            symbol = order.get("symbol", "")
+            # Check if an open position exists for this symbol
+            pos = get_position_for_coin(symbol)
+            if pos is None:
+                orphans.append({
+                    "symbol":  symbol,
+                    "coin":    symbol.replace("USDT", "").replace("PERP", "").upper(),
+                    "orderId": order.get("orderId", ""),
+                    "side":    order.get("side", ""),
+                    "price":   order.get("price", ""),
+                    "qty":     order.get("qty", ""),
+                })
+
+        if not orphans:
+            return 0
+
+        cancelled = 0
+        for o in orphans:
+            ok = cancel_order(o["symbol"], o["orderId"])
+            if ok:
+                cancelled += 1
+                log(f"ORPHAN TP CANCELLED: {o['coin']} {o['side']} @ {o['price']} ID={o['orderId']}")
+                print(f"   🗑 Orphan TP cancelled: {o['coin']} {o['side']} @ {o['price']}")
+            else:
+                log(f"ORPHAN TP CANCEL FAILED: {o['coin']} {o['side']} @ {o['price']} ID={o['orderId']}")
+                print(f"   ✗ Orphan TP cancel failed: {o['coin']} ID={o['orderId']}")
+
+        if cancelled:
+            _lines = [f"  🗑 {o['coin']} {o['side']} qty={o['qty']} @ {o['price']}" for o in orphans[:cancelled]]
+            send_telegram_alert(
+                f"🗑 <b>ORPHANED TP ORDERS CLEANED</b> — {cancelled} reduce-only order(s) "
+                f"had no matching open position:\n" + "\n".join(_lines)
+            )
+        return cancelled
+
+    except Exception as _ote:
+        log(f"⚠ cancel_orphaned_tp_orders failed: {_ote}")
+        return 0
+
+
 def cancel_order(symbol, order_id, _max_retries=3):
     """
     Cancel a specific open order by orderId.
@@ -874,11 +943,23 @@ def calc_qty(entry_price, info, size_mult=1.0):
     Position value = TRADE_MARGIN_USDT × LEVERAGE
     qty = position_value / entry_price, rounded to qty_step
     size_mult: drawdown-based scaling factor (0.0–1.0). Default 1.0 = full size.
+
+    FIX #299 — min_qty floor check:
+    If rounding forces us to min_qty and that would deploy >1.5× intended capital
+    (i.e. the coin is too expensive for this size_mult), return 0 so the caller's
+    `if qty <= 0: skip` check fires and we do NOT silently overshoot the budget.
     """
     position_value = TRADE_MARGIN_USDT * LEVERAGE * size_mult   # e.g. $200 × 0.75 = $150
     raw_qty        = position_value / entry_price
     qty            = round_to_step(raw_qty, info["qty_step"])
-    qty            = max(qty, info["min_qty"])
+    if qty < info["min_qty"]:
+        forced_value = info["min_qty"] * entry_price
+        if forced_value > position_value * 1.5:
+            # Would deploy ≥150% of intended capital at this size_mult — skip
+            log(f"   calc_qty: min_qty forces {forced_value:.1f} USDT vs intended {position_value:.1f} "
+                f"({forced_value/position_value*100:.0f}%) — returning 0 to prevent overdeploy")
+            return 0
+        qty = info["min_qty"]
     return qty
 
 
@@ -1206,7 +1287,7 @@ def main():
         pass
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🤖  WHALE-STREAM TRADER v47.15 — BYBIT DEMO    ║")
+    print("║   🤖  WHALE-STREAM TRADER v47.18 — BYBIT DEMO    ║")
     print(f"║   💰  ${TRADE_MARGIN_USDT} margin × {LEVERAGE}x = ${TRADE_MARGIN_USDT*LEVERAGE} per trade        ║")
     print("╚══════════════════════════════════════════════════╝")
     print()
@@ -2250,6 +2331,18 @@ def main():
             print("\n✅ No stale entry orders detected (all open orders have active sheet signals)")
     except Exception as _se:
         print(f"   ⚠ Stale order check failed: {_se}")
+
+    # ── Orphaned TP order cleanup (#300) ────────────────────────────────────
+    # Reduce-only TP orders are excluded from stale entry cleanup above.
+    # When SL closes a position, up to 4 TP orders are left open on Bybit.
+    # Cancel them now by cross-referencing against live open positions.
+    try:
+        _orphan_count = cancel_orphaned_tp_orders()
+        if _orphan_count == 0:
+            print("\n✅ No orphaned TP orders (all reduce-only orders have matching positions)")
+    except Exception as _oe:
+        print(f"   ⚠ Orphan TP check failed: {_oe}")
+
     _mark_done("trader", details={"placed": placed_coins, "skipped": skipped_shorts})
 
 
