@@ -627,6 +627,28 @@ def load_pattern_memory():
         return {}
 
 
+def _get_funding_rate(coin, bybit_base_url):
+    """
+    Fetch current funding rate for a perpetual contract from Bybit.
+    Returns funding_rate as float (e.g., 0.0001 = 0.01%), or None on error.
+    Note: public endpoint — no auth headers needed.
+    """
+    try:
+        import requests as _req
+        symbol = f"{coin}USDT"
+        url = f"{bybit_base_url}/v5/market/tickers?category=linear&symbol={symbol}"
+        resp = _req.get(url, timeout=6, headers={})
+        data = resp.json()
+        if data.get("retCode") != 0:
+            return None
+        items = data.get("result", {}).get("list", [])
+        if not items:
+            return None
+        return float(items[0].get("fundingRate", 0))
+    except Exception:
+        return None
+
+
 def _fetch_4h_regime_strategist(coin_sym):
     """Return 4H SMA20 regime for a coin: 'BULL', 'BEAR', or 'NEUTRAL'. (v47.28)"""
     try:
@@ -719,6 +741,25 @@ def build_strategist_user_message(signals, history, positions, balance, drawdown
                       (s["direction"] == "SHORT" and _coin_4h == "BULL")
         _regime_suffix = " ⚠️ counter-trend" if _is_counter else (" ✅ aligned" if _coin_4h != "NEUTRAL" else "")
         lines.append(f"  4H Regime  : {_coin_4h}{_regime_suffix}")
+
+        # ── Funding rate context (informational — hard vetoes applied in main()) ──
+        _fr = s.get("funding_rate")   # populated by main() before this call
+        if _fr is not None:
+            _fr_pct = _fr * 100
+            if s["direction"] == "LONG":
+                if _fr > 0.0008:
+                    lines.append(f"  💸 Funding  : {_fr_pct:+.4f}% ❌ EXTREME — market over-long, dump risk")
+                elif _fr > 0.0003:
+                    lines.append(f"  💸 Funding  : {_fr_pct:+.4f}% ⚠️ Crowded LONG")
+                else:
+                    lines.append(f"  💸 Funding  : {_fr_pct:+.4f}%")
+            else:  # SHORT
+                if _fr < -0.0005:
+                    lines.append(f"  💸 Funding  : {_fr_pct:+.4f}% ❌ EXTREME NEGATIVE — short squeeze risk")
+                elif _fr < -0.0002:
+                    lines.append(f"  💸 Funding  : {_fr_pct:+.4f}% ⚠️ Crowded SHORT — squeeze risk")
+                else:
+                    lines.append(f"  💸 Funding  : {_fr_pct:+.4f}%")
 
         # ── Auto-blocklist warning (v47.30) ──────────────────────────────────
         _coin_up = s["coin"].upper()
@@ -987,7 +1028,16 @@ def send_telegram_summary(decisions_data, signals):
         grade     = d.get("grade", "?")
         reason    = d.get("reason", "")
         icon = "✅" if decision == "APPROVE" else ("⚠️" if decision == "REDUCE_SIZE" else "⛔")
-        lines.append(f"  {icon} <b>{coin} {direction}</b> [{grade}]  {reason}")
+        _fr_val = d.get("funding_rate")
+        # funding_rate may also be on the matching signal dict — look it up
+        if _fr_val is None:
+            for _sig in signals:
+                if _sig.get("coin", "").upper() == coin.upper() and \
+                   _sig.get("direction", "").upper() == direction.upper():
+                    _fr_val = _sig.get("funding_rate")
+                    break
+        _fr_suffix = f"  💸 Funding: {_fr_val * 100:+.4f}%" if _fr_val is not None else ""
+        lines.append(f"  {icon} <b>{coin} {direction}</b> [{grade}]  {reason}{_fr_suffix}")
 
     send_telegram("\n".join(lines))
 
@@ -1471,6 +1521,88 @@ def main():
         _mark_done("strategist", details={"approved": [], "vetoed": [v["coin"] for v in auto_vetoed]})
         return
 
+    # ── Funding Rate Pre-Veto ────────────────────────────────────
+    # Fetch funding rate per coin and veto/warn on extreme crowded positioning.
+    # Public Bybit endpoint — no auth needed.
+    print("\n💸 Checking funding rates (Bybit)...")
+    _BYBIT_BASE = "https://api.bybit.com"
+    _funding_vetoed = []
+    _signals_after_funding = []
+    for _fs in signals:
+        _fcoin = _fs["coin"]
+        _fdir  = _fs["direction"]
+        _frate = _get_funding_rate(_fcoin, _BYBIT_BASE)
+        _fs["funding_rate"] = _frate   # store for prompt + Telegram
+
+        if _frate is None:
+            print(f"   ⚡ Funding rate unavailable for {_fcoin} — skipping check")
+            _signals_after_funding.append(_fs)
+            continue
+
+        _frate_pct = _frate * 100
+        _veto_reason = None
+
+        if _fdir == "LONG":
+            if _frate > 0.0008:
+                _veto_reason = (f"❌ EXTREME FUNDING +{_frate:.4f} — market over-long, dump risk "
+                                f"(funding={_frate_pct:+.4f}%)")
+            elif _frate > 0.0003:
+                print(f"   ⚠️ {_fcoin} LONG: Crowded LONG — funding={_frate_pct:+.4f}% (warning only)")
+        else:  # SHORT
+            if _frate < -0.0005:
+                _veto_reason = (f"❌ EXTREME NEGATIVE FUNDING {_frate:.4f} — short squeeze risk "
+                                f"(funding={_frate_pct:+.4f}%)")
+            elif _frate < -0.0002:
+                print(f"   ⚠️ {_fcoin} SHORT: Crowded SHORT — funding={_frate_pct:+.4f}% — squeeze risk (warning only)")
+
+        if _veto_reason:
+            log(f"Funding VETO: {_fcoin} {_fdir} — {_veto_reason}")
+            print(f"   ⛔ FUNDING VETO: {_fcoin} {_fdir} — {_veto_reason}")
+            _funding_vetoed.append({
+                "coin":      _fcoin,
+                "direction": _fdir,
+                "decision":  "VETO",
+                "grade":     "D",
+                "reason":    _veto_reason,
+                "funding_rate": _frate,
+            })
+        else:
+            print(f"   ✅ {_fcoin} {_fdir}: funding={_frate_pct:+.4f}% — OK")
+            _signals_after_funding.append(_fs)
+
+    if _funding_vetoed:
+        print(f"   → Funding rate vetoed {len(_funding_vetoed)} signal(s). "
+              f"{len(_signals_after_funding)} remain.")
+        signals = _signals_after_funding
+        # If funding vetoes cleared everything, short-circuit
+        if not signals:
+            log("No signals remain after funding rate filter")
+            print("\n   No signals remain after funding rate veto.")
+            _all_vetoes = regime_vetoed + auto_vetoed + _funding_vetoed
+            _empty_fr = {
+                "run_at":          bkk_str,
+                "cycle_id":        _get_cycle_id(),
+                "recheck_count":   0,
+                "recheck_changes": [],
+                "decisions":       _all_vetoes,
+                "regime_note":     "All signals vetoed by funding rate check (crowded positioning)",
+                "approved_count":  0,
+                "vetoed_count":    len(_all_vetoes),
+                "reduced_count":   0,
+                "market_bias":     market_bias,
+            }
+            write_decisions(_empty_fr)
+            send_telegram(
+                f"💸 <b>STRATEGIST — FUNDING VETO</b> — {bkk_str}\n"
+                f"  All remaining signals vetoed: extreme funding rates detected.\n"
+                f"  {', '.join(v['coin'] + ' ' + v['direction'] for v in _funding_vetoed)}\n"
+                f"  Next cycle: Bot will generate fresh signals."
+            )
+            _mark_done("strategist", details={"approved": [], "vetoed": [v["coin"] for v in _all_vetoes]})
+            return
+    else:
+        print(f"   ✅ All {len(signals)} signal(s) passed funding rate check")
+
     # ── Load Pattern Memory ──────────────────────────────────────
     print("\n📚 Loading pattern memory...")
     memory = load_pattern_memory()
@@ -1543,10 +1675,10 @@ def main():
         _mark_done("strategist", details={"approved": [], "vetoed": _vetoed_coins, "error": "parse_failed"})
         return
 
-    # ── Merge regime + scorer pre-vetoes into decisions ─────────────
-    # regime_vetoed and auto_vetoed contain signals dropped before Claude saw them.
+    # ── Merge regime + scorer + funding pre-vetoes into decisions ───────
+    # regime_vetoed, auto_vetoed, and _funding_vetoed contain signals dropped before Claude.
     # Append so the full picture is visible in the decisions file + Telegram.
-    all_decisions = regime_vetoed + auto_vetoed + parsed.get("decisions", [])
+    all_decisions = regime_vetoed + auto_vetoed + _funding_vetoed + parsed.get("decisions", [])
     parsed["decisions"] = all_decisions
 
     # ── Annotate each Claude decision with its scorer score (v47.21) ─

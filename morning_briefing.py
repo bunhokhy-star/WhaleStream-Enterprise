@@ -288,6 +288,20 @@ def progress_bar(filled_count, total_bars=10):
     return "█" * filled + "░" * (total_bars - filled)
 
 
+def _get_fear_greed():
+    """Fetch Crypto Fear & Greed Index from alternative.me. Returns (score_int, label_str)."""
+    try:
+        import requests as _req
+        resp = _req.get("https://api.alternative.me/fng/?limit=1", timeout=6)
+        data = resp.json()
+        entry = data["data"][0]
+        score = int(entry["value"])
+        label = entry["value_classification"]
+        return score, label
+    except Exception:
+        return None, "Unknown"
+
+
 # ─────────────────────────────────────────────────────────────
 # 1. BALANCE
 # ─────────────────────────────────────────────────────────────
@@ -830,6 +844,8 @@ def build_message():
 
     # ── Market Regime (BTC trend — the #1 filter) ──
     bias, btc_price, btc_sma, btc_pct = get_btc_market_bias()
+    fg_score, fg_label = _get_fear_greed()
+    print(f"   🧠 Fear & Greed: {fg_score}/100 ({fg_label})")
     if bias == "BEARISH":
         bias_emoji   = "🐻"
         bias_action  = "SHORT mode — trade only SHORTs today"
@@ -1017,6 +1033,14 @@ def build_message():
         f"  {bias_detail}",
         f"{'━'*40}",
     ]
+
+    if fg_score is not None:
+        fg_emoji = "😱" if fg_score < 25 else "😨" if fg_score < 45 else "😐" if fg_score < 55 else "🤑" if fg_score > 75 else "😊"
+        lines.append(f"{fg_emoji} Fear & Greed: {fg_score}/100 — {fg_label}")
+        if fg_score < 25:
+            lines.append(f"   ⚠️ EXTREME FEAR — system favours SHORTs; raise LONG floor to 97%")
+        elif fg_score > 80:
+            lines.append(f"   ⚠️ EXTREME GREED — LONG risk elevated; avoid chasing")
 
     # Critical alerts at top
     if alert_lines:

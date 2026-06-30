@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v47.45   —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v47.46   —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 coins from CoinGecko (free, no key)     ║
@@ -180,7 +180,7 @@ LONG_COIN_BLOCKLIST = {
     "WLD",   # 0W/2L — 0% WR, counter-trend coin ← added v47.5 (2026-06-28)
     "XLM",   # 0W/2L — 0% LONG WR (also SHORT-blocked) ← added v47.41
     "ENA",    # 0W/1L — SHORT already blocked; LONG also losing ← added v47.43
-    "PENDLE", # 1W/3L — 25% WR (206-trade analysis Jun 2026) ← added v47.45
+    "PENDLE", # 1W/3L — 25% WR (206-trade analysis Jun 2026) ← added v47.46
 }
 # ── Auto-blocklist from debrief data (v47.28) ──────────────────────────────────
 # coin_blocklist_auto.json written by debrief save_memory() whenever a coin
@@ -353,6 +353,92 @@ GOOGLE_CREDENTIALS_FILE = "google_credentials.json"
 #   claude-opus-4-6             (smartest, most expensive)
 CLAUDE_MODEL = "claude-sonnet-4-6"
 
+# ── 4H Technical Indicator helpers (v47.46) ────────────────────────────────
+BYBIT_MARKET_URL = "https://api.bybit.com"  # always production for market data
+
+def _compute_rsi(closes, period=14):
+    """RSI from list of close prices (oldest first)."""
+    if len(closes) < period + 1:
+        return 50.0
+    gains, losses = [], []
+    for i in range(1, len(closes)):
+        d = closes[i] - closes[i - 1]
+        gains.append(max(d, 0.0))
+        losses.append(max(-d, 0.0))
+    avg_gain = sum(gains[-period:]) / period
+    avg_loss = sum(losses[-period:]) / period
+    if avg_loss == 0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return round(100.0 - (100.0 / (1.0 + rs)), 1)
+
+def _compute_ema(values, period):
+    """EMA from list of values (oldest first)."""
+    if len(values) < period:
+        return values[-1] if values else 0.0
+    k = 2.0 / (period + 1)
+    ema = sum(values[:period]) / period
+    for v in values[period:]:
+        ema = v * k + ema * (1.0 - k)
+    return ema
+
+def _get_coin_indicators(coins_subset, limit=50):
+    """
+    Fetch 4H OHLCV from Bybit for each coin and compute:
+      RSI(14), EMA(20), EMA(50), volume trend (5-bar vs 20-bar avg).
+    Returns dict: {coin: {rsi, ema_dir, vol_trend, signal}}
+    Uses BYBIT_MARKET_URL (always production) — market data is public.
+    """
+    import time as _time
+    results = {}
+    for coin in coins_subset:
+        try:
+            symbol = f"{coin}USDT"
+            url = (f"{BYBIT_MARKET_URL}/v5/market/kline"
+                   f"?category=linear&symbol={symbol}&interval=240&limit={limit}")
+            resp = requests.get(url, timeout=8, headers={})
+            data = resp.json()
+            if data.get("retCode") != 0:
+                continue
+            raw = data.get("result", {}).get("list", [])
+            if len(raw) < 22:
+                continue
+            raw = list(reversed(raw))          # oldest first
+            closes  = [float(c[4]) for c in raw]
+            volumes = [float(c[5]) for c in raw]
+            rsi    = _compute_rsi(closes)
+            ema20  = _compute_ema(closes, 20)
+            ema50  = _compute_ema(closes, 50)
+            price  = closes[-1]
+            vol5   = sum(volumes[-5:])  / 5
+            vol20  = sum(volumes[-20:]) / 20
+            vol_pct = ((vol5 - vol20) / vol20 * 100) if vol20 > 0 else 0
+            vol_arrow = "↑" if vol_pct > 10 else "↓" if vol_pct < -10 else "→"
+            vol_str = f"{vol_pct:+.0f}%{vol_arrow}"
+            bull_ema = ema20 > ema50
+            above_ema20 = price > ema20
+            if bull_ema and above_ema20 and rsi < 70:
+                sig = "LONG-READY"
+            elif rsi >= 70:
+                sig = "OVERBOUGHT"
+            elif not bull_ema and not above_ema20 and rsi > 30:
+                sig = "SHORT-READY"
+            elif rsi <= 30:
+                sig = "OVERSOLD"
+            else:
+                sig = "NEUTRAL"
+            results[coin] = {
+                "rsi": rsi,
+                "ema_dir": "BULL" if bull_ema else "BEAR",
+                "vol_trend": vol_str,
+                "signal": sig,
+            }
+            _time.sleep(0.05)  # 50ms rate-limit gap
+        except Exception:
+            continue
+    return results
+# ── end 4H Technical Indicator helpers ────────────────────────────────────
+
 # ─────────────────────────────────────────────────────────────
 # SECTION 2: YOUR WHALE-STREAM PROMPT  ← Do not change this
 # ─────────────────────────────────────────────────────────────
@@ -363,7 +449,7 @@ except ImportError:
     MISSION_PROMPT = ""
     def print_mission_banner(): pass
 
-WHALE_STREAM_PROMPT = """WHALE-STREAM v47.45 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
+WHALE_STREAM_PROMPT = """WHALE-STREAM v47.46 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
 ROLE:
 You are an Institutional Multi-Agent Trading Committee composed of:
 • Market Regime Analyst • Smart Money Concepts Specialist • Quantitative Momentum Analyst • Liquidity & Stop-Hunt Analyst • Wyckoff Structure Analyst • Relative Strength Analyst • Breakout Probability Engine • Reversal Probability Engine • Continuation Probability Engine • Risk Management Committee
@@ -630,6 +716,16 @@ MTF BIAS FORMAT (use exactly one of these in "mtf_bias"):
   "MTF_UNKNOWN"            — coin not in MTF block (data unavailable) — apply standard analysis
 
 If the coin has no MTF data in the block, use "MTF_UNKNOWN" and rely on the market data table alone.
+════════════════════════════════════════════════════════════
+TECH FILTER (4H): When 4H TECHNICAL INDICATORS block is present, apply these rules to ALL signal candidates:
+  - LONG-READY (EMA BULL + price above EMA20 + RSI<70) → confirmed uptrend, standard confidence floor applies
+  - OVERBOUGHT (RSI≥70) → LONG requires conf≥97% regardless of coin history
+  - SHORT-READY (EMA BEAR + price below EMA20 + RSI>30) → confirmed downtrend, standard floor applies
+  - OVERSOLD (RSI≤30) → SHORT requires conf≥97% (high squeeze risk)
+  - NEUTRAL (mixed signals) → apply +5% to confidence floor for any signal from this coin
+  - If a coin has no indicator data in the block: treat as NEUTRAL
+  - NEVER pick a LONG from a coin marked OVERBOUGHT unless conf≥97%
+  - NEVER pick a SHORT from a coin marked OVERSOLD unless conf≥97%
 ════════════════════════════════════════════════════════════
 ENTRY RULE (LONGS): Entry MUST be Retest Zone / Liquidity Sweep Reclaim / Support-Resistance Reclaim / Breakout Retest. Never chase current price.
 ENTRY ZONE WIDTH RULE (CRITICAL — REDUCES SIGNAL EXPIRY): Historical data shows 54% of LONG signals expire because price never pulls back to the entry zone within 72 hours.
@@ -2375,7 +2471,7 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     shorts = data.get("shorts", [])
 
     lines = []
-    lines.append(f"🐳 WHALE-STREAM v47.45")
+    lines.append(f"🐳 WHALE-STREAM v47.46")
     lines.append(f"📅 {ts}")
 
     # ── Market regime summary ─────────────────────────────────
@@ -2954,7 +3050,7 @@ def main():
 
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🐳  WHALE-STREAM v47.45  — AUTO BOT STARTING    ║")
+    print("║   🐳  WHALE-STREAM v47.46  — AUTO BOT STARTING    ║")
     print("╚══════════════════════════════════════════════════╝")
     # Check conservative flag early so we can show it in the startup banner
     _short_conservative_early = os.path.exists(os.path.join(SCRIPT_DIR, "short_conservative.flag"))
@@ -3037,6 +3133,40 @@ def main():
     # ── Step 3: Format into WHALE-STREAM table format ───────
     print("🔧 Formatting market data into 2 batches (100 coins each)...")
     batches = format_market_data(all_coins)   # list of 2 strings
+
+    # ── 4H Technical Indicators for top 30 momentum candidates (v47.46) ──
+    # Pick 15 biggest 24h gainers + 15 biggest 24h losers from the coin list
+    _sorted_by_move = sorted(
+        [c for c in all_coins if c.get("price_change_percentage_24h") is not None],
+        key=lambda c: c["price_change_percentage_24h"]
+    )
+    _indicator_coins = (
+        [c["symbol"].upper().replace("USDT","") for c in _sorted_by_move[-15:]] +  # top gainers
+        [c["symbol"].upper().replace("USDT","") for c in _sorted_by_move[:15]]     # top losers
+    )
+    # Remove duplicates, blocklisted coins
+    _indicator_coins = list(dict.fromkeys(
+        c for c in _indicator_coins
+        if c not in LONG_COIN_BLOCKLIST and c not in SHORT_COIN_BLOCKLIST
+    ))[:30]
+    print(f"   📊 Fetching 4H indicators for {len(_indicator_coins)} coins...")
+    _tech_indicators = _get_coin_indicators(_indicator_coins)
+    print(f"   ✅ Indicators computed for {len(_tech_indicators)} coins")
+
+    # Format indicator block for prompt injection
+    _indicator_lines = ["── 4H TECHNICAL INDICATORS ──"]
+    for _ic, _iv in _tech_indicators.items():
+        _indicator_lines.append(
+            f"{_ic}: RSI={_iv['rsi']} EMA={_iv['ema_dir']} vol={_iv['vol_trend']} → {_iv['signal']}"
+        )
+    _indicator_text = "\n".join(_indicator_lines) if len(_tech_indicators) > 0 else ""
+    # ── end 4H indicators ──────────────────────────────────────────────────
+
+    # Inject technical indicators into prompt if available
+    if _indicator_text:
+        batches[0] = batches[0] + f"\n\n{_indicator_text}\n"
+        if len(batches) > 1:
+            batches[1] = batches[1] + f"\n\n{_indicator_text}\n"
 
     # ── Step 4: Analyze with Claude — 2 separate calls to exploit prompt caching ──
     # v45.2: Batch 1 WRITES the system-prompt cache (4,442 tokens at 125% cost).
@@ -3198,9 +3328,9 @@ def main():
     # Signal count rules:
     #   NEUTRAL (sideways):       2 LONG + 2 SHORT  — fewer bets in choppy market
     #   BULL (weak, 2-5%):        3 LONG + 2 SHORT  — favour trend direction
-    #   BEAR (weak, -5 to -2%):   1 LONG + 3 SHORT  — v47.45: 2→1 (proven coins only)
+    #   BEAR (weak, -5 to -2%):   1 LONG + 3 SHORT  — v47.46: 2→1 (proven coins only)
     #   Strong BULL (abs>5%):     4 LONG + 2 SHORT  — strong trend = more LONG opportunity
-    #   Strong BEAR (abs>5%):     1 LONG + 4 SHORT  — v47.45: 2→1 (proven coins only)
+    #   Strong BEAR (abs>5%):     1 LONG + 4 SHORT  — v47.46: 2→1 (proven coins only)
     _abs_pct = abs(_btc_regime_pct)
     if _btc_regime == "NEUTRAL":
         _n_long, _n_short = 2, 2
@@ -3214,10 +3344,10 @@ def main():
             _regime_note = f"BULL ({_btc_regime_pct:+.1f}%) — standard 3+2"
     else:  # BEAR
         if _abs_pct > 5.0:
-            _n_long, _n_short = 1, 4  # v47.45: was 2+4 — 1 proven LONG only in strong bear
+            _n_long, _n_short = 1, 4  # v47.46: was 2+4 — 1 proven LONG only in strong bear
             _regime_note = f"STRONG BEAR ({_btc_regime_pct:+.1f}%) — aggressive 1+4"
         else:
-            _n_long, _n_short = 1, 3  # v47.45: was 2+3 — 1 proven LONG only in bear
+            _n_long, _n_short = 1, 3  # v47.46: was 2+3 — 1 proven LONG only in bear
             _regime_note = f"BEAR ({_btc_regime_pct:+.1f}%) — standard 1+3"
     # ── BTC 24h LONG count override (v47.41) ─────────────────────────────────
     # Hard cap on LONGs when BTC is dropping hard intraday.

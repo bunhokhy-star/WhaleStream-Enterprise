@@ -1,5 +1,20 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.46 — 2026-06-30 — Signal intelligence upgrade: 4H candle indicators + Funding Rate veto + Fear & Greed macro context
+
+### `whale_stream_bot.py`
+- **4H Technical Indicators** — New `_get_coin_indicators()` fetches 4H OHLCV from Bybit (production endpoint) for the top 30 momentum candidates (15 biggest gainers + 15 biggest losers from 200-coin list). Computes RSI(14), EMA(20), EMA(50), volume trend (5-bar vs 20-bar avg). Results injected into Claude's prompt as a structured block before signal selection.
+- **TECH FILTER rules in prompt** — New rule block tells Claude: LONG-READY (EMA BULL + RSI<70) = standard floor; OVERBOUGHT (RSI≥70) = LONG needs conf≥97%; SHORT-READY (EMA BEAR + RSI>30) = standard floor; OVERSOLD (RSI≤30) = SHORT needs conf≥97%; NEUTRAL = +5% confidence floor. Claude now picks signals based on real trend structure, not just 24h momentum.
+- **Helper functions** — `_compute_rsi()`, `_compute_ema()`, `_get_coin_indicators()` added. `BYBIT_MARKET_URL = "https://api.bybit.com"` hardcoded for market data (always production regardless of demo/live mode).
+- **Version banner** updated to v47.46 (all locations).
+
+### `whale_stream_strategist.py`
+- **Funding Rate pre-veto** — New `_get_funding_rate()` hits Bybit public `/v5/market/tickers` for each signal candidate. VETO rules: LONG with funding >0.08% (extreme crowded long) → dump risk veto; SHORT with funding <-0.05% (extreme crowded short) → squeeze risk veto. Warnings at 0.03% / -0.02% thresholds. Funding-vetoed signals written to `strategist_decisions.json` and included in Telegram summary.
+- **Funding rate in Telegram** — `💸 Funding: +X.XXXX%` appended to each signal line in Strategist Telegram output.
+
+### `morning_briefing.py`
+- **Fear & Greed Index** — New `_get_fear_greed()` fetches from `api.alternative.me/fng/` each morning. Score + emoji injected into the daily Telegram briefing. Macro alerts: score<25 = `⚠️ EXTREME FEAR — system favours SHORTs`; score>80 = `⚠️ EXTREME GREED — LONG risk elevated`.
+
 ## v47.45 — 2026-06-30 — Bear regime tightening: PENDLE block + BEAR LONG slots 2→1
 
 ### `whale_stream_bot.py`
