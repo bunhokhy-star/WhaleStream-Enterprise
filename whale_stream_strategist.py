@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM STRATEGIST v47.19 — SIGNAL QUALITY COUNCIL    ║
+║   WHALE-STREAM STRATEGIST v47.40 — SIGNAL QUALITY COUNCIL    ║
 ║                                                              ║
 ║  Team role: runs at :10 (Bot fires :00, Trader fires :20)   ║
 ║                                                              ║
@@ -1006,7 +1006,7 @@ def _get_cycle_id():
 def main():
     print()
     print("╔══════════════════════════════════════════════════════╗")
-    print("║   🧠  WHALE-STREAM STRATEGIST v47.19                 ║")
+    print("║   🧠  WHALE-STREAM STRATEGIST v47.40                 ║")
     print("║   Signal Quality Council — APPROVE / VETO / REDUCE  ║")
     print("╚══════════════════════════════════════════════════════╝")
     print()
@@ -1374,6 +1374,18 @@ def main():
             "vetoed":   [v["coin"] for v in regime_vetoed],
         })
         return
+
+    # ── Score drift state (v47.40 fix: was local to build_strategist_user_message, never visible here) ──
+    _score_drift_active = False
+    try:
+        _sdw_main_path = os.path.join(SCRIPT_DIR, "score_drift_warning.json")
+        if os.path.exists(_sdw_main_path):
+            with open(_sdw_main_path, "r", encoding="utf-8") as _sdw_mf:
+                if json.load(_sdw_mf).get("warned_tiers", {}):
+                    _score_drift_active = True
+                    print("   ⚠ SCORE DRIFT active in main() — raising effective floor 4 → 5")
+    except Exception:
+        pass
 
     # ── Signal Scorer — pre-Claude quality gate ──────────────────
     print("\n🎯 Scoring signals (pre-Claude quality gate)...")

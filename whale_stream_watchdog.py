@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM WATCHDOG v47.15                                ║
+║   WHALE-STREAM WATCHDOG v47.40                                ║
 ║                                                              ║
 ║  ROLE (Principle 1): System health guardian.                 ║
 ║  Runs at :30 of every 4h cycle. Confirms all agents ran.     ║
@@ -639,7 +639,8 @@ if __name__ == "__main__":
                 if os.path.exists(_pv_sen_path):
                     with open(_pv_sen_path, "r", encoding="utf-8") as _pvs:
                         _pv_prev_wk = json.load(_pvs)
-                if _pv_last7_sum < _pv_prior7_sum and _pv_prev_wk.get("week") != _pv_week:
+                _pv_week_key = f"{_pv_now.year}-{_pv_week}"  # v47.40: year-qualified key to match stored format
+                if _pv_last7_sum < _pv_prior7_sum and _pv_prev_wk.get("week") != _pv_week_key:
                     _pv_delta = _pv_last7_sum - _pv_prior7_sum
                     send_telegram(
                         f"📉 <b>P&L DECLINING — Weekly Velocity</b>\n"
@@ -648,14 +649,25 @@ if __name__ == "__main__":
                         f"Delta: {_pv_delta:+.1f}% — momentum shifting negative"
                     )
                     with open(_pv_sen_path, "w", encoding="utf-8") as _pvs:
-                        json.dump({"week": _pv_week, "alerted_at": now_str}, _pvs)
+                        json.dump({"week": f"{_pv_now.year}-{_pv_week}", "alerted_at": now_str}, _pvs)  # v47.40: include year to avoid cross-year dedup match
     except Exception:
         pass  # non-critical
     # ── end P&L velocity ──────────────────────────────────────────────────────
 
     # ── Sunday scorer health digest (v47.32) ─────────────────────────────────
     # Every Sunday :30 cycle → send weekly dim-health + score accuracy Telegram.
-    if datetime.now(BKK).weekday() == 6:   # Sunday = 6
+    # v47.40 dedup: only fire once per Sunday (sentinel stores year-date string)
+    _sund_now   = datetime.now(BKK)
+    _sund_today = _sund_now.strftime("%Y-%m-%d")
+    _sund_sen_path = os.path.join(BASE_DIR, "sunday_digest_sent.json")
+    _sund_already_sent = False
+    try:
+        if os.path.exists(_sund_sen_path):
+            with open(_sund_sen_path, "r", encoding="utf-8") as _ssf:
+                _sund_already_sent = (json.load(_ssf).get("sent_date") == _sund_today)
+    except Exception:
+        pass
+    if _sund_now.weekday() == 6 and not _sund_already_sent:   # Sunday = 6, first time today
         try:
             _pm_path_wd = os.path.join(BASE_DIR, "pattern_memory.json")
             with open(_pm_path_wd, "r", encoding="utf-8") as _pmf_wd:
@@ -769,7 +781,8 @@ if __name__ == "__main__":
                     _bs_wd = _bl_wd.get("blocked_since", {})
                     for _bk_wd, _bsince_wd in _bs_wd.items():
                         try:
-                            _bdt_wd = datetime.fromisoformat(_bsince_wd).replace(tzinfo=BKK) \
+                            # v47.40: fromisoformat fails on Py≤3.10 with " BKK" suffix — use strptime on first 16 chars
+                            _bdt_wd = datetime.strptime(_bsince_wd[:16], "%Y-%m-%d %H:%M").replace(tzinfo=BKK) \
                                       if _bsince_wd else None
                         except Exception:
                             _bdt_wd = None
@@ -971,6 +984,13 @@ if __name__ == "__main__":
                         print("   🔁 Pattern fatigue alert sent.")
             except Exception as _pf_e:
                 print(f"   ⚠ Pattern fatigue check failed: {_pf_e}")
+
+            # v47.40: write dedup sentinel so digest only fires once this Sunday
+            try:
+                with open(_sund_sen_path, "w", encoding="utf-8") as _ssfw:
+                    json.dump({"sent_date": _sund_today}, _ssfw)
+            except Exception:
+                pass
 
         except Exception as _sund_e:
             print(f"   ⚠ Sunday digest failed: {_sund_e}")

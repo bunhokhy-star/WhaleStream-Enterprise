@@ -1,5 +1,37 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.40 — 2026-06-30 — Bug fixes: Python 3.8 compat, Sunday dedup, fromisoformat, P&L weights, year-qualified velocity sentinel
+
+### `whale_stream_bot.py`
+- **Version banner** updated to v47.40 (4 locations: docstring, WHALE_STREAM_PROMPT, Telegram header, startup print).
+
+### `whale_stream_debrief.py`
+- **Python 3.8 compatibility** — `_exit_stats` dict-merge used `{...} | {"total": 0}` syntax (Python 3.9+ only). Fixed to `{**{...}, "total": 0}` so it runs on Python 3.8 servers.
+- **calibration_drift.json cleared on low sample** — When `_elite_total < 10`, the `else:` branch now deletes `calibration_drift.json` if it exists, preventing a stale drift flag from persisting after the ELITE sample drops below the minimum threshold.
+- **Version banner** updated to v47.40.
+
+### `whale_stream_watchdog.py`
+- **Sunday digest dedup** — The Sunday digest block (`weekday() == 6`) was firing up to 6× per Sunday (every :30 cycle). Added `sunday_digest_sent.json` sentinel that stores today's date; the block only runs once per calendar day.
+- **fromisoformat fix** — `datetime.fromisoformat(_bsince_wd)` fails on Python ≤3.10 when the string has a " BKK" timezone suffix. Fixed to `datetime.strptime(_bsince_wd[:16], "%Y-%m-%d %H:%M")`.
+- **P&L velocity sentinel year** — The sentinel stored `{"week": 26}` without the year, causing it to skip the alert for the same ISO week in the next calendar year. Fixed write to `{"week": "2026-26"}` and read-side comparison to match.
+- **Version banner** updated to v47.40.
+
+### `whale_stream_tracker.py`
+- **Blended P&L weights corrected** — `_blended = _pnl1 * 0.25 + _pnl2 * 0.75` was wrong; trader closes 50% at TP1, not 25%. Fixed to `_pnl1 * 0.50 + _pnl2 * 0.50`.
+- **Version banner** added to docstring (v47.40) — file had no version string.
+
+### `whale_stream_trader.py`
+- **already_active.add(symbol) after successful place_order** — Prevents the same coin from getting a LONG + SHORT order in the same trader cycle when both directions appear in the signal list.
+- **MTF penalty floor clamp** — After the 0.5× MTF counter-trend penalty is applied, `_coin_size_mult` is now floored at `0.25` (was unclamped, could compound to near-zero with prior REDUCE).
+- **Version banner** updated to v47.40.
+
+### `signal_scorer.py`
+- **Version banner** updated to v47.40.
+
+### `morning_briefing.py`
+- **SL warning false-positive fix** — `_sl_warn` was `" 🚨"` when `sl_dist_pct < 1.5` including negative values (price past SL). Fixed to `0 < sl_dist_pct < 1.5`.
+- **R:R guard explicit None check** — `if _r['sl_dist_pct'] and …` is falsy for 0.0 and None alike. Fixed to `is not None and > 0` for both sl and tp1.
+
 ## v47.39 — 2026-06-30 — 12 backlog items
 
 ### `whale_stream_debrief.py`

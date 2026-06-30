@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM DEBRIEF AGENT v47.26 — POST-TRADE LEARNING    ║
+║   WHALE-STREAM DEBRIEF AGENT v47.40 — POST-TRADE LEARNING    ║
 ║                                                              ║
 ║  Called automatically by whale_stream_tracker.py after      ║
 ║  each WIN or LOSS resolution.                                ║
@@ -436,6 +436,10 @@ def save_memory(memory):
             else:
                 if os.path.exists(_cd_flag_path):
                     os.remove(_cd_flag_path)
+        else:
+            # v47.40: clear stale drift flag when sample drops below threshold (e.g. after pattern_memory reset)
+            if os.path.exists(_cd_flag_path):
+                os.remove(_cd_flag_path)
     except Exception:
         pass  # non-critical
 
@@ -444,7 +448,7 @@ def save_memory(memory):
     # Helps assess whether TP targets are calibrated for ELITE vs GOOD vs MARGINAL.
     _exit_tiers = ("ELITE", "GOOD", "MARGINAL", "LOW")
     _exit_slots  = ("TP1", "TP2", "TP3", "TP4", "SL", "other")
-    _exit_stats  = {t: {s: 0 for s in _exit_slots} | {"total": 0} for t in _exit_tiers}
+    _exit_stats  = {t: {**{s: 0 for s in _exit_slots}, "total": 0} for t in _exit_tiers}  # v47.40: dict| is Py3.9+; use ** for 3.8 compat
     for _ed in memory.get("debriefs", []):
         _esc = _ed.get("score")
         if _esc is None:
@@ -1487,7 +1491,7 @@ def main():
     """
     print()
     print("╔══════════════════════════════════════════════════════╗")
-    print("║   🧠  WHALE-STREAM DEBRIEF AGENT v47.26              ║")
+    print("║   🧠  WHALE-STREAM DEBRIEF AGENT v47.40              ║")
     print("║   Post-Trade Learning — every loss teaches us        ║")
     print("╚══════════════════════════════════════════════════════╝")
     print()

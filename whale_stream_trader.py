@@ -1357,7 +1357,7 @@ def main():
         pass
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🤖  WHALE-STREAM TRADER v47.18 — BYBIT DEMO    ║")
+    print("║   🤖  WHALE-STREAM TRADER v47.40 — BYBIT DEMO    ║")
     print(f"║   💰  ${TRADE_MARGIN_USDT} margin × {LEVERAGE}x = ${TRADE_MARGIN_USDT*LEVERAGE} per trade        ║")
     print("╚══════════════════════════════════════════════════╝")
     print()
@@ -1989,7 +1989,7 @@ def main():
                 )
                 log(_mtf_msg)
                 print(f"   {_mtf_msg}")
-                _coin_size_mult = _new_mult
+                _coin_size_mult = max(_new_mult, 0.25)  # v47.40: floor at 0.25 after MTF penalty
             else:
                 print(f"   ✅ MTF aligned: {coin} {'LONG' if side=='Buy' else 'SHORT'} "
                       f"with BTC 4H {_fresh_btc_bias} — no penalty")
@@ -2203,6 +2203,7 @@ def main():
             placed  += 1
             placed_coins.append(coin)
             n_positions += 1   # keep Gate 4 position cap accurate mid-loop
+            already_active.add(symbol)  # v47.40: prevent same-cycle LONG+SHORT on same coin
             sheet_order_writes.append((sheet_row_idx, order_id))
             skip_counts.pop(f"row_{sheet_row_idx}", None)
 

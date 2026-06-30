@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║       WHALE-STREAM TRADE TRACKER                             ║
+║       WHALE-STREAM TRADE TRACKER                    v47.40  ║
 ║                                                              ║
 ║  Runs every 30 minutes (via Task Scheduler).                 ║
 ║  Reads all OPEN trades from Google Sheets,                   ║
@@ -1581,7 +1581,7 @@ def main():
                                 else:
                                     _pnl1 = (_pc_entry - _pc_tp1)  / _pc_entry * 100 * LEVERAGE
                                     _pnl2 = (_pc_entry - _pc_exit) / _pc_entry * 100 * LEVERAGE
-                                _blended   = _pnl1 * 0.25 + _pnl2 * 0.75  # 25% closed at TP1, 75% still running
+                                _blended   = _pnl1 * 0.50 + _pnl2 * 0.50  # v47.40 fix: trader closes 50% at TP1 (was 25/75 — wrong)
                                 _blend_str = f"{_blended:+.2f}% [T]"
                                 _sr = i + 2
                                 updates.append((_sr, COL_TP_HIT + 1, _pc_label))

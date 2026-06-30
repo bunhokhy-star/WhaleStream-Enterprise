@@ -1066,9 +1066,10 @@ def build_message():
             _sl_str  = (f"{_r['sl_dist_pct']:.1f}%"  if _r['sl_dist_pct']  is not None else "N/A")
             _tp_str  = (f"{_r['tp1_dist_pct']:.1f}%" if _r['tp1_dist_pct'] is not None else "N/A")
             _rr_str  = ""
-            if _r['sl_dist_pct'] and _r['tp1_dist_pct'] and _r['sl_dist_pct'] > 0:
-                _rr_str = f"  R:R={_r['tp1_dist_pct']/_r['sl_dist_pct']:.1f}"
-            _sl_warn = " 🚨" if (_r['sl_dist_pct'] is not None and _r['sl_dist_pct'] < 1.5) else ""
+            if (_r['sl_dist_pct'] is not None and _r['sl_dist_pct'] > 0 and
+                    _r['tp1_dist_pct'] is not None and _r['tp1_dist_pct'] > 0):
+                _rr_str = f"  R:R={_r['tp1_dist_pct']/_r['sl_dist_pct']:.1f}"  # v47.40: explicit None + >0 guards
+            _sl_warn = " 🚨" if (_r['sl_dist_pct'] is not None and 0 < _r['sl_dist_pct'] < 1.5) else ""  # v47.40: exclude negative/zero
             lines.append(
                 f"  {_side_icon} {_r['coin']:<6} SL:{_sl_str}{_sl_warn}  TP1:{_tp_str}{_rr_str}"
             )

@@ -1,7 +1,9 @@
 from __future__ import annotations   # PEP 563 — lazy annotations, Python 3.7+ compatible
+import os    # required for module-level path joins (must precede all other module-level code)
+import json  # required for scorer_tune.json + pattern WR cache loads
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM SIGNAL SCORER v47.26                          ║
+║   WHALE-STREAM SIGNAL SCORER v47.40                          ║
 ║                                                              ║
 ║  Pre-scores every signal 0–10 BEFORE sending to Strategist.  ║
 ║  Deterministic — no API calls, instant evaluation.           ║
