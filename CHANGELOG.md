@@ -1,5 +1,15 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.41 — 2026-06-30 — Signal quality sprint: BTC 24h LONG suppression + coin blocklist updates
+
+### `whale_stream_bot.py`
+- **BTC 24h LONG count cap** (code-level, `_n_long` clamp) — Root cause of Jun 22–25 loss cluster: BTC fell 8%+ over 48h but 4H SMA20 regime lagged; bot kept generating LONGs that all stopped out. New hard guard: BTC 24h ≤ −3% → cap LONGs at 1; BTC 24h ≤ −5% → cap LONGs at 0. Applied after the 4H regime dynamic count, so it overrides the softer SMA20 bias on fast bear days.
+- **`fetch_btc_24h_momentum()` LONG danger text** — At −3% threshold, guidance now adds: "DANGER ZONE FOR LONGS. Even Stage 2 coins with positive 7d momentum stop out when BTC drops 3%+ intraday. MANDATORY RULE: max 1 LONG, only if RS > +8% vs BTC AND negative funding AND proven graveyard winner."
+- **`fetch_btc_24h_momentum()` returns `(text, float)` tuple** — Caller unpacks `btc_24h_text, btc_24h_pct = ...` so the float is available for the code-level gate. Fallback returns `(str, 0.0)`.
+- **`SHORT_COIN_BLOCKLIST` — added CHZ** — CHZ SHORT had 3 consecutive stop-outs (Jun 20–21) after the coin found a floor at ~0.02. Previously removed from recovery list; now permanently banned for SHORTs.
+- **`LONG_COIN_BLOCKLIST` — added XLM** — XLM LONG: 0W/2L (both SL). XLM already in SHORT blocklist; now fully banned both directions.
+- **Version banner** updated to v47.41 (4 locations).
+
 ## v47.40 — 2026-06-30 — Bug fixes: Python 3.8 compat, Sunday dedup, fromisoformat, P&L weights, year-qualified velocity sentinel
 
 ### `whale_stream_bot.py`

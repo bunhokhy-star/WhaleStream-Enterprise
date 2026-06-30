@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v47.40   —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v47.41   —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 coins from CoinGecko (free, no key)     ║
@@ -146,6 +146,7 @@ SHORT_COIN_BLOCKLIST = {
     "ENA",   # 0W/5L — 0% WR, avg -60.6%
     "XLM",   # 0W/2L — 0% WR, avg -38.0%
     "BCH",   # 0W/2L — 0% WR, avg -44.0%
+    "CHZ",   # 3 consec. losses (Jun 20-21) — found floor, shorts stopped  ← added v47.41
     "VVV",   # 0W/3L — 0% WR, avg -57.9%  ← updated count v46.53
     "ZRO",   # 0W/1L — 0% WR, avg -40.9%
     "WLD",   # 0W/2L — 0% WR, avg -49.7%  ← added v46.5
@@ -177,6 +178,7 @@ LONG_COIN_BLOCKLIST = {
     "QNT",   # 0W/3L — 0% WR, avg -65.6%  ← added v46.62 (2026-06-26)
     "WIF",   # 1W/4L — 25% WR, avg -48.7% ← added v46.62 (2026-06-26)
     "WLD",   # 0W/2L — 0% WR, counter-trend coin ← added v47.5 (2026-06-28)
+    "XLM",   # 0W/2L — 0% LONG WR (also SHORT-blocked) ← added v47.41
 }
 # ── Auto-blocklist from debrief data (v47.28) ──────────────────────────────────
 # coin_blocklist_auto.json written by debrief save_memory() whenever a coin
@@ -340,7 +342,7 @@ except ImportError:
     MISSION_PROMPT = ""
     def print_mission_banner(): pass
 
-WHALE_STREAM_PROMPT = """WHALE-STREAM v47.40 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
+WHALE_STREAM_PROMPT = """WHALE-STREAM v47.41 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
 ROLE:
 You are an Institutional Multi-Agent Trading Committee composed of:
 • Market Regime Analyst • Smart Money Concepts Specialist • Quantitative Momentum Analyst • Liquidity & Stop-Hunt Analyst • Wyckoff Structure Analyst • Relative Strength Analyst • Breakout Probability Engine • Reversal Probability Engine • Continuation Probability Engine • Risk Management Committee
@@ -1685,9 +1687,10 @@ def fetch_btc_24h_momentum():
                     alert    = "🐻 STRONG DOWNTREND"
                     guidance = (
                         f"BTC is DOWN {change_24h:+.1f}% in 24h (${price:,.0f}). "
-                        "FAVOURABLE SHORT environment. Historical data shows SHORTs perform well in BTC downtrends. "
-                        "SHORT thresholds: ≥95% in REPAIR MODE (see SHORT SIGNAL STRATEGY above). Up to 3 SHORTs allowed."
-                    )
+                        "⚠ DANGER ZONE FOR LONGS. Even 'Stage 2' coins with positive 7d momentum stop out when BTC drops 3%+ intraday — cascade effect confirmed in live data (Jun 22-25 2026: 15 LONG losses in 48h). "
+                        "MANDATORY RULE: Output MAXIMUM 1 LONG this run, only if coin has RS > +8% vs BTC AND negative funding AND proven graveyard winner. "
+                        "FAVOURABLE SHORT environment: SHORTs perform well in BTC downtrends. Up to 3 SHORTs allowed at ≥95%."
+                    )  # v47.41: added LONG danger warning
                 elif change_24h <= -1.5:
                     alert    = "📉 DOWNTREND"
                     guidance = (
@@ -1705,10 +1708,10 @@ def fetch_btc_24h_momentum():
 
                 result = f"BTC 24h Change: {change_24h:+.1f}% [{alert}] at ${price:,.0f}\n{guidance}"
                 print(f"   ✓ BTC 24h Momentum: {change_24h:+.1f}% [{alert}]")
-                return result
+                return result, change_24h  # v47.41: return tuple (text, float) for code-level gating
     except Exception as e:
         print(f"   ⚠ BTC 24h momentum fetch failed ({e})")
-    return "BTC 24h momentum: unavailable — apply SHORT thresholds per REPAIR MODE rules (≥95%, max 3 SHORTs)."
+    return "BTC 24h momentum: unavailable — apply SHORT thresholds per REPAIR MODE rules (≥95%, max 3 SHORTs).", 0.0
 
 
 def fetch_bybit_realtime():
@@ -2282,7 +2285,7 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     shorts = data.get("shorts", [])
 
     lines = []
-    lines.append(f"🐳 WHALE-STREAM v47.40")
+    lines.append(f"🐳 WHALE-STREAM v47.41")
     lines.append(f"📅 {ts}")
 
     # ── Market regime summary ─────────────────────────────────
@@ -2861,7 +2864,7 @@ def main():
 
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🐳  WHALE-STREAM v47.40  — AUTO BOT STARTING    ║")
+    print("║   🐳  WHALE-STREAM v47.41  — AUTO BOT STARTING    ║")
     print("╚══════════════════════════════════════════════════╝")
     # Check conservative flag early so we can show it in the startup banner
     _short_conservative_early = os.path.exists(os.path.join(SCRIPT_DIR, "short_conservative.flag"))
@@ -2927,7 +2930,7 @@ def main():
 
     # ── Step 1g: Fetch BTC 24h Momentum (short-side guard) ───
     print("📈 Fetching BTC 24h Momentum Gate (short-side guard)...")
-    btc_24h = fetch_btc_24h_momentum()
+    btc_24h_text, btc_24h_pct = fetch_btc_24h_momentum()  # v47.41: unpack (text, float)
 
     # ── Step 2: Fetch market data ───────────────────────────
     all_coins = fetch_top_300_coins()
@@ -2963,7 +2966,7 @@ def main():
             batches[0],
             graveyard_text=graveyard, dominance_text=dominance,
             fear_greed_text=fear_greed, btc_move_text=btc_move,
-            btc_24h_text=btc_24h, batch_note=_STANDALONE,
+            btc_24h_text=btc_24h_text, batch_note=_STANDALONE,
             coin_perf_text=coin_perf, mtf_block_text=mtf_block,
         )
     except Exception as e:
@@ -2979,7 +2982,7 @@ def main():
                 batches[1],
                 graveyard_text=graveyard, dominance_text=dominance,
                 fear_greed_text=fear_greed, btc_move_text=btc_move,
-                btc_24h_text=btc_24h, batch_note=_STANDALONE,
+                btc_24h_text=btc_24h_text, batch_note=_STANDALONE,
                 coin_perf_text=coin_perf, mtf_block_text=mtf_block,
             )
         except Exception as e:
@@ -3126,6 +3129,22 @@ def main():
         else:
             _n_long, _n_short = 2, 3
             _regime_note = f"BEAR ({_btc_regime_pct:+.1f}%) — standard 2+3"
+    # ── BTC 24h LONG count override (v47.41) ─────────────────────────────────
+    # Hard cap on LONGs when BTC is dropping hard intraday.
+    # Root cause: Jun 22-25 2026 — BTC fell 8%+ over 48h; bot generated 15+ LONGs that
+    # all stopped out because the 4H SMA20 regime lags 24h spot moves by several candles.
+    # This provides a faster, independent guard on top of the 4H regime.
+    if btc_24h_pct <= -5.0:
+        if _n_long > 0:
+            _n_long = 0
+            _regime_note += f" | BTC24h {btc_24h_pct:+.1f}%→0L"
+            print(f"   📉 BTC 24h override: {btc_24h_pct:+.1f}% → LONGs suppressed to 0")
+    elif btc_24h_pct <= -3.0:
+        if _n_long > 1:
+            _n_long = 1
+            _regime_note += f" | BTC24h {btc_24h_pct:+.1f}%→max1L"
+            print(f"   📉 BTC 24h override: {btc_24h_pct:+.1f}% → LONGs capped at 1")
+    # ── end BTC 24h LONG override ─────────────────────────────────────────────
     print(f"   📡 BTC 4H Regime: {_regime_note} → keeping top {_n_long}🟢 + {_n_short}🔴")
     # ── end dynamic count ─────────────────────────────────────────────────────
 
