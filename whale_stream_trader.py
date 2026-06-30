@@ -1903,6 +1903,20 @@ def main():
             continue
         if _sig_score is not None:
             print(f"   📊 Score: {_sig_score}/10 ≥ floor {SCORE_MIN_TRADER} — pass")
+        # ── Score-based position sizing (v47.24) ───────────────────────────────
+        # Higher conviction → more capital. Applied AFTER MTF + Strategist REDUCE.
+        # 9-10 = ELITE (1.00×), 7-8 = GOOD (0.85×), 5-6 = MARGINAL (0.70×)
+        # Unknown score (scorer not run this cycle) → 1.00× (no change)
+        if _sig_score is None:
+            _score_size_mult, _score_tier = 1.00, None
+        elif _sig_score >= 9:
+            _score_size_mult, _score_tier = 1.00, "ELITE"
+        elif _sig_score >= 7:
+            _score_size_mult, _score_tier = 0.85, "GOOD"
+        else:   # 5-6: passed gate but marginal quality
+            _score_size_mult, _score_tier = 0.70, "MARGINAL"
+        if _score_tier:
+            print(f"   📐 Score tier: {_score_tier} ({_sig_score:.0f}/10) → size mult {_score_size_mult:.0%}")
         # ── end Score Gate ─────────────────────────────────────────────────────
 
         # ── Strategist VETO / REDUCE check ─────────────────────────────────────
@@ -1966,6 +1980,21 @@ def main():
                 print(f"   ✅ MTF aligned: {coin} {'LONG' if side=='Buy' else 'SHORT'} "
                       f"with BTC 4H {_fresh_btc_bias} — no penalty")
         # ── end MTF freshness penalty ────────────────────────────────────────
+
+        # ── Apply score-based size multiplier (v47.24) ───────────────────────
+        # Applied last — after Strategist REDUCE and MTF penalty — so all three
+        # size adjustments stack multiplicatively without interfering with each other.
+        if _score_size_mult < 1.0:
+            _pre_score_mult = _coin_size_mult
+            _coin_size_mult = round(_coin_size_mult * _score_size_mult, 3)
+            # Re-check floor after additional reduction
+            if _coin_size_mult < _MIN_SIZE_MULT:
+                log(f"SIZE FLOOR (score): {coin} — {_coin_size_mult:.3f}x → clamped to {_MIN_SIZE_MULT}x")
+                _coin_size_mult = _MIN_SIZE_MULT
+            log(f"SCORE SIZING: {coin} {_dir_key} — {_pre_score_mult:.2f}x × {_score_size_mult:.0%} "
+                f"({_score_tier}) → {_coin_size_mult:.2f}x")
+            print(f"   📐 Final size after score: {_coin_size_mult:.2f}x (score {_score_tier})")
+        # ── end score-based size ─────────────────────────────────────────────
 
         # Skip if already have a position OR an unfilled order
         if symbol in already_active:

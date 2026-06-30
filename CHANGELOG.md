@@ -1,5 +1,15 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.24 — 2026-06-30 — Score-based position sizing; time-of-day WR; holding period analysis
+
+### `whale_stream_trader.py`
+- **NEW: Score-based position sizing** — after signal passes score gate and MTF freshness penalty, applies a final size multiplier based on score tier: ELITE (9-10) = 1.0×, GOOD (7-8) = 0.85×, MARGINAL (5-6) = 0.70×. Applied multiplicatively after Strategist REDUCE and MTF penalty. Floor `_MIN_SIZE_MULT = 0.25` protects against stacked reductions. Logged with tier name and resulting multiplier.
+
+### `analyze_shorts.py`
+- **NEW: Time-of-day WR breakdown** — groups LONG resolved trades by the 4-hour BKK slot their signal was generated (00/04/08/12/16/20), matching the bot run schedule. Shows per-slot trades / wins / WR with ✅/⚠️/❌ icons and session label. Flags slots with WR < 45% over ≥5 trades as weak and suggests raising confidence floor for those hours.
+- **NEW: Holding period analysis** — parses `ts` and `resolved_at` fields (populated from v46.27+) to compute hold duration in hours for each resolved trade. Shows avg hold time for wins vs losses, bucket distribution (<6h / 6-24h / 24-48h / 48-72h / >72h) with WR per bucket, expiry capture rates at 36h/48h/72h cutoffs, and a suggested optimal expiry.
+- **FIX: `resolved_at` added to `resolved.append()` dict** — field was present in `COL_RESOLVED_AT = 16` but not being collected into the resolved list; holding period analysis now has the data it needs.
+
 ## v47.23 — 2026-06-30 — AVOID lesson injection; auto-tune score floor; weekly Telegram health card
 
 ### `whale_stream_bot.py`

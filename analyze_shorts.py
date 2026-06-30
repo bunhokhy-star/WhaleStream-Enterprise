@@ -133,16 +133,17 @@ def main():
                 continue  # fake instant resolution — TP/SL within noise of entry
 
         resolved.append({
-            "coin":      coin,
-            "direction": direction,
-            "conf":      conf,
-            "status":    status,
-            "pnl":       pnl,
-            "is_bybit":  is_bybit,   # True if P&L was written back from Bybit actual fill
-            "ts":        ts_str,
-            "signal":    signal,
-            "pattern":   pattern,
-            "tp_hit":    row[COL_TP_HIT].strip() if len(row) > COL_TP_HIT else "",
+            "coin":        coin,
+            "direction":   direction,
+            "conf":        conf,
+            "status":      status,
+            "pnl":         pnl,
+            "is_bybit":    is_bybit,   # True if P&L was written back from Bybit actual fill
+            "ts":          ts_str,
+            "signal":      signal,
+            "pattern":     pattern,
+            "tp_hit":      row[COL_TP_HIT].strip() if len(row) > COL_TP_HIT else "",
+            "resolved_at": row[COL_RESOLVED_AT].strip() if len(row) > COL_RESOLVED_AT else "",
         })
 
     longs  = [r for r in resolved if r["direction"] == "LONG"]
@@ -919,6 +920,155 @@ def main():
     with open(OUT_FILE, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
     print(f"\nAnalysis saved to: {OUT_FILE}")
+
+    # ── TIME-OF-DAY WR BREAKDOWN (v47.24) ────────────────────────────────────
+    # Group resolved LONGs by the 4h BKK slot their signal was generated in.
+    # Bot runs at 00/04/08/12/16/20 BKK — slot = floor(hour / 4) * 4.
+    p()
+    p("═" * 58)
+    p("  LONG WIN RATE BY TIME SLOT (4h BKK cycle)")
+    p("  Bot generates signals at 00/04/08/12/16/20 BKK")
+    p("═" * 58)
+    slot_trades = defaultdict(list)
+    _ts_parse_fmt = "%Y-%m-%d %H:%M"
+    for r in longs:
+        ts_raw = r.get("ts", "").strip().replace(" BKK", "")
+        try:
+            dt = datetime.strptime(ts_raw[:16], _ts_parse_fmt)
+            slot = (dt.hour // 4) * 4
+            slot_trades[slot].append(r)
+        except Exception:
+            slot_trades[-1].append(r)   # unparseable → bucket -1
+
+    if any(k >= 0 for k in slot_trades):
+        _slot_labels = {
+            0:  "00:00 BKK (17:00 UTC-1d)  Asia-close / dead",
+            4:  "04:00 BKK (21:00 UTC-1d)  US-close / thin",
+            8:  "08:00 BKK (01:00 UTC)     Dead zone",
+            12: "12:00 BKK (05:00 UTC)     EU open",
+            16: "16:00 BKK (09:00 UTC)     EU+early-US",
+            20: "20:00 BKK (13:00 UTC)     US peak",
+        }
+        p(f"  {'Slot':<10} {'Trades':>6} {'W':>4} {'L':>4} {'WR':>7}  Session")
+        p("  " + "-" * 58)
+        _weak_slots = []
+        for slot in sorted(k for k in slot_trades if k >= 0):
+            trades = slot_trades[slot]
+            wins   = [t for t in trades if t["status"] == "WIN"]
+            wr     = len(wins) / len(trades) * 100 if trades else 0
+            label  = _slot_labels.get(slot, f"{slot:02d}:00 BKK")
+            icon   = "✅" if wr >= 60 else ("⚠️ " if wr >= 45 else "❌")
+            p(f"  {icon} {slot:02d}:00      {len(trades):>6} {len(wins):>4} {len(trades)-len(wins):>4} {wr:>6.0f}%  {label}")
+            if wr < 45 and len(trades) >= 5:
+                _weak_slots.append((slot, wr, len(trades)))
+        _unknown = slot_trades.get(-1, [])
+        if _unknown:
+            p(f"  ─  ??:??      {len(_unknown):>6}  (timestamp unparseable)")
+        p()
+        if _weak_slots:
+            p(f"  ⚠️  WEAK TIME SLOTS (WR<45%, ≥5 trades):")
+            for sl, sl_wr, sl_n in _weak_slots:
+                p(f"     {sl:02d}:00 BKK — {sl_wr:.0f}% WR over {sl_n} trades")
+            p(f"     → Consider raising confidence floor to ≥92% for signals at these hours")
+            p(f"     → Or: inject 'weak slot' warning into graveyard prompt for these hours")
+        else:
+            p(f"  ✅ No consistently weak time slots yet (need ≥5 trades per slot to evaluate)")
+    else:
+        p("  No LONG trades with parseable timestamps yet.")
+    p()
+
+    # ── HOLDING PERIOD ANALYSIS (v47.24) ─────────────────────────────────────
+    p("═" * 58)
+    p("  HOLDING PERIOD ANALYSIS")
+    p("  How long do wins resolve vs losses? Informs expiry rule.")
+    p("═" * 58)
+    _hold_wins  = []
+    _hold_losses = []
+    _hold_buckets = {"<6h": [], "6-24h": [], "24-48h": [], "48-72h": [], ">72h": []}
+    _WIN_BUCKETS  = {"<6h": 0, "6-24h": 0, "24-48h": 0, "48-72h": 0, ">72h": 0}
+    _LOSS_BUCKETS = {"<6h": 0, "6-24h": 0, "24-48h": 0, "48-72h": 0, ">72h": 0}
+    _BUCKET_KEYS  = ["<6h", "6-24h", "24-48h", "48-72h", ">72h"]
+
+    for r in resolved:
+        ts_raw  = r.get("ts", "").strip().replace(" BKK", "")
+        res_raw = r.get("resolved_at", "").strip().replace(" BKK", "")
+        if not ts_raw or not res_raw:
+            continue
+        try:
+            t_sig = datetime.strptime(ts_raw[:16],  _ts_parse_fmt)
+            t_res = datetime.strptime(res_raw[:16], _ts_parse_fmt)
+            hold_h = (t_res - t_sig).total_seconds() / 3600
+            if hold_h < 0 or hold_h > 200:
+                continue   # bad data
+            # Bucket
+            if   hold_h <  6:  bk = "<6h"
+            elif hold_h < 24:  bk = "6-24h"
+            elif hold_h < 48:  bk = "24-48h"
+            elif hold_h < 72:  bk = "48-72h"
+            else:              bk = ">72h"
+            if r["status"] == "WIN":
+                _hold_wins.append(hold_h)
+                _WIN_BUCKETS[bk] += 1
+            else:
+                _hold_losses.append(hold_h)
+                _LOSS_BUCKETS[bk] += 1
+        except Exception:
+            continue
+
+    if _hold_wins or _hold_losses:
+        _avg_win_h  = sum(_hold_wins)  / len(_hold_wins)  if _hold_wins  else None
+        _avg_loss_h = sum(_hold_losses) / len(_hold_losses) if _hold_losses else None
+        if _avg_win_h  is not None:
+            p(f"  Avg WIN  hold time : {_avg_win_h:.1f}h  ({len(_hold_wins)} trades)")
+        if _avg_loss_h is not None:
+            p(f"  Avg LOSS hold time : {_avg_loss_h:.1f}h  ({len(_hold_losses)} trades)")
+        p()
+        p(f"  {'Bucket':<10} {'Wins':>5} {'Losses':>7} {'WR':>7}")
+        p("  " + "-" * 34)
+        for bk in _BUCKET_KEYS:
+            _bw = _WIN_BUCKETS[bk]
+            _bl = _LOSS_BUCKETS[bk]
+            _bt = _bw + _bl
+            _bwr = f"{_bw/_bt*100:.0f}%" if _bt > 0 else "N/A"
+            _bicon = "✅" if (_bt > 0 and _bw/_bt >= 0.60) else ("⚠️ " if (_bt > 0 and _bw/_bt >= 0.45) else ("❌" if _bt > 0 else "─ "))
+            p(f"  {_bicon} {bk:<9} {_bw:>5} {_bl:>7} {_bwr:>7}")
+        p()
+        # Verdict
+        if _avg_win_h and _avg_loss_h:
+            _diff = _avg_loss_h - _avg_win_h
+            if _diff > 12:
+                p(f"  ⚠️  Losses take {_diff:.0f}h longer than wins on average.")
+                p(f"     → Consider early-exit rule: if no TP hit after {_avg_win_h*2:.0f}h, reduce/close.")
+                # Optimal expiry recommendation
+                _long_wins_72 = [h for h in _hold_wins if h <= 72]
+                if _long_wins_72:
+                    _pct_wins_by_72 = len(_long_wins_72) / len(_hold_wins) * 100
+                    p(f"     → {_pct_wins_by_72:.0f}% of wins resolve within 72h — current expiry is {'adequate' if _pct_wins_by_72 >= 90 else 'may be too long'}.")
+            elif _diff > 0:
+                p(f"  ✅ Losses resolve only {_diff:.0f}h later than wins — expiry rule looks reasonable.")
+            else:
+                p(f"  ℹ️  Wins and losses resolve at similar speed — time-based exit may not help.")
+
+        # Expiry threshold suggestion
+        _wins_by_36 = sum(1 for h in _hold_wins if h <= 36)
+        _wins_by_48 = sum(1 for h in _hold_wins if h <= 48)
+        _wins_by_72 = sum(1 for h in _hold_wins if h <= 72)
+        if _hold_wins:
+            p()
+            p(f"  Win capture by cutoff:")
+            p(f"    ≤36h: {_wins_by_36}/{len(_hold_wins)} wins ({_wins_by_36/len(_hold_wins)*100:.0f}%)")
+            p(f"    ≤48h: {_wins_by_48}/{len(_hold_wins)} wins ({_wins_by_48/len(_hold_wins)*100:.0f}%)")
+            p(f"    ≤72h: {_wins_by_72}/{len(_hold_wins)} wins ({_wins_by_72/len(_hold_wins)*100:.0f}%) ← current expiry")
+            _best_cutoff = "72h (current)"
+            if _wins_by_48 / len(_hold_wins) >= 0.95:
+                _best_cutoff = "48h (captures 95%+ of wins — could shorten expiry)"
+            elif _wins_by_36 / len(_hold_wins) >= 0.90:
+                _best_cutoff = "36h (captures 90%+ of wins — aggressive shortening)"
+            p(f"  → Suggested expiry: {_best_cutoff}")
+    else:
+        p("  Not enough resolved_at timestamps to compute holding periods.")
+        p("  (resolved_at field populated from v46.27+)")
+    p()
 
     # ── Weekly Telegram Health Card (v47.23) ──────────────────────────────────
     # Sends a compact system health card to ops Telegram channel.
