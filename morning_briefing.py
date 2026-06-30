@@ -1043,6 +1043,52 @@ def build_message():
             )
         lines += [""] + _sc_lines
 
+    # ── Score trend: last-10 vs prior-10 avg score (v47.28) ───────────────────
+    try:
+        _mem_path_st = os.path.join(BASE_DIR, "pattern_memory.json")
+        if os.path.exists(_mem_path_st):
+            with open(_mem_path_st, "r", encoding="utf-8") as _stf:
+                _st_mem = json.load(_stf)
+            _all_db = [
+                d for d in _st_mem.get("debriefs", [])
+                if d.get("score") is not None
+            ]
+            # newest first
+            _all_db_sorted = sorted(
+                _all_db,
+                key=lambda d: (d.get("resolved_at") or d.get("debrief_at") or ""),
+                reverse=True,
+            )
+            if len(_all_db_sorted) >= 20:
+                def _safe_score(d):
+                    try:
+                        return float(d["score"])
+                    except (TypeError, ValueError):
+                        return None
+
+                _last10  = [s for s in (_safe_score(d) for d in _all_db_sorted[:10])  if s is not None]
+                _prior10 = [s for s in (_safe_score(d) for d in _all_db_sorted[10:20]) if s is not None]
+                if _last10 and _prior10:
+                    _avg_last  = sum(_last10)  / len(_last10)
+                    _avg_prior = sum(_prior10) / len(_prior10)
+                    _delta     = _avg_last - _avg_prior
+                    if _delta >= 0.5:
+                        _trend_icon = "✅"
+                        _trend_note = f"improving (+{_delta:.1f})"
+                    elif _delta <= -0.5:
+                        _trend_icon = "⚠️"
+                        _trend_note = f"declining ({_delta:.1f})"
+                    else:
+                        _trend_icon = "➡️"
+                        _trend_note = f"stable ({_delta:+.1f})"
+                    lines += [
+                        "",
+                        f"📈 SCORE TREND (last 10 vs prior 10)",
+                        f"  {_trend_icon} Avg score: {_avg_last:.1f} vs {_avg_prior:.1f} — {_trend_note}",
+                    ]
+    except Exception:
+        pass  # score trend is non-critical
+
     lines += [
         "",
         f"🔄 Monitor: {monitor_status}",

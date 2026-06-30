@@ -627,6 +627,31 @@ def load_pattern_memory():
         return {}
 
 
+def _fetch_4h_regime_strategist(coin_sym):
+    """Return 4H SMA20 regime for a coin: 'BULL', 'BEAR', or 'NEUTRAL'. (v47.28)"""
+    try:
+        import requests as _sr
+        _r = _sr.get(
+            "https://api.bybit.com/v5/market/kline",
+            params={"category": "linear", "symbol": f"{coin_sym}USDT",
+                    "interval": "240", "limit": "22"},
+            timeout=5,
+        )
+        _d = _r.json()
+        if _d.get("retCode") != 0:
+            return "NEUTRAL"
+        _cs = _d["result"]["list"]
+        if len(_cs) < 21:
+            return "NEUTRAL"
+        _closes = [float(c[4]) for c in _cs[1:21]]
+        _sma    = sum(_closes) / 20
+        _cur    = float(_cs[0][4])
+        _pct    = (_cur - _sma) / _sma * 100
+        return "BEAR" if _pct < -2.0 else ("BULL" if _pct > 2.0 else "NEUTRAL")
+    except Exception:
+        return "NEUTRAL"
+
+
 def build_strategist_user_message(signals, history, positions, balance, drawdown_pct, btc_7d, memory=None):
     """Build the user-side prompt with all context the Strategist needs."""
     lines = []
@@ -645,6 +670,12 @@ def build_strategist_user_message(signals, history, positions, balance, drawdown
         lines.append(f"  Entry zone : {s['entry']}")
         if s.get("score") is not None:
             lines.append(f"  {format_score_for_prompt(s)}")
+        # ── Per-coin 4H regime (v47.28) ──────────────────────────────
+        _coin_4h = _fetch_4h_regime_strategist(s["coin"])
+        _is_counter = (s["direction"] == "LONG" and _coin_4h == "BEAR") or \
+                      (s["direction"] == "SHORT" and _coin_4h == "BULL")
+        _regime_suffix = " ⚠️ counter-trend" if _is_counter else (" ✅ aligned" if _coin_4h != "NEUTRAL" else "")
+        lines.append(f"  4H Regime  : {_coin_4h}{_regime_suffix}")
 
         if not trades:
             lines.append(f"  History    : No resolved trades yet on this coin+direction")

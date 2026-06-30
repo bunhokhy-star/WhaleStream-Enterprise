@@ -1,5 +1,19 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.28 — 2026-06-30 — Auto-blocklist from debrief; Strategist 4H regime; score trend in briefing
+
+### `whale_stream_debrief.py`
+- **NEW: Auto-blocklist writer** — `save_memory()` now computes per-coin LONG win/loss totals from all debriefs. If a coin has ≥3 LONG losses and 0 LONG wins, it is added to `coin_blocklist_auto.json` (written to the script directory). File format: `{"blocked_longs": [...], "updated_at": "...", "note": "..."}`. Runs after `score_accuracy` block; fails silently on write error. Logged with 🚫 icon showing blocked coin list.
+
+### `whale_stream_bot.py`
+- **NEW: Auto-blocklist reader at startup** — immediately after `LONG_COIN_BLOCKLIST` definition, reads `coin_blocklist_auto.json` (if it exists) and merges the `blocked_longs` list into `LONG_COIN_BLOCKLIST` using set union. Logged with 🚫 icon on startup. Fails silently — hardcoded blocklist always applies even if the file is missing or corrupted.
+
+### `whale_stream_strategist.py`
+- **NEW: Per-coin 4H regime in Strategist user message** — `_fetch_4h_regime_strategist()` helper fetches each signal coin's 4H klines from Bybit public API (same SMA20 ±2% logic as bot.py). `build_strategist_user_message()` now includes a `4H Regime  :` line per signal: shows BULL/BEAR/NEUTRAL, ✅ aligned (trend-following), ⚠️ counter-trend (LONG in BEAR or SHORT in BULL), or neutral with no suffix. Helps Claude weight regime context in APPROVE/REDUCE/VETO decisions. Fails silently → NEUTRAL.
+
+### `morning_briefing.py`
+- **NEW: Score trend alert** — after the yesterday score card block in `build_message()`, reads `pattern_memory.json` and computes the average score for the last 10 debriefs vs the prior 10 (newest first, non-None scores only). Reports `📈 SCORE TREND` with ✅ improving (+0.5+), ⚠️ declining (−0.5+), or ➡️ stable. Requires ≥20 scored debriefs to activate. Fails silently — non-critical section.
+
 ## v47.27 — 2026-06-30 — Fix ts in debrief; score accuracy actions; per-coin 4H regime filter
 
 ### `whale_stream_tracker.py`

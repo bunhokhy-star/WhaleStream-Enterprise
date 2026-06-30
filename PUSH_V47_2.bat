@@ -1,8 +1,8 @@
 @echo off
 cd /d C:\Users\MAX\WhaleStream
 git add -A
-git commit -m "v47.27 — Fix ts in debrief records; score accuracy actions; per-coin 4H regime filter"
+git commit -m "v47.28 — Auto-blocklist from debrief; Strategist 4H regime; score trend in briefing"
 git push
 echo.
-echo Done — v47.27 pushed to GitHub.
+echo Done — v47.28 pushed to GitHub.
 pause

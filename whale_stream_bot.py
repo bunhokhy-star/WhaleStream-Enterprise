@@ -164,6 +164,20 @@ LONG_COIN_BLOCKLIST = {
     "WIF",   # 1W/4L — 25% WR, avg -48.7% ← added v46.62 (2026-06-26)
     "WLD",   # 0W/2L — 0% WR, counter-trend coin ← added v47.5 (2026-06-28)
 }
+# ── Auto-blocklist from debrief data (v47.28) ──────────────────────────────────
+# coin_blocklist_auto.json written by debrief save_memory() whenever a coin
+# reaches ≥3 LONG losses + 0 LONG wins. Merged at startup — no manual edit needed.
+try:
+    _auto_bl_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "coin_blocklist_auto.json")
+    if os.path.exists(_auto_bl_path):
+        with open(_auto_bl_path, "r", encoding="utf-8") as _abl_f:
+            _auto_bl_data = json.load(_abl_f)
+        _auto_bl_coins = set(c.upper() for c in _auto_bl_data.get("blocked_longs", []))
+        LONG_COIN_BLOCKLIST = LONG_COIN_BLOCKLIST | _auto_bl_coins
+        if _auto_bl_coins:
+            print(f"   🚫 AUTO-BLOCKLIST: {', '.join(sorted(_auto_bl_coins))} added from coin_blocklist_auto.json")
+except Exception:
+    pass  # fail silently — hardcoded blocklist still applies
 
 # ── Malformed coin blocklist (BOTH directions) ────────────────────────────────
 # Coins that consistently generate invalid SL levels in EITHER direction.
