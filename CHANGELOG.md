@@ -1,5 +1,13 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.43 — 2026-06-30 — Signal quality sprint #3: LONG proven whitelist (prompt + code filter), SHORT proven list (prompt)
+
+### `whale_stream_bot.py`
+- **LONG proven whitelist — graveyard prompt injection** — After the streak trap warnings, dynamically computes which coins are "proven" for LONGs: ≥3 resolved LONG trades AND ≥60% WR AND not in `LONG_COIN_BLOCKLIST`. Injects `✅ L_PROVEN(≥60%WR,≥3T): ...` listing these coins, with explicit instruction that ALL other LONG coins require conf≥95%. Self-updating: new coins graduate into the whitelist automatically as they accumulate trades.
+- **LONG proven whitelist — code-level filter** — After the H SHORT price floor block (inside the top-N filter), recomputes the same proven LONG set from `resolved` trades and drops any non-proven LONG signal with confidence < 95%. Prints `🎯 LONG WL: {COIN} conf={N}% < 95% (non-proven) → dropped` per dropped signal. Hard guard: only activates if `_proven_long_set` is non-empty (safe at startup with few trades).
+- **SHORT proven list — graveyard prompt injection** — Alongside the LONG proven injection, computes coins with 100% SHORT WR AND ≥2 trades AND not in `SHORT_COIN_BLOCKLIST`. Injects `✅ S_PROVEN(100%WR,≥2T): ...` listing priority SHORT targets as H approaches its price floor (focus concentration).
+- **Version banner** updated to v47.43 (4 locations).
+
 ## v47.42 — 2026-06-30 — Signal quality sprint #2: ENA blocklist, streak trap warning, H SHORT floor, bear SHORT expansion
 
 ### `whale_stream_bot.py`
