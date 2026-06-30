@@ -1089,6 +1089,42 @@ def build_message():
     except Exception:
         pass  # score trend is non-critical
 
+    # ── Scorer dim correlation (v47.31) ──────────────────────────────────────
+    # Shows per-proxy WR for confidence buckets + MTF alignment buckets.
+    # Needs ≥10 trades per bucket to display. Identifies which scorer dim is weakest.
+    try:
+        _mem_path_dc = os.path.join(BASE_DIR, "pattern_memory.json")
+        if os.path.exists(_mem_path_dc):
+            with open(_mem_path_dc, "r", encoding="utf-8") as _dcf_mb:
+                _dc_mem_mb = json.load(_dcf_mb)
+            _dc_mb = _dc_mem_mb.get("dim_correlation", {})
+            if _dc_mb:
+                _dc_labels = {
+                    "conf_high":    "Conf ≥90%  ",
+                    "conf_med":     "Conf 75-89%",
+                    "conf_low":     "Conf <75%  ",
+                    "mtf_ideal":    "MTF ideal  ",
+                    "mtf_aligned":  "MTF aligned",
+                    "mtf_neutral":  "MTF neutral",
+                    "mtf_counter":  "MTF counter",
+                    "mtf_sideways": "MTF sideway",
+                }
+                _dc_rows = []
+                for _dk, _dlbl in _dc_labels.items():
+                    _dv_mb = _dc_mb.get(_dk, {})
+                    _dw_mb = _dv_mb.get("wins", 0)
+                    _dl_mb = _dv_mb.get("losses", 0)
+                    _dn_mb = _dw_mb + _dl_mb
+                    if _dn_mb < 10:
+                        continue
+                    _dwr_mb = _dw_mb / _dn_mb * 100
+                    _di = "✅" if _dwr_mb >= 60 else ("⚠️" if _dwr_mb >= 45 else "❌")
+                    _dc_rows.append(f"  {_di} {_dlbl} {_dwr_mb:.0f}%  ({_dw_mb}W/{_dl_mb}L)")
+                if _dc_rows:
+                    lines += ["", "🔬 SCORER DIM HEALTH"] + _dc_rows
+    except Exception:
+        pass  # non-critical
+
     # ── Auto-blocklist summary (v47.30) ───────────────────────────────────────
     try:
         _bl_path_mb = os.path.join(BASE_DIR, "coin_blocklist_auto.json")
@@ -1107,6 +1143,24 @@ def build_message():
                     "",
                     f"🚫 AUTO-BLOCKED (debrief ≥3L/0W): {' | '.join(_bl_parts)}",
                 ]
+    except Exception:
+        pass  # non-critical
+
+    # ── Score gate override status (v47.31) ──────────────────────────────────
+    # Shows when debrief has raised the emergency score gate due to scorer drift.
+    try:
+        _sgov_path_mb = os.path.join(BASE_DIR, "score_gate_override.json")
+        if os.path.exists(_sgov_path_mb):
+            with open(_sgov_path_mb, "r", encoding="utf-8") as _sgof_mb:
+                _sgov_mb = json.load(_sgof_mb)
+            _sgo_gate  = _sgov_mb.get("SCORE_MIN_TRADER", "?")
+            _sgo_since = _sgov_mb.get("since", "?")
+            lines += [
+                "",
+                f"🚨 SCORE GATE RAISED — SCORE_MIN_TRADER={_sgo_gate} (since {_sgo_since})",
+                f"  → Scorer drift active. Only score ≥{_sgo_gate} signals will be traded.",
+                f"  → Auto-reverts when all tiers recover to ≥55% accuracy.",
+            ]
     except Exception:
         pass  # non-critical
 

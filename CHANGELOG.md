@@ -1,5 +1,15 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.31 — 2026-06-30 — Score gate status in briefing; blocklist aging; dim correlation
+
+### `morning_briefing.py`
+- **NEW: Score gate override status (Option A)** — after the auto-blocklist block, checks `score_gate_override.json`. If active, shows `🚨 SCORE GATE RAISED: SCORE_MIN_TRADER=X (since <date>)` with revert condition. Silent when file is absent. Operator knows immediately each morning if the emergency gate is engaged.
+- **NEW: Scorer dim health section (Option C)** — reads `dim_correlation` from `pattern_memory.json`. For each bucket (conf ≥90%, conf 75-89%, conf <75%, MTF ideal, aligned, neutral, counter, sideways) with ≥10 trades, shows WR with ✅/⚠️/❌ icon. Identifies which scorer dimension is weakest. Silent when data is insufficient.
+
+### `whale_stream_debrief.py`
+- **NEW: Auto-blocklist aging / auto-expiry (Option B)** — in `save_memory()`, after computing the ≥3L/0W blocklist candidates, checks the most recent LOSS timestamp for each blocked coin. If most recent LOSS > 7 days ago: coin is removed from the block, logged, and a `⏳ AUTO-BLOCKLIST EXPIRED` Telegram is sent. `blocked_since` timestamps now persisted in `coin_blocklist_auto.json` so expiry is stable across restarts. Prevents permanent bans from brief bad streaks.
+- **NEW: Per-proxy win correlation tracking (Option C)** — in `save_memory()`, after `score_accuracy`, computes `dim_correlation` dict: 8 buckets (3 confidence tiers + 5 MTF alignment buckets). Each bucket has `{wins, losses}` derived from stored `confidence` and `mtf_bias` fields in debrief records. Written to `pattern_memory.json` as `dim_correlation` — consumed by morning_briefing.py.
+
 ## v47.30 — 2026-06-30 — Blocklist in Strategist + briefing; score gate auto-tune
 
 ### `whale_stream_strategist.py`

@@ -313,6 +313,63 @@ def save_memory(memory):
             _score_accuracy[_acc_tier]["incorrect"] += 1
     memory["score_accuracy"] = _score_accuracy
 
+    # Per-proxy win correlation (v47.31) — identifies miscalibrated scorer dimensions
+    # Tracks two inferable proxies from stored debrief fields:
+    #   Confidence (dim 1 proxy): high/med/low confidence buckets
+    #   MTF alignment (dim 6 proxy): ideal/aligned/neutral/counter/sideways
+    _dim_corr = {
+        "conf_high":    {"wins": 0, "losses": 0},   # confidence ≥90
+        "conf_med":     {"wins": 0, "losses": 0},   # confidence 75-89
+        "conf_low":     {"wins": 0, "losses": 0},   # confidence <75
+        "mtf_ideal":    {"wins": 0, "losses": 0},   # 4H+1H ideal entry
+        "mtf_aligned":  {"wins": 0, "losses": 0},   # 4H confirms direction, non-ideal 1H
+        "mtf_neutral":  {"wins": 0, "losses": 0},   # no MTF data or unknown
+        "mtf_counter":  {"wins": 0, "losses": 0},   # 4H opposes direction
+        "mtf_sideways": {"wins": 0, "losses": 0},   # 4H sideways (indecision)
+    }
+    for _d in memory.get("debriefs", []):
+        _dout = _d.get("outcome", "").upper()
+        if _dout not in ("WIN", "LOSS"):
+            continue
+        _dis_win = (_dout == "WIN")
+
+        # Confidence proxy (dim 1)
+        try:
+            _dc_conf = float(_d.get("confidence", 0) or 0)
+            if _dc_conf >= 90:
+                _dck = "conf_high"
+            elif _dc_conf >= 75:
+                _dck = "conf_med"
+            else:
+                _dck = "conf_low"
+            if _dis_win: _dim_corr[_dck]["wins"]   += 1
+            else:        _dim_corr[_dck]["losses"] += 1
+        except Exception:
+            pass
+
+        # MTF alignment proxy (dim 6)
+        _dc_mtf = (_d.get("mtf_bias") or "").upper()
+        _dc_dr  = (_d.get("direction") or "").upper()
+        if _dc_mtf in ("4H_BULL_1H_PULLBACK", "4H_BEAR_1H_BOUNCE",
+                       "4H_BULL_1H_BOT", "4H_BEAR_1H_TOP"):
+            _dmk = "mtf_ideal"
+        elif "SIDEWAYS" in _dc_mtf:
+            _dmk = "mtf_sideways"
+        elif _dc_mtf.startswith("4H_BULL") and _dc_dr == "LONG":
+            _dmk = "mtf_aligned"
+        elif _dc_mtf.startswith("4H_BEAR") and _dc_dr == "SHORT":
+            _dmk = "mtf_aligned"
+        elif _dc_mtf.startswith("4H_BULL") and _dc_dr == "SHORT":
+            _dmk = "mtf_counter"
+        elif _dc_mtf.startswith("4H_BEAR") and _dc_dr == "LONG":
+            _dmk = "mtf_counter"
+        else:
+            _dmk = "mtf_neutral"
+        if _dis_win: _dim_corr[_dmk]["wins"]   += 1
+        else:        _dim_corr[_dmk]["losses"] += 1
+
+    memory["dim_correlation"] = _dim_corr
+
     # Auto-blocklist: coins with ≥3 losses + 0 wins per direction (v47.28 LONG / v47.29 SHORT)
     # Writes coin_blocklist_auto.json — read by bot.py at startup.
     try:
@@ -344,12 +401,97 @@ def save_memory(memory):
             c for c, l in _bl_short_losses.items()
             if l >= 3 and _bl_short_wins.get(c, 0) == 0
         ])
+
+        # ── Auto-blocklist aging (v47.31) ────────────────────────────────────
+        # Coins blocked for >7 days with no fresh LOSS are auto-expired.
+        # "Fresh" = any LOSS in the debrief history after the coin was first blocked.
+        # Prevents permanent bans from a brief bad streak months ago.
         _bl_path = os.path.join(SCRIPT_DIR, "coin_blocklist_auto.json")
+        _EXPIRY_DAYS = 7
+        _now_bl_dt   = datetime.now(BKK)
+
+        # Load existing blocked_since timestamps
+        _existing_bl_data = {}
+        try:
+            if os.path.exists(_bl_path):
+                with open(_bl_path, "r", encoding="utf-8") as _blf_old:
+                    _existing_bl_data = json.load(_blf_old)
+        except Exception:
+            pass
+        _existing_since = _existing_bl_data.get("blocked_since", {})
+
+        # Build most-recent-LOSS timestamp per (coin, direction)
+        _last_bl_loss: dict = {}
+        for _dbl in memory.get("debriefs", []):
+            if _dbl.get("outcome", "").upper() != "LOSS":
+                continue
+            _blc  = _dbl.get("coin", "").upper()
+            _bldr = _dbl.get("direction", "").upper()
+            _blts = _dbl.get("debrief_at", "")
+            _blkey = f"{_blc}_{_bldr}"
+            if _blts > _last_bl_loss.get(_blkey, ""):
+                _last_bl_loss[_blkey] = _blts
+
+        def _check_aged_out(coin_up, direction_up):
+            """True if most recent LOSS for this coin+direction is >_EXPIRY_DAYS days old."""
+            _bkey = f"{coin_up}_{direction_up}"
+            _lts  = _last_bl_loss.get(_bkey, "")
+            if not _lts:
+                return False   # no LOSS at all — shouldn't happen but be safe
+            try:
+                _ldt = datetime.strptime(_lts[:16], "%Y-%m-%d %H:%M").replace(tzinfo=BKK)
+                return (_now_bl_dt - _ldt).days >= _EXPIRY_DAYS
+            except Exception:
+                return False
+
+        _aged_out_longs  = []
+        _aged_out_shorts = []
+        _blocked_since_out: dict = {}
+
+        _final_blocked_longs = []
+        for _blc in _auto_blocked_longs:
+            if _check_aged_out(_blc, "LONG"):
+                _aged_out_longs.append(_blc)
+            else:
+                _final_blocked_longs.append(_blc)
+                _bskey = f"{_blc}_LONG"
+                _blocked_since_out[_bskey] = _existing_since.get(_bskey, bkk_now_str())
+
+        _final_blocked_shorts = []
+        for _blc in _auto_blocked_shorts:
+            if _check_aged_out(_blc, "SHORT"):
+                _aged_out_shorts.append(_blc)
+            else:
+                _final_blocked_shorts.append(_blc)
+                _bskey = f"{_blc}_SHORT"
+                _blocked_since_out[_bskey] = _existing_since.get(_bskey, bkk_now_str())
+
+        _auto_blocked_longs  = _final_blocked_longs
+        _auto_blocked_shorts = _final_blocked_shorts
+
+        if _aged_out_longs or _aged_out_shorts:
+            for _agc in _aged_out_longs:
+                log(f"   ⏳ AUTO-BLOCKLIST EXPIRED (LONG): {_agc} — no LOSS in >{_EXPIRY_DAYS}d")
+            for _agc in _aged_out_shorts:
+                log(f"   ⏳ AUTO-BLOCKLIST EXPIRED (SHORT): {_agc} — no LOSS in >{_EXPIRY_DAYS}d")
+            _al_parts = []
+            if _aged_out_longs:  _al_parts.append(f"LONGS [{', '.join(_aged_out_longs)}]")
+            if _aged_out_shorts: _al_parts.append(f"SHORTS [{', '.join(_aged_out_shorts)}]")
+            try:
+                send_telegram(
+                    f"⏳ <b>AUTO-BLOCKLIST EXPIRED</b> — {' | '.join(_al_parts)}\n"
+                    f"No loss in >{_EXPIRY_DAYS} days. Coin(s) re-allowed — monitor first trades."
+                )
+            except Exception:
+                pass
+        # ── End aging block ──────────────────────────────────────────────────
+
         _bl_data = {
             "blocked_longs":  _auto_blocked_longs,
             "blocked_shorts": _auto_blocked_shorts,
+            "blocked_since":  _blocked_since_out,
             "updated_at":     bkk_now_str(),
-            "note": "Auto-generated by debrief — ≥3 losses + 0 wins per direction",
+            "note": "Auto-generated by debrief — ≥3 losses + 0 wins per direction; 7-day expiry",
         }
         with open(_bl_path, "w", encoding="utf-8") as _blf:
             json.dump(_bl_data, _blf, indent=2)
