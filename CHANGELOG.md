@@ -1,5 +1,32 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.17 — 2026-06-30 — MTF chart pattern analysis: real 4H+1H OHLCV candles injected into signals
+
+### `whale_stream_bot.py`
+- **NEW: Multi-timeframe (MTF) chart data** — 4 new functions (`get_klines`, `_mtf_trend_label`,
+  `compute_coin_mtf_summary`, `fetch_mtf_block`) fetch real Bybit OHLCV candles (4H×20 + 1H×30)
+  for the top 20 coins by volume, compute BULL/BEAR/SIDEWAYS trend labels, HH+HL/LH+LL pattern
+  hints, and range position (TOP/MID/BOT). No auth required — uses public `/v5/market/kline`.
+- **NEW: MTF_BIAS RULE in WHALE_STREAM_PROMPT** — Claude is required to include `mtf_bias` in
+  every signal JSON (e.g. `"4H_BULL_1H_PULLBACK"`). IDEAL LONG = 4H:BULL + 1H pulling back.
+  IDEAL SHORT = 4H:BEAR + 1H bouncing up. 4H_SIDEWAYS signals get confidence penalty.
+- **NEW: MTF_BLOCK injected into DYNAMIC_DATA_TEMPLATE** — between COIN_PERFORMANCE and
+  SIGNAL_GRAVEYARD sections.
+- **NEW: `mtf_block_text` parameter** added to `analyze_with_claude()` — passed to both
+  Batch 1 and Batch 2 calls.
+- **NEW: Step 2b in main()** — fetches MTF block (~10-15s) after coin list, before Claude call.
+  Fails gracefully with empty string if Bybit API unavailable.
+- **NEW: `mtf_bias` combined into pattern column** — Google Sheets column J shows
+  `"Bull flag + RS vs BTC [4H_BULL_1H_PULLBACK]"` for easy Strategist reading.
+- **Version bump**: v47.16 → v47.17
+
+### `whale_stream_strategist.py`
+- **NEW: VETO rule 6** — Pattern contains `4H_SIDEWAYS` → automatic VETO. 4H sideways = structural
+  indecision with no edge. Exception: ≥97% confidence + explicit range breakout catalyst → REDUCE_SIZE.
+- **Version bump**: v47.14 → v47.17
+
+---
+
 ## v47.16 — 2026-06-30 — TP auto-placement: monitor places TP orders after entry fills
 
 ### `whale_stream_monitor.py`

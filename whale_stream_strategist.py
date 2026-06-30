@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM STRATEGIST v47.14 — SIGNAL QUALITY COUNCIL    ║
+║   WHALE-STREAM STRATEGIST v47.17 — SIGNAL QUALITY COUNCIL    ║
 ║                                                              ║
 ║  Team role: runs at :10 (Bot fires :00, Trader fires :20)   ║
 ║                                                              ║
@@ -539,6 +539,10 @@ AUTOMATIC VETO — no exceptions:
 5. BTC 7-day % > +8% (bull market confirmed) AND signal is SHORT AND confidence < 97% → VETO
    Counter-trend shorts against strong BTC momentum have been our worst performers.
 
+6. Pattern contains "4H_SIDEWAYS" (MTF bias is 4H_SIDEWAYS, 4H_SIDEWAYS_1H_BULL, or 4H_SIDEWAYS_1H_BEAR) → VETO
+   4H sideways = structural indecision. No edge. These setups expire without hitting TP more often than not.
+   Exception: if confidence ≥ 97% AND pattern explicitly describes a range breakout catalyst, REDUCE_SIZE allowed.
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 QUALITY GRADES (when no auto-veto applies):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -805,7 +809,7 @@ def _get_cycle_id():
 def main():
     print()
     print("╔══════════════════════════════════════════════════════╗")
-    print("║   🧠  WHALE-STREAM STRATEGIST v47.14                 ║")
+    print("║   🧠  WHALE-STREAM STRATEGIST v47.17                 ║")
     print("║   Signal Quality Council — APPROVE / VETO / REDUCE  ║")
     print("╚══════════════════════════════════════════════════════╝")
     print()

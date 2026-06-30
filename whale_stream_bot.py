@@ -251,7 +251,7 @@ except ImportError:
     MISSION_PROMPT = ""
     def print_mission_banner(): pass
 
-WHALE_STREAM_PROMPT = """WHALE-STREAM v47.10 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
+WHALE_STREAM_PROMPT = """WHALE-STREAM v47.17 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
 ROLE:
 You are an Institutional Multi-Agent Trading Committee composed of:
 • Market Regime Analyst • Smart Money Concepts Specialist • Quantitative Momentum Analyst • Liquidity & Stop-Hunt Analyst • Wyckoff Structure Analyst • Relative Strength Analyst • Breakout Probability Engine • Reversal Probability Engine • Continuation Probability Engine • Risk Management Committee
@@ -490,6 +490,35 @@ TIER 1 OUTPUT REQUIREMENT: Any signal scored 92%+ MUST include a valid TP3 value
   Calculate TP3 as the next major resistance or measured-move target above TP2 (typically 8–15% above entry).
   If you cannot identify a credible TP3, downgrade the signal to TIER 2 (90–91%) rather than omit it.
 ════════════════════════════════════════════════════════════
+════════════════════════════════════════════════════════════
+MTF BIAS RULE (v47.17 — Real Bybit OHLCV candle data supplied in your analysis context):
+Your DATA section includes a MULTI-TIMEFRAME block with 4H and 1H trend labels computed from actual Bybit candles.
+Use this to validate every signal before outputting it:
+
+MANDATORY MTF RULES:
+• Every signal MUST include "mtf_bias" in its JSON output (e.g. "4H_BULL_1H_PULLBACK")
+• IDEAL LONG setup:  4H:BULL + 1H pulling back (HH+HL pattern on 4H, price at MID or BOT of range)
+• IDEAL SHORT setup: 4H:BEAR + 1H bouncing up (LH+LL pattern on 4H, price at MID or TOP of range)
+• STRONG LONG:  4H:BULL + 1H:BULL (already in motion — use tight entry near current price, widen TP targets)
+• STRONG SHORT: 4H:BEAR + 1H:BEAR (already in motion — same principle)
+• SIDEWAYS 4H → structural indecision: REDUCE confidence by 5–8% or replace with a STAY OUT slot
+• DO NOT output a LONG if 4H shows BEAR unless it is a capitulation reversal with ≥95% confidence
+• DO NOT output a SHORT if 4H shows BULL unless it is a distribution top with ≥97% confidence
+
+MTF BIAS FORMAT (use exactly one of these in "mtf_bias"):
+  "4H_BULL_1H_BULL"        — both timeframes trending up (strong, can be extended)
+  "4H_BULL_1H_PULLBACK"    — 4H up-trend + 1H pulling back = IDEAL LONG entry
+  "4H_BULL_1H_SIDEWAYS"    — 4H up-trend + 1H ranging = acceptable LONG
+  "4H_BEAR_1H_BEAR"        — both timeframes trending down (strong SHORT, can be extended)
+  "4H_BEAR_1H_BOUNCE"      — 4H down-trend + 1H bouncing up = IDEAL SHORT entry
+  "4H_BEAR_1H_SIDEWAYS"    — 4H down-trend + 1H ranging = acceptable SHORT
+  "4H_SIDEWAYS_1H_BULL"    — 4H ranging + 1H up = weaker LONG, lower confidence
+  "4H_SIDEWAYS_1H_BEAR"    — 4H ranging + 1H down = weaker SHORT, lower confidence
+  "4H_SIDEWAYS"            — full range / indecision = prefer STAY OUT
+  "MTF_UNKNOWN"            — coin not in MTF block (data unavailable) — apply standard analysis
+
+If the coin has no MTF data in the block, use "MTF_UNKNOWN" and rely on the market data table alone.
+════════════════════════════════════════════════════════════
 ENTRY RULE (LONGS): Entry MUST be Retest Zone / Liquidity Sweep Reclaim / Support-Resistance Reclaim / Breakout Retest. Never chase current price.
 ENTRY ZONE WIDTH RULE (CRITICAL — REDUCES SIGNAL EXPIRY): Historical data shows 54% of LONG signals expire because price never pulls back to the entry zone within 72 hours.
   • Set entry zone TOP at 1–3% below current price OR at current price if BTC momentum is positive (BTC 24h% > +1%) or funding rate is strongly negative (< −0.03%).
@@ -540,7 +569,7 @@ OUTPUT FORMAT:
 ⚡ STEP 1 — OUTPUT THE JSON BLOCK FIRST (MANDATORY, BEFORE ANYTHING ELSE):
 
 ##JSON_START##
-{"verdict":"GO","regime":"Bull Consolidation","btc_bias":"BULLISH","eth_bias":"BULLISH","risk_env":"RISK-ON","longs":[{"rank":1,"coin":"ZEC","conf":"94%","score":"94.3","entry":"$375-$390","sl":"$362","tp1":"$425","tp2":"$455","tp3":"$490","tp4":"$540","pattern":"Stage 2 breakout retest + negative funding"},{"rank":2,"coin":"ADA","conf":"92%","score":"92.0","entry":"$0.152-$0.158","sl":"$0.147","tp1":"$0.172","tp2":"$0.185","tp3":"$0.200","tp4":"$0.220","pattern":"Bull flag + RS vs BTC"},{"rank":3,"coin":"IOTA","conf":"90%","score":"90.1","entry":"$0.0420-$0.0440","sl":"$0.0402","tp1":"$0.0500","tp2":"$0.0560","tp3":"$0.0620","tp4":"$0.0700","pattern":"Support reclaim"}],"shorts":[{"rank":1,"coin":"FF","conf":"96%","score":"96.0","entry":"$0.100-$0.104","sl":"$0.109","tp1":"$0.089","tp2":"$0.079","tp3":"$0.068","tp4":"$0.055","pattern":"Stage 5 distribution + RS failure"},{"rank":2,"coin":"H","conf":"95%","score":"95.2","entry":"$0.0021-$0.0022","sl":"$0.0024","tp1":"$0.0018","tp2":"$0.0016","tp3":"$0.0014","tp4":"$0.0012","pattern":"Stage 5 distribution failure + declining volume"}]}
+{"verdict":"GO","regime":"Bull Consolidation","btc_bias":"BULLISH","eth_bias":"BULLISH","risk_env":"RISK-ON","longs":[{"rank":1,"coin":"ZEC","conf":"94%","score":"94.3","entry":"$375-$390","sl":"$362","tp1":"$425","tp2":"$455","tp3":"$490","tp4":"$540","pattern":"Stage 2 breakout retest + negative funding","mtf_bias":"4H_BULL_1H_PULLBACK"},{"rank":2,"coin":"ADA","conf":"92%","score":"92.0","entry":"$0.152-$0.158","sl":"$0.147","tp1":"$0.172","tp2":"$0.185","tp3":"$0.200","tp4":"$0.220","pattern":"Bull flag + RS vs BTC","mtf_bias":"4H_BULL_1H_SIDEWAYS"},{"rank":3,"coin":"IOTA","conf":"90%","score":"90.1","entry":"$0.0420-$0.0440","sl":"$0.0402","tp1":"$0.0500","tp2":"$0.0560","tp3":"$0.0620","tp4":"$0.0700","pattern":"Support reclaim","mtf_bias":"4H_SIDEWAYS_1H_BULL"}],"shorts":[{"rank":1,"coin":"FF","conf":"96%","score":"96.0","entry":"$0.100-$0.104","sl":"$0.109","tp1":"$0.089","tp2":"$0.079","tp3":"$0.068","tp4":"$0.055","pattern":"Stage 5 distribution + RS failure","mtf_bias":"4H_BEAR_1H_BOUNCE"},{"rank":2,"coin":"H","conf":"95%","score":"95.2","entry":"$0.0021-$0.0022","sl":"$0.0024","tp1":"$0.0018","tp2":"$0.0016","tp3":"$0.0014","tp4":"$0.0012","pattern":"Stage 5 distribution failure + declining volume","mtf_bias":"4H_BEAR_1H_BEAR"}]}
 ##JSON_END##
 
 For STAY OUT verdict use:
@@ -700,6 +729,7 @@ BTC 24H MOMENTUM GATE (Short-Side Guard):
 ════════════════════════════════════════════════════════════
 {COIN_PERFORMANCE}
 
+{MTF_BLOCK}
 ════════════════════════════════════════════════════════════
 SIGNAL GRAVEYARD — RECENT TRADE OUTCOMES (Self-Learning Feedback):
 {SIGNAL_GRAVEYARD}
@@ -1430,6 +1460,164 @@ def fetch_bybit_realtime():
         return {}
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# MTF (Multi-Timeframe) CHART DATA FUNCTIONS  — added v47.17
+# Fetches real Bybit OHLCV candles and computes compact trend summaries.
+# No API key required — all calls use the public market/kline endpoint.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def get_klines(symbol, interval, limit=20):
+    """
+    Fetch OHLCV klines from Bybit public API (no auth required).
+    symbol   : e.g. "BTCUSDT"
+    interval : "60" (1H) | "240" (4H) | "D" (daily)
+    Returns list of dicts [{open, high, low, close, volume}], oldest-first.
+    Returns [] on any error — callers must handle empty gracefully.
+    """
+    url = "https://api.bybit.com/v5/market/kline"
+    try:
+        resp = _SESSION.get(url, params={
+            "category": "linear",   # USDT perpetual — matches what we trade
+            "symbol":   symbol,
+            "interval": interval,
+            "limit":    limit,
+        }, timeout=8)
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get("retCode") != 0:
+            return []
+        # Bybit returns newest-first; reverse to oldest-first for analysis
+        raw = list(reversed(data.get("result", {}).get("list", [])))
+        candles = []
+        for r in raw:
+            try:
+                candles.append({
+                    "open":   float(r[1]),
+                    "high":   float(r[2]),
+                    "low":    float(r[3]),
+                    "close":  float(r[4]),
+                    "volume": float(r[5]),
+                })
+            except (IndexError, ValueError, TypeError):
+                pass
+        return candles
+    except Exception:
+        return []
+
+
+def _mtf_trend_label(candles, sma_period=10):
+    """
+    Compute trend label + pattern from a candle list.
+    Returns (label, pct_above_sma, pattern_hint).
+    label: "BULL" | "BEAR" | "SIDEWAYS" | "UNKNOWN"
+    pct_above_sma: int 0-100
+    pattern_hint: "HH+HL" | "LH+LL" | "CHOPPY" | "RANGE"
+    """
+    if len(candles) < sma_period + 2:
+        return "UNKNOWN", 50, "RANGE"
+
+    closes = [c["close"] for c in candles]
+    sma    = sum(closes[-sma_period:]) / sma_period
+    above  = sum(1 for c in closes[-sma_period:] if c > sma)
+    pct    = int(above / sma_period * 100)
+    current = closes[-1]
+
+    # Structure: compare recent highs/lows vs 3 candles earlier
+    highs = [c["high"] for c in candles[-6:]]
+    lows  = [c["low"]  for c in candles[-6:]]
+    if len(highs) >= 4:
+        hh = highs[-1] > highs[-3]
+        hl = lows[-1]  > lows[-3]
+        lh = highs[-1] < highs[-3]
+        ll = lows[-1]  < lows[-3]
+        if   hh and hl:   pattern = "HH+HL"
+        elif lh and ll:   pattern = "LH+LL"
+        elif hh and ll:   pattern = "CHOPPY"
+        else:             pattern = "RANGE"
+    else:
+        pattern = "RANGE"
+
+    # Trend decision: majority of recent closes vs SMA + current price side
+    if pct >= 65 and current > sma:
+        label = "BULL"
+    elif pct <= 35 and current < sma:
+        label = "BEAR"
+    else:
+        label = "SIDEWAYS"
+
+    return label, pct, pattern
+
+
+def compute_coin_mtf_summary(symbol):
+    """
+    Fetch 4H×20 + 1H×30 candles for one coin and return a compact 1-line string.
+    symbol: coin ticker (e.g. "BTC") — USDT is appended automatically.
+    Returns None if Bybit data is unavailable for this coin.
+    """
+    bybit_sym = f"{symbol}USDT"
+    c4h = get_klines(bybit_sym, "240", 20)   # 4H × 20 candles = last 80h
+    c1h = get_klines(bybit_sym,  "60", 30)   # 1H × 30 candles = last 30h
+    if not c4h or not c1h:
+        return None
+
+    label_4h, pct_4h, pat_4h = _mtf_trend_label(c4h, sma_period=10)
+    label_1h, pct_1h, pat_1h = _mtf_trend_label(c1h, sma_period=15)
+
+    # 4H range position — where is close within the 20-candle high-low range?
+    h4_high  = max(c["high"]  for c in c4h)
+    h4_low   = min(c["low"]   for c in c4h)
+    h4_close = c4h[-1]["close"]
+    rng      = h4_high - h4_low
+    pct_pos  = (h4_close - h4_low) / rng * 100 if rng > 0 else 50
+    pos_str  = "TOP" if pct_pos >= 70 else "MID" if pct_pos >= 35 else "BOT"
+
+    return (
+        f"4H:{label_4h}({pct_4h}%)[{pat_4h}] "
+        f"1H:{label_1h}({pct_1h}%)[{pat_1h}] "
+        f"RngPos:{pos_str}({pct_pos:.0f}%)"
+    )
+
+
+def fetch_mtf_block(all_coins, n=20):
+    """
+    Select top N coins by 24h Bybit volume, fetch MTF summary for each,
+    and return a formatted text block for injection into the Claude prompt.
+    Fails gracefully — returns empty string if all fetches fail.
+    Takes ~10-15s for 20 coins (throttled to avoid Bybit rate limits).
+    """
+    # Top N by 24h USDT volume (already enriched with Bybit data by fetch_top_300_coins)
+    top = sorted(all_coins, key=lambda c: c.get("total_volume", 0), reverse=True)[:n]
+
+    lines = [
+        "════════════════════════════════════════════════════════════",
+        f"MULTI-TIMEFRAME (MTF) CHART DATA — TOP {n} COINS BY VOLUME (Real Bybit Candles)",
+        "Use this data to validate signal direction before scoring. Each line shows:",
+        "  4H-trend(SMA%) [pattern] | 1H-trend(SMA%) [pattern] | 4H-range position",
+        "Patterns: HH+HL=uptrend  LH+LL=downtrend  RANGE=consolidation  CHOPPY=mixed",
+        "IDEAL LONG : 4H:BULL + 1H pulling back (HH+HL pattern, BOT/MID range)",
+        "IDEAL SHORT: 4H:BEAR + 1H bouncing up  (LH+LL pattern, MID/TOP range)",
+        "SIDEWAYS 4H: structural indecision — prefer lower confidence or STAY OUT",
+        "────────────────────────────────────────────────────────────",
+    ]
+
+    fetched = 0
+    for coin in top:
+        symbol = (coin.get("symbol") or "").upper()
+        if not symbol:
+            continue
+        summary = compute_coin_mtf_summary(symbol)
+        if summary:
+            lines.append(f"  {symbol:<10} {summary}")
+            fetched += 1
+        else:
+            lines.append(f"  {symbol:<10} MTF: unavailable (not a USDT perp or API timeout)")
+        time.sleep(0.06)   # 60ms throttle — Bybit kline endpoint allows ~30 req/s
+
+    lines.append("════════════════════════════════════════════════════════════")
+    print(f"   ✓ MTF block: {fetched}/{len(top)} coins fetched successfully")
+    return "\n".join(lines) if fetched > 0 else ""
+
+
 def fetch_top_300_coins():
     """
     Hybrid data fetch (v45.1 — top 200 coins, down from 300):
@@ -1573,7 +1761,7 @@ def format_market_data(all_coins):
     return batches   # list of 2 strings — caller makes 2 separate Claude calls
 
 
-def analyze_with_claude(market_data_text, graveyard_text="", dominance_text="", fear_greed_text="", btc_move_text="", btc_24h_text="", batch_note="", coin_perf_text=""):
+def analyze_with_claude(market_data_text, graveyard_text="", dominance_text="", fear_greed_text="", btc_move_text="", btc_24h_text="", batch_note="", coin_perf_text="", mtf_block_text=""):
     """
     Send market data to Claude using WHALE-STREAM prompt with prompt caching.
 
@@ -1597,6 +1785,7 @@ def analyze_with_claude(market_data_text, graveyard_text="", dominance_text="", 
     print(f"   😱 F&G Gate     : {'injected' if fear_greed_text else 'unavailable'}")
     print(f"   ⚡ BTC Move Gate: {'injected' if btc_move_text else 'unavailable'}")
     print(f"   📈 BTC 24h Gate : {'injected' if btc_24h_text else 'unavailable'}")
+    print(f"   📉 MTF Block    : {'injected' if mtf_block_text else 'unavailable (skipped)'}")
 
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
@@ -1607,6 +1796,7 @@ def analyze_with_claude(market_data_text, graveyard_text="", dominance_text="", 
     btc_move_block   = btc_move_text   if btc_move_text   else "BTC 30-min move: unavailable — proceed with standard caution."
     btc_24h_block    = btc_24h_text    if btc_24h_text    else "BTC 24h momentum: unavailable — apply standard SHORT thresholds (≥95%, max 3 SHORTs)."
     coin_perf_block  = coin_perf_text  if coin_perf_text  else "LONG COIN PERFORMANCE: insufficient data (no resolved LONGs yet)"
+    mtf_block        = mtf_block_text  if mtf_block_text  else ""
 
     # Build dynamic user message (gates + graveyard + market data — changes every run)
     user_content = DYNAMIC_DATA_TEMPLATE.format(
@@ -1615,6 +1805,7 @@ def analyze_with_claude(market_data_text, graveyard_text="", dominance_text="", 
         BTC_MOVE_GATE      = btc_move_block,
         BTC_24H_GATE       = btc_24h_block,
         COIN_PERFORMANCE   = coin_perf_block,
+        MTF_BLOCK          = mtf_block,
         SIGNAL_GRAVEYARD   = graveyard_block,
         MARKET_DATA        = market_data_text,
         BATCH_NOTE         = batch_note,
@@ -2192,6 +2383,14 @@ def log_to_google_sheets(data, bkk_time):
                 continue  # do NOT write as OPEN or INVALID
             # ────────────────────────────────────────────────────────────
 
+            # Combine pattern + mtf_bias into the pattern field (no new column needed)
+            _pattern_raw  = s.get("pattern", "")
+            _mtf_bias_raw = s.get("mtf_bias", "")
+            _pattern_full = (
+                f"{_pattern_raw} [{_mtf_bias_raw}]"
+                if _mtf_bias_raw and _mtf_bias_raw != "MTF_UNKNOWN"
+                else _pattern_raw
+            )
             rows.append([
                 coin,
                 signal_emoji,
@@ -2202,7 +2401,7 @@ def log_to_google_sheets(data, bkk_time):
                 s.get("tp2", ""),
                 s.get("tp3", ""),
                 s.get("tp4", ""),
-                s.get("pattern", ""),
+                _pattern_full,
                 timestamp,
                 "OPEN",  # Status  — tracker will update this
                 "",      # Entry Price (midpoint, filled by tracker)
@@ -2275,7 +2474,7 @@ def main():
 
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🐳  WHALE-STREAM v47.10  — AUTO BOT STARTING    ║")
+    print("║   🐳  WHALE-STREAM v47.17  — AUTO BOT STARTING    ║")
     print("╚══════════════════════════════════════════════════╝")
     # Check conservative flag early so we can show it in the startup banner
     _short_conservative_early = os.path.exists(os.path.join(SCRIPT_DIR, "short_conservative.flag"))
@@ -2350,6 +2549,11 @@ def main():
         _mark_done("sigbot", details={"longs": [], "shorts": [], "error": "fetch_failed"})
         return
 
+    # ── Step 2b: Fetch MTF chart data (v47.17 — real OHLCV candles) ─────────
+    # Top 20 coins by volume; ~10-15s; fails gracefully with empty string
+    print("📉 Fetching MTF chart data (4H+1H candles for top 20 coins)...")
+    mtf_block = fetch_mtf_block(all_coins, n=20)
+
     # ── Step 3: Format into WHALE-STREAM table format ───────
     print("🔧 Formatting market data into 2 batches (100 coins each)...")
     batches = format_market_data(all_coins)   # list of 2 strings
@@ -2373,7 +2577,7 @@ def main():
             graveyard_text=graveyard, dominance_text=dominance,
             fear_greed_text=fear_greed, btc_move_text=btc_move,
             btc_24h_text=btc_24h, batch_note=_STANDALONE,
-            coin_perf_text=coin_perf,
+            coin_perf_text=coin_perf, mtf_block_text=mtf_block,
         )
     except Exception as e:
         print(f"✗ Claude analysis failed (batch 1): {e}")
@@ -2389,7 +2593,7 @@ def main():
                 graveyard_text=graveyard, dominance_text=dominance,
                 fear_greed_text=fear_greed, btc_move_text=btc_move,
                 btc_24h_text=btc_24h, batch_note=_STANDALONE,
-                coin_perf_text=coin_perf,
+                coin_perf_text=coin_perf, mtf_block_text=mtf_block,
             )
         except Exception as e:
             print(f"⚠ Claude analysis failed (batch 2): {e} — continuing with batch 1 only")

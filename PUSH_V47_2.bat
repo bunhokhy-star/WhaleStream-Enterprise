@@ -1,8 +1,8 @@
 @echo off
 cd /d C:\Users\MAX\WhaleStream
 git add -A
-git commit -m "v47.16 — monitor.py: auto-place 4x25% TP reduce-only orders when new position detected (fixes 'current position is zero' TP failures after limit entry fills)"
+git commit -m "v47.17 — MTF chart analysis: real 4H+1H OHLCV candles injected into Claude signals; VETO rule 6 for 4H_SIDEWAYS bias; mtf_bias field in every signal JSON"
 git push
 echo.
-echo Done — v47.16 pushed to GitHub.
+echo Done — v47.17 pushed to GitHub.
 pause
