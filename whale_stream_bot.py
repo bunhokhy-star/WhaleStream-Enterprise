@@ -1201,6 +1201,63 @@ def fetch_signal_graveyard():
             pass   # non-critical — graveyard still works without lessons
         # ── end AVOID lessons ─────────────────────────────────────────────────
 
+        # ── Option B (v47.25): Pattern WR injection ───────────────────────────
+        # Compute per-pattern WR from debriefs in pattern_memory.json.
+        # Inject top 3 winners (WR≥65%, ≥3 trades) and worst 3 losers (WR≤40%, ≥3 trades).
+        try:
+            _mem_path4 = os.path.join(os.path.dirname(__file__), "pattern_memory.json")
+            if os.path.exists(_mem_path4):
+                with open(_mem_path4, "r", encoding="utf-8") as _mf4:
+                    _mem4 = json.load(_mf4)
+                _pat_stats: dict = {}  # pattern → {wins, losses}
+                for _db in _mem4.get("debriefs", []):
+                    _pat = _db.get("pattern", "").strip()
+                    if not _pat or _pat in ("-", "N/A", "UNKNOWN", ""):
+                        continue
+                    # Normalise: take first 60 chars to avoid runaway pattern text
+                    _pat = _pat[:60]
+                    if _pat not in _pat_stats:
+                        _pat_stats[_pat] = {"wins": 0, "losses": 0}
+                    _outcome = _db.get("outcome", "").upper()
+                    if _outcome == "WIN":
+                        _pat_stats[_pat]["wins"] += 1
+                    elif _outcome == "LOSS":
+                        _pat_stats[_pat]["losses"] += 1
+
+                _pat_lines = []
+                _good_pats = sorted(
+                    [(_p, _v) for _p, _v in _pat_stats.items()
+                     if _v["wins"] + _v["losses"] >= 3
+                     and _v["wins"] / (_v["wins"] + _v["losses"]) >= 0.65],
+                    key=lambda x: x[1]["wins"] / (x[1]["wins"] + x[1]["losses"]),
+                    reverse=True,
+                )[:3]
+                _bad_pats = sorted(
+                    [(_p, _v) for _p, _v in _pat_stats.items()
+                     if _v["wins"] + _v["losses"] >= 3
+                     and _v["wins"] / (_v["wins"] + _v["losses"]) <= 0.40],
+                    key=lambda x: x[1]["wins"] / (x[1]["wins"] + x[1]["losses"]),
+                )[:3]
+
+                if _good_pats or _bad_pats:
+                    _pat_lines.append("\n\nPATTERN WIN RATES (from live debrief history):")
+                    if _good_pats:
+                        _pat_lines.append("  ✅ PROVEN WINNERS — prioritise signals matching these patterns:")
+                        for _pp, _pv in _good_pats:
+                            _pn = _pv["wins"] + _pv["losses"]
+                            _pwr = 100 * _pv["wins"] / _pn
+                            _pat_lines.append(f"    [{_pwr:.0f}% WR / {_pn} trades] {_pp}")
+                    if _bad_pats:
+                        _pat_lines.append("  🚫 CHRONIC LOSERS — avoid signals that match these patterns:")
+                        for _pp, _pv in _bad_pats:
+                            _pn = _pv["wins"] + _pv["losses"]
+                            _pwr = 100 * _pv["wins"] / _pn
+                            _pat_lines.append(f"    [{_pwr:.0f}% WR / {_pn} trades] {_pp}")
+                    graveyard_text += "\n".join(_pat_lines)
+        except Exception:
+            pass   # non-critical
+        # ── end Pattern WR injection ──────────────────────────────────────────
+
         print(f"   ✓ Signal Graveyard: {len(recent)} trades (overall {win_rate:.0f}% WR | long {long_wr:.0f}% | short {short_wr:.0f}%)")
         if blacklisted:
             print(f"   🚫 Short blacklist: {', '.join(blacklisted)}")

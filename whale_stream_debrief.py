@@ -310,6 +310,63 @@ def save_memory(memory):
     except Exception as _at_e:
         log(f"   ⚠ Auto-tune write failed (non-critical): {_at_e}")
 
+    # Auto-write AVOID lessons for chronic pattern+time loss combos (v47.25)
+    # Logic: for each (coin, direction, pattern, 4h-slot) combo, if ≥3 losses
+    # AND WR < 40%, write an [AVOID] lesson into coin_lessons if not already present.
+    try:
+        _combo_stats: dict = {}   # (coin, direction, pat_short, slot) → {wins, losses}
+        _ts_fmt = "%Y-%m-%d %H:%M"
+        for _db in memory.get("debriefs", []):
+            _c  = _db.get("coin", "")
+            _dr = _db.get("direction", "")
+            _pa = _db.get("pattern", "").strip()[:50]
+            _ts = _db.get("ts", "").replace(" BKK", "")
+            if not (_c and _dr and _pa and _ts):
+                continue
+            try:
+                _dt   = __import__("datetime").datetime.strptime(_ts[:16], _ts_fmt)
+                _slot = (_dt.hour // 4) * 4
+            except Exception:
+                continue
+            _key = (_c, _dr, _pa, _slot)
+            if _key not in _combo_stats:
+                _combo_stats[_key] = {"wins": 0, "losses": 0}
+            _out = _db.get("outcome", "").upper()
+            if _out == "WIN":
+                _combo_stats[_key]["wins"] += 1
+            elif _out == "LOSS":
+                _combo_stats[_key]["losses"] += 1
+
+        _new_avoid_count = 0
+        _cl = memory.get("coin_lessons", {})
+        for (_c, _dr, _pa, _slot), _cv in _combo_stats.items():
+            _tot = _cv["wins"] + _cv["losses"]
+            if _cv["losses"] < 3 or _tot < 3:
+                continue
+            _wr = _cv["wins"] / _tot
+            if _wr >= 0.40:
+                continue
+            # Build the lesson text
+            _lesson = (
+                f"[AVOID] {_pa} at {_slot:02d}:00 BKK — "
+                f"{_cv['losses']}L/{_tot} = {_wr*100:.0f}% WR (chronic loss combo)"
+            )
+            # Check not already present
+            _cl.setdefault(_c, {}).setdefault(_dr, [])
+            _existing = _cl[_c][_dr]
+            _already  = any(_pa[:30] in ex and f"{_slot:02d}:00" in ex for ex in _existing)
+            if not _already:
+                _existing.append(_lesson)
+                _cl[_c][_dr] = _existing[-5:]   # keep last 5 per coin+direction
+                _new_avoid_count += 1
+                log(f"   🚫 AUTO-AVOID: {_c} {_dr} — {_pa[:40]} @ {_slot:02d}:00 BKK "
+                    f"({_cv['losses']}L/{_tot}, {_wr*100:.0f}% WR)")
+        memory["coin_lessons"] = _cl
+        if _new_avoid_count:
+            log(f"   🚫 Pattern+time AVOID lessons written: {_new_avoid_count} new combo(s)")
+    except Exception as _av_e:
+        log(f"   ⚠ Pattern+time AVOID write failed (non-critical): {_av_e}")
+
     try:
         _tmp = MEMORY_FILE + ".tmp"
         with open(_tmp, "w", encoding="utf-8") as f:

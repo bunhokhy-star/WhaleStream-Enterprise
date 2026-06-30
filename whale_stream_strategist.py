@@ -561,6 +561,30 @@ LONG star coins: AERO (100% WR / 8 trades), TIA (100% WR / 4 trades), JUP (75% W
 SHORT star patterns: Stage 5 distribution collapse (100%), Stage 4-5 distribution (90%)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SIGNAL SCORE CALIBRATION (v47.25):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Each signal has a multi-dimension quality score (0–10) computed before you see it.
+It measures: pattern strength, confidence level, BTC regime alignment, volatility,
+volume, and this coin's own track record. Use it to calibrate your grade:
+
+  ELITE   (9-10) → lean APPROVE unless a hard auto-veto fires. Grade A or A+.
+  GOOD    (7-8)  → normal evaluation. Grade A/B based on history + pattern quality.
+  MARGINAL (5-6) → lean REDUCE_SIZE. Only APPROVE if pattern AND history are both strong.
+                   When in doubt between APPROVE and REDUCE_SIZE → choose REDUCE_SIZE.
+
+The score appears under each signal as "Signal Score: X/10 [tier]".
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+AVOID LESSONS — NON-NEGOTIABLE (v47.25):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Any lesson tagged [AVOID] in the PATTERN MEMORY section was written by the Debrief
+Agent after a confirmed loss on that coin+direction. These are institutional memory.
+If a current signal matches a coin+direction with an [AVOID] lesson:
+  • Grade C minimum → REDUCE_SIZE unless score is ELITE (9-10) AND pattern is completely different
+  • Grade D → VETO if the [AVOID] lesson directly describes the current setup
+Do NOT repeat the same mistake twice. The system learns so we don't lose twice.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 OUTPUT FORMAT (JSON only — no prose, no explanation outside the JSON):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {
@@ -649,6 +673,20 @@ def build_strategist_user_message(signals, history, positions, balance, drawdown
 
         if relevant_lessons or avoid_patterns or prefer_patterns:
             lines.append("\n=== PATTERN MEMORY (lessons from recent resolved trades) ===")
+            # ── Surface AVOID lessons first and separately (v47.25) ──────────
+            _avoid_block = []
+            for coin, directions in relevant_lessons.items():
+                for direction, lesson_list in directions.items():
+                    if any(s["coin"] == coin and s["direction"] == direction for s in signals):
+                        _avoids = [l for l in lesson_list if l.startswith("[AVOID]")]
+                        for _av in _avoids[-2:]:
+                            _avoid_block.append(
+                                f"  ⛔ {coin} {direction}: {_av[len('[AVOID]'):].strip()}"
+                            )
+            if _avoid_block:
+                lines.append("\n  ⚠️  ACTIVE AVOID LESSONS (from Debrief — see AVOID LESSONS rule above):")
+                lines.extend(_avoid_block)
+            # ── All lessons (including non-AVOID context) ─────────────────────
             for coin, directions in relevant_lessons.items():
                 for direction, lesson_list in directions.items():
                     # Only show if this coin is actually in a matching direction signal

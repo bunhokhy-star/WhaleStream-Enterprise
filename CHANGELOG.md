@@ -1,5 +1,18 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.25 — 2026-06-30 — Strategist score calibration + AVOID prominence; pattern WR in bot; debrief pattern+time AVOID auto-writer
+
+### `whale_stream_strategist.py`
+- **NEW: SIGNAL SCORE CALIBRATION section in system prompt** — explicit tier-based decision guidance: ELITE (9-10) → lean APPROVE, GOOD (7-8) → normal evaluation, MARGINAL (5-6) → lean REDUCE_SIZE. Closes the gap where score was computed and shown but Claude had no instruction on how to weight it in APPROVE/REDUCE/VETO decisions.
+- **NEW: AVOID LESSONS rule in system prompt** — tells Claude that any `[AVOID]`-tagged lesson in PATTERN MEMORY is mandatory institutional memory: matching signals must be at least Grade C (REDUCE_SIZE), or Grade D (VETO) if the lesson directly describes the current setup.
+- **NEW: AVOID lessons surfaced prominently in user message** — before the full coin lessons block, a dedicated `⚠️ ACTIVE AVOID LESSONS` section now lists all `[AVOID]`-tagged lessons for signal coins, making them impossible to miss in the context window.
+
+### `whale_stream_bot.py`
+- **NEW: Pattern WR injection into graveyard prompt** — after AVOID lessons block, reads `debriefs` from `pattern_memory.json`, computes per-pattern WR (normalised to 60 chars, min 3 trades), injects top 3 proven winners (WR ≥ 65%) and worst 3 chronic losers (WR ≤ 40%) into `graveyard_text`. Claude now steers toward proven setups and away from confirmed losing patterns at signal-generation time. Fails silently if no data yet.
+
+### `whale_stream_debrief.py`
+- **NEW: Pattern+time AVOID lesson auto-writer** — in `save_memory()`, after all stats blocks, scans all debriefs to build `(coin, direction, pattern, 4h-slot)` combo stats. If a combo has ≥3 losses AND WR < 40%, auto-writes `[AVOID] {pattern} at {slot}:00 BKK — {N}L/{total} = {wr}% WR (chronic loss combo)` into `coin_lessons[coin][direction]`. These are immediately picked up by the bot (graveyard AVOID injection) and Strategist (AVOID lessons block) in the next cycle. Dedup check prevents re-writing the same combo.
+
 ## v47.24 — 2026-06-30 — Score-based position sizing; time-of-day WR; holding period analysis
 
 ### `whale_stream_trader.py`
