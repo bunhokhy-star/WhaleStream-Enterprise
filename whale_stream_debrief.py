@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM DEBRIEF AGENT v47.15 — POST-TRADE LEARNING    ║
+║   WHALE-STREAM DEBRIEF AGENT v47.26 — POST-TRADE LEARNING    ║
 ║                                                              ║
 ║  Called automatically by whale_stream_tracker.py after      ║
 ║  each WIN or LOSS resolution.                                ║
@@ -280,6 +280,38 @@ def save_memory(memory):
         else:
             score_tier_stats[_tier]["losses"] += 1
     memory["score_tier_stats"] = score_tier_stats
+
+    # Compute score prediction accuracy per tier (v47.26)
+    # "Correct" = high score predicts WIN, low score predicts LOSS.
+    # ELITE(9-10) / GOOD(7-8): predicted WIN → correct if actual WIN
+    # MARGINAL(5-6) / LOW(0-4): predicted LOSS → correct if actual LOSS
+    _score_accuracy = {
+        "ELITE":    {"correct": 0, "incorrect": 0},
+        "GOOD":     {"correct": 0, "incorrect": 0},
+        "MARGINAL": {"correct": 0, "incorrect": 0},
+        "LOW":      {"correct": 0, "incorrect": 0},
+    }
+    for _d in memory.get("debriefs", []):
+        _sc = _d.get("score")
+        if _sc is None:
+            continue
+        try:
+            _sc = float(_sc)
+        except (TypeError, ValueError):
+            continue
+        _out = _d.get("outcome", "").upper()
+        if _out not in ("WIN", "LOSS"):
+            continue
+        _acc_tier = ("ELITE" if _sc >= 9 else
+                     "GOOD" if _sc >= 7 else
+                     "MARGINAL" if _sc >= 5 else "LOW")
+        _predicted_win = (_sc >= 7)    # ELITE/GOOD → expect WIN
+        _actual_win    = (_out == "WIN")
+        if _predicted_win == _actual_win:
+            _score_accuracy[_acc_tier]["correct"] += 1
+        else:
+            _score_accuracy[_acc_tier]["incorrect"] += 1
+    memory["score_accuracy"] = _score_accuracy
 
     # Auto-tune score floor (v47.23): if tier 5-6 underperforms, raise gate to 6
     # Threshold: ≥8 trades in tier 5-6 AND WR < 45% → write scorer_config.json
@@ -710,7 +742,7 @@ def main():
     """
     print()
     print("╔══════════════════════════════════════════════════════╗")
-    print("║   🧠  WHALE-STREAM DEBRIEF AGENT v47.19              ║")
+    print("║   🧠  WHALE-STREAM DEBRIEF AGENT v47.26              ║")
     print("║   Post-Trade Learning — every loss teaches us        ║")
     print("╚══════════════════════════════════════════════════════╝")
     print()

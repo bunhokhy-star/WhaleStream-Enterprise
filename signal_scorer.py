@@ -1,7 +1,7 @@
 from __future__ import annotations   # PEP 563 — lazy annotations, Python 3.7+ compatible
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM SIGNAL SCORER v47.19                          ║
+║   WHALE-STREAM SIGNAL SCORER v47.26                          ║
 ║                                                              ║
 ║  Pre-scores every signal 0–10 BEFORE sending to Strategist.  ║
 ║  Deterministic — no API calls, instant evaluation.           ║
@@ -12,13 +12,17 @@ from __future__ import annotations   # PEP 563 — lazy annotations, Python 3.7+
 ║    [3] Coin historical win rate    (0–2)                     ║
 ║    [4] Portfolio correlation       (0–2)                     ║
 ║    [5] Pattern strength            (0–2)                     ║
-║  MTF bias adjustment (applied after, clamped 0–10):          ║
+║  Post-base adjustments (applied after, clamped 0–10):        ║
 ║    [6] MTF structure alignment     (-2 to +2)                ║
 ║       +2 = ideal entry (4H_BULL+1H_PULLBACK or mirror)      ║
 ║       +1 = 4H trend confirms direction                       ║
 ║        0 = no MTF bias or neutral                            ║
 ║       -1 = 4H trend opposes direction (counter-trend)        ║
 ║       -2 = 4H_SIDEWAYS (structural indecision, VETO risk)   ║
+║    [7] Live pattern WR             (-1 to +1)  v47.26        ║
+║       +1 = pattern WR ≥65% over ≥3 debrief trades           ║
+║        0 = <3 trades or WR 41-64% (inconclusive)            ║
+║       -1 = pattern WR ≤40% over ≥3 trades (chronic loser)   ║
 ║                                                              ║
 ║  Verdict thresholds:                                         ║
 ║    Score ≥ 7  → STRONG  (send to Claude for final review)    ║
@@ -84,6 +88,87 @@ REVIEW_MIN  = 4   # score ≥ 4 → REVIEW (send to Claude, flag low score); bel
 MTF_IDEAL_LONG  = {"4H_BULL_1H_PULLBACK", "4H_BULL_1H_RANGE", "4H_BULL_1H_BOT"}
 # Ideal SHORT entry: 4H bearish structure, 1H bouncing up (best timing)
 MTF_IDEAL_SHORT = {"4H_BEAR_1H_BOUNCE",   "4H_BEAR_1H_RANGE", "4H_BEAR_1H_TOP"}
+
+
+# ── Pattern WR cache (dimension 7, v47.26) ────────────────────
+# Loaded once at scorer import time from pattern_memory.json.
+# Maps normalised pattern_key → {wins, losses} from live debrief history.
+_PATTERN_WR_CACHE: dict = {}
+_PATTERN_WR_LOADED: bool = False
+
+def _load_pattern_wr_cache() -> None:
+    """Load (or reload) pattern WR stats from pattern_memory.json debriefs."""
+    global _PATTERN_WR_CACHE, _PATTERN_WR_LOADED
+    try:
+        import os as _os, json as _json
+        _path = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "pattern_memory.json")
+        if not _os.path.exists(_path):
+            _PATTERN_WR_LOADED = True
+            return
+        with open(_path, "r", encoding="utf-8") as _f:
+            _mem = _json.load(_f)
+        _cache: dict = {}
+        for _db in _mem.get("debriefs", []):
+            _pat = (_db.get("pattern") or "").strip()[:60]
+            if not _pat or _pat in ("-", "N/A", "UNKNOWN"):
+                continue
+            _key = _pat.lower()
+            if _key not in _cache:
+                _cache[_key] = {"wins": 0, "losses": 0}
+            _out = (_db.get("outcome") or "").upper()
+            if   _out == "WIN":  _cache[_key]["wins"]   += 1
+            elif _out == "LOSS": _cache[_key]["losses"] += 1
+        _PATTERN_WR_CACHE  = _cache
+        _PATTERN_WR_LOADED = True
+    except Exception:
+        _PATTERN_WR_LOADED = True  # don't retry on every call
+
+
+def _score_pattern_wr(pattern: str) -> tuple[int, str]:
+    """
+    Dimension 7 (v47.26): Live pattern win-rate adjustment from debrief history.
+    Looks up the current signal's pattern in pattern_memory.json debriefs.
+    Minimum 3 resolved trades required to apply bonus/penalty.
+
+    +1 — pattern WR ≥ 65% over ≥3 trades  (proven winner in live data)
+     0 — insufficient data or WR 41-64%    (inconclusive)
+    -1 — pattern WR ≤ 40% over ≥3 trades  (chronic loser in live data)
+    """
+    if not _PATTERN_WR_LOADED:
+        _load_pattern_wr_cache()
+    if not pattern or not _PATTERN_WR_CACHE:
+        return 0, "pattern_wr no history yet ±0"
+
+    # Try full pattern key first, then try substring match (pattern may be long)
+    _pat_lower = pattern.lower().strip()[:60]
+    _best: dict | None = None
+
+    # Exact key match
+    if _pat_lower in _PATTERN_WR_CACHE:
+        _best = _PATTERN_WR_CACHE[_pat_lower]
+    else:
+        # Substring: find the longest cached key that is a substring of the signal's pattern
+        _candidates = [
+            (_k, _v) for _k, _v in _PATTERN_WR_CACHE.items()
+            if len(_k) >= 10 and (_k in _pat_lower or _pat_lower in _k)
+        ]
+        if _candidates:
+            _k, _best = max(_candidates, key=lambda x: len(x[0]))
+
+    if _best is None:
+        return 0, "pattern_wr no match in history ±0"
+
+    _n = _best["wins"] + _best["losses"]
+    if _n < 3:
+        return 0, f"pattern_wr <3 samples ({_n}) ±0"
+
+    _wr = _best["wins"] / _n
+    if _wr >= 0.65:
+        return 1, f"pattern_wr {_wr*100:.0f}% ({_best['wins']}W/{_best['losses']}L ≥65%) +1"
+    elif _wr <= 0.40:
+        return -1, f"pattern_wr {_wr*100:.0f}% ({_best['wins']}W/{_best['losses']}L ≤40%) -1"
+    else:
+        return 0, f"pattern_wr {_wr*100:.0f}% ({_best['wins']}W/{_best['losses']}L neutral) ±0"
 
 
 def _extract_mtf_bias(pattern_str: str) -> str:
@@ -278,10 +363,11 @@ def score_signal(signal: dict, market_bias: str, history: dict, positions: dict)
     d3_pts, d3_reason = _score_win_rate(coin, direction, history)
     d4_pts, d4_reason = _score_correlation(coin, direction, positions)
     d5_pts, d5_reason = _score_pattern(pattern)
-    d6_pts, d6_reason = _score_mtf_bias(direction, pattern)   # MTF adjustment (-2 to +2)
+    d6_pts, d6_reason = _score_mtf_bias(direction, pattern)    # MTF adjustment (-2 to +2)
+    d7_pts, d7_reason = _score_pattern_wr(pattern)             # Live pattern WR (-1 to +1, v47.26)
 
     base_score  = d1_pts + d2_pts + d3_pts + d4_pts + d5_pts
-    total_score = max(0, min(10, base_score + d6_pts))   # clamp to 0-10 after MTF adj
+    total_score = max(0, min(10, base_score + d6_pts + d7_pts))  # clamp 0-10 after adjustments
 
     if total_score >= STRONG_MIN:
         verdict = "STRONG"
@@ -291,18 +377,21 @@ def score_signal(signal: dict, market_bias: str, history: dict, positions: dict)
         verdict = "SKIP"
 
     breakdown = {
-        "confidence":  (d1_pts, d1_reason),
-        "regime":      (d2_pts, d2_reason),
-        "win_rate":    (d3_pts, d3_reason),
-        "correlation": (d4_pts, d4_reason),
-        "pattern":     (d5_pts, d5_reason),
-        "mtf_bias":    (d6_pts, d6_reason),   # signed: can be negative
+        "confidence":   (d1_pts, d1_reason),
+        "regime":       (d2_pts, d2_reason),
+        "win_rate":     (d3_pts, d3_reason),
+        "correlation":  (d4_pts, d4_reason),
+        "pattern":      (d5_pts, d5_reason),
+        "mtf_bias":     (d6_pts, d6_reason),    # signed: can be negative
+        "pattern_wr":   (d7_pts, d7_reason),    # live debrief WR adjustment (-1/0/+1)
     }
 
     mtf_sign = f"+{d6_pts}" if d6_pts >= 0 else str(d6_pts)
+    pwr_sign  = f"+{d7_pts}" if d7_pts >= 0 else str(d7_pts)
     summary = (
         f"{coin} {direction} — Score {total_score}/10 [{verdict}] | "
-        f"Conf:{d1_pts} Regime:{d2_pts} WR:{d3_pts} Corr:{d4_pts} Pat:{d5_pts} MTF:{mtf_sign}"
+        f"Conf:{d1_pts} Regime:{d2_pts} WR:{d3_pts} Corr:{d4_pts} Pat:{d5_pts} "
+        f"MTF:{mtf_sign} PatWR:{pwr_sign}"
     )
 
     return {

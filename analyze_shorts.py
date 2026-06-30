@@ -1109,6 +1109,30 @@ def main():
                         _twr = _tw / _tt * 100
                         _icon = "⭐" if _tier == "9-10" else ("✅" if _twr >= 55 else ("⚠️" if _twr >= 40 else "❌"))
                         _tg_lines.append(f"  {_icon} Score {_tier}: {_twr:.0f}% WR ({_tw}W/{_tl}L)")
+
+                # Score prediction accuracy verdict (v47.26)
+                _sacc = _smem.get("score_accuracy", {})
+                _sacc_rows = []
+                for _sacc_tier in ("ELITE", "GOOD", "MARGINAL"):
+                    _sc_c = _sacc.get(_sacc_tier, {}).get("correct", 0)
+                    _sc_i = _sacc.get(_sacc_tier, {}).get("incorrect", 0)
+                    _sc_t = _sc_c + _sc_i
+                    if _sc_t < 3:
+                        continue
+                    _sc_pct = _sc_c / _sc_t * 100
+                    _sc_icon = "✅" if _sc_pct >= 60 else ("⚠️" if _sc_pct >= 45 else "❌")
+                    _sacc_rows.append(f"  {_sc_icon} {_sacc_tier}: {_sc_pct:.0f}% acc ({_sc_c}✓/{_sc_i}✗)")
+                if _sacc_rows:
+                    _tg_lines.append("\n🎯 <b>Score Prediction Accuracy</b>")
+                    _tg_lines.extend(_sacc_rows)
+                    _sc_tot_c = sum(_sacc.get(t, {}).get("correct", 0) for t in ("ELITE", "GOOD", "MARGINAL"))
+                    _sc_tot_i = sum(_sacc.get(t, {}).get("incorrect", 0) for t in ("ELITE", "GOOD", "MARGINAL"))
+                    _sc_tot   = _sc_tot_c + _sc_tot_i
+                    if _sc_tot >= 5:
+                        _sc_all   = _sc_tot_c / _sc_tot * 100
+                        _v_icon   = ("✅ Scorer VALIDATED" if _sc_all >= 60 else
+                                     ("⚠️ Scorer MARGINAL" if _sc_all >= 50 else "❌ Scorer NEEDS REVIEW"))
+                        _tg_lines.append(f"  → {_v_icon} ({_sc_all:.0f}% overall)")
             except Exception:
                 pass
 

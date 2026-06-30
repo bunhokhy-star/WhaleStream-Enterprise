@@ -1,8 +1,8 @@
 @echo off
 cd /d C:\Users\MAX\WhaleStream
 git add -A
-git commit -m "v47.25 — Strategist score calibration + AVOID prominence; pattern WR in bot graveyard; debrief pattern+time AVOID auto-writer"
+git commit -m "v47.26 — Morning score card; scorer pattern WR dim 7; debrief score accuracy tracking"
 git push
 echo.
-echo Done — v47.25 pushed to GitHub.
+echo Done — v47.26 pushed to GitHub.
 pause

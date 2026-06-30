@@ -1,5 +1,20 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.26 — 2026-06-30 — Morning score card; scorer pattern WR (dim 7); debrief score accuracy tracking
+
+### `morning_briefing.py`
+- **NEW: Yesterday's score card** — `parse_yesterday_score_card()` reads `pattern_memory.json` debriefs filtered to yesterday (BKK). For each debriefed trade, shows coin, direction, score/10, tier badge (`[ELITE]`/`[GOOD]`/`[MARGINAL]`), outcome icon ✅/❌, and P&L. Below the trade list, reports score prediction accuracy: correct = (score ≥ 7 and WIN) or (score < 7 and LOSS). Added after yesterday's P&L section in `build_message()`.
+
+### `signal_scorer.py`
+- **NEW: Dimension 7 — Live pattern WR** (`_score_pattern_wr()`) — loads `pattern_memory.json` once at import via `_load_pattern_wr_cache()`. Returns `+1` if pattern WR ≥ 65% over ≥3 debrief trades (proven winner), `−1` if WR ≤ 40% over ≥3 trades (chronic loser), `0` otherwise. Tries exact lowercase match first, then longest substring match. Applied in `score_signal()` after MTF adjustment; total score clamped 0–10. `breakdown` dict gains `"pattern_wr"` key; summary string gains `PatWR:` field.
+- **Header updated** to v47.26; dimension list now shows 7 dimensions with per-tier description.
+
+### `whale_stream_debrief.py`
+- **NEW: Score prediction accuracy tracking** — in `save_memory()`, after `score_tier_stats` block, computes `score_accuracy` across all debriefs with a non-None score. Tiers: ELITE (9-10), GOOD (7-8), MARGINAL (5-6), LOW (0-4). A prediction is "correct" if high score (≥7) → WIN or low score (<7) → LOSS; "incorrect" otherwise. Stored as `memory["score_accuracy"] = {"ELITE": {correct, incorrect}, ...}` in `pattern_memory.json`.
+
+### `analyze_shorts.py`
+- **NEW: Score prediction accuracy verdict in weekly health card** — after score tier WR table, reads `score_accuracy` from `pattern_memory.json`. Shows per-tier accuracy % (✅ ≥60% / ⚠️ ≥45% / ❌ <45%) for ELITE/GOOD/MARGINAL tiers (min 3 trades). Below the per-tier rows, shows overall verdict: `✅ Scorer VALIDATED` (≥60%), `⚠️ Scorer MARGINAL` (≥50%), or `❌ Scorer NEEDS REVIEW` (<50%).
+
 ## v47.25 — 2026-06-30 — Strategist score calibration + AVOID prominence; pattern WR in bot; debrief pattern+time AVOID auto-writer
 
 ### `whale_stream_strategist.py`

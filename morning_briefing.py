@@ -640,6 +640,51 @@ def parse_yesterday_pnl():
 
 
 # ─────────────────────────────────────────────────────────────
+# 6b. YESTERDAY'S SCORE CARD (v47.26) — from pattern_memory.json debriefs
+# ─────────────────────────────────────────────────────────────
+
+def parse_yesterday_score_card():
+    """
+    Read pattern_memory.json debriefs, filter to trades resolved yesterday (BKK).
+    Returns a list of dicts: [{coin, direction, score, outcome, pnl}] or [].
+    'yesterday' = BKK date for rows where resolved_at (or debrief_at) starts with that date.
+    """
+    try:
+        mem_path = os.path.join(BASE_DIR, "pattern_memory.json")
+        if not os.path.exists(mem_path):
+            return []
+        with open(mem_path, "r", encoding="utf-8") as f:
+            mem = json.load(f)
+        debriefs = mem.get("debriefs", [])
+        if not debriefs:
+            return []
+
+        now_bkk   = datetime.now(BKK)
+        yesterday = (now_bkk - timedelta(days=1)).strftime("%Y-%m-%d")
+
+        results = []
+        for d in debriefs:
+            # Use resolved_at first, fall back to debrief_at
+            date_str = (d.get("resolved_at") or d.get("debrief_at") or "").strip()
+            if not date_str.startswith(yesterday):
+                continue
+            score   = d.get("score")
+            outcome = d.get("outcome", "").upper()
+            if outcome not in ("WIN", "LOSS"):
+                continue
+            results.append({
+                "coin":      d.get("coin", "?"),
+                "direction": d.get("direction", "?"),
+                "score":     score,
+                "outcome":   outcome,
+                "pnl":       d.get("pnl_pct"),
+            })
+        return results
+    except Exception:
+        return []
+
+
+# ─────────────────────────────────────────────────────────────
 # BUILD MESSAGE
 # ─────────────────────────────────────────────────────────────
 
@@ -958,6 +1003,46 @@ def build_message():
         activity_summary,
     ]
     lines += [""] + pnl_section
+
+    # ── Yesterday's score card (v47.26) ───────────────────────────────────────
+    _score_trades = parse_yesterday_score_card()
+    if _score_trades:
+        _sc_lines = ["📐 YESTERDAY'S SCORE CARD"]
+        _sc_correct = 0
+        _sc_total   = 0
+        for _st in _score_trades:
+            _sc   = _st["score"]
+            _out  = _st["outcome"]
+            _icon = "✅" if _out == "WIN" else "❌"
+            _sc_str = f"{_sc:.0f}/10" if _sc is not None else "?/10"
+            _tier   = ""
+            if _sc is not None:
+                if   _sc >= 9: _tier = " [ELITE]"
+                elif _sc >= 7: _tier = " [GOOD]"
+                elif _sc >= 5: _tier = " [MARGINAL]"
+                # Score accuracy: ELITE/GOOD→WIN or MARGINAL→LOSS = correct prediction
+                _sc_total += 1
+                if (_sc >= 7 and _out == "WIN") or (_sc < 7 and _out == "LOSS"):
+                    _sc_correct += 1
+            _pnl_str = ""
+            if _st["pnl"] is not None:
+                try:
+                    _pnl_str = f" ({float(_st['pnl']):+.1f}%)"
+                except Exception:
+                    pass
+            _sc_lines.append(
+                f"  {_icon} {_st['coin']} {_st['direction']} "
+                f"scored {_sc_str}{_tier} → {_out}{_pnl_str}"
+            )
+        if _sc_total >= 2:
+            _acc = _sc_correct / _sc_total * 100
+            _acc_icon = "✅" if _acc >= 60 else ("⚠️" if _acc >= 40 else "❌")
+            _sc_lines.append(
+                f"  {_acc_icon} Score accuracy yesterday: "
+                f"{_sc_correct}/{_sc_total} = {_acc:.0f}%"
+            )
+        lines += [""] + _sc_lines
+
     lines += [
         "",
         f"🔄 Monitor: {monitor_status}",
