@@ -193,6 +193,29 @@ try:
 except Exception:
     pass  # fail silently — hardcoded blocklist still applies
 
+# ── Probation watchlist (v47.33) ──────────────────────────────────────────────
+# Coins that recently expired from the auto-blocklist and are on 3-trade probation.
+# Loaded once at startup — inject into graveyard prompt so Claude knows not to
+# confidently generate signals for these coins without extra caution.
+BOT_PROBATION_LONGS:  set = set()
+BOT_PROBATION_SHORTS: set = set()
+try:
+    _wl_path_bot = os.path.join(os.path.dirname(os.path.abspath(__file__)), "blocklist_watchlist.json")
+    if os.path.exists(_wl_path_bot):
+        with open(_wl_path_bot, "r", encoding="utf-8") as _wlf_bot:
+            _wl_data_bot = json.load(_wlf_bot)
+        for _wk_bot, _we_bot in _wl_data_bot.get("watchlist", {}).items():
+            _wc_bot  = _we_bot.get("coin", "").upper()
+            _wdr_bot = _we_bot.get("direction", "").upper()
+            if _wc_bot and _wdr_bot == "LONG":
+                BOT_PROBATION_LONGS.add(_wc_bot)
+            elif _wc_bot and _wdr_bot == "SHORT":
+                BOT_PROBATION_SHORTS.add(_wc_bot)
+        if BOT_PROBATION_LONGS or BOT_PROBATION_SHORTS:
+            print(f"   🔶 PROBATION: LONG={sorted(BOT_PROBATION_LONGS)} SHORT={sorted(BOT_PROBATION_SHORTS)}")
+except Exception:
+    pass  # fail silently — non-critical
+
 # ── Malformed coin blocklist (BOTH directions) ────────────────────────────────
 # Coins that consistently generate invalid SL levels in EITHER direction.
 # The AI keeps picking these but always places SL on the wrong side of entry,
@@ -1285,6 +1308,28 @@ def fetch_signal_graveyard():
         except Exception:
             pass   # non-critical
         # ── end Pattern WR injection ──────────────────────────────────────────
+
+        # ── Task 4 (v47.33): Probation coin caution ───────────────────────────
+        try:
+            _prob_lines: list = []
+            if BOT_PROBATION_LONGS:
+                _prob_lines.append(
+                    "  🔶 LONG PROBATION: " + ", ".join(sorted(BOT_PROBATION_LONGS))
+                    + " — recently expelled from auto-blocklist; require ≥95% confidence before generating a signal"
+                )
+            if BOT_PROBATION_SHORTS:
+                _prob_lines.append(
+                    "  🔶 SHORT PROBATION: " + ", ".join(sorted(BOT_PROBATION_SHORTS))
+                    + " — recently expelled from auto-blocklist; require ≥95% confidence before generating a signal"
+                )
+            if _prob_lines:
+                graveyard_text += (
+                    "\n\nPROBATION COINS (recently expelled from auto-blocklist — treat like borderline candidates):\n"
+                    + "\n".join(_prob_lines)
+                )
+        except Exception:
+            pass   # non-critical
+        # ── end Probation coin caution ────────────────────────────────────────
 
         print(f"   ✓ Signal Graveyard: {len(recent)} trades (overall {win_rate:.0f}% WR | long {long_wr:.0f}% | short {short_wr:.0f}%)")
         if blacklisted:

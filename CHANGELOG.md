@@ -1,5 +1,21 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.33 — 2026-06-30 — Bot probation awareness; score drift warning; P&L attribution
+
+### `whale_stream_bot.py`
+- **NEW: Probation load at startup (Option A)** — After the LONG auto-blocklist module-level load, reads `blocklist_watchlist.json` into `BOT_PROBATION_LONGS` and `BOT_PROBATION_SHORTS` sets. Prints a startup summary if any coins are on probation. Fails silently.
+- **NEW: Probation caution in graveyard prompt (Option A)** — After the Pattern WR injection block, adds a `PROBATION COINS` section to `graveyard_text` listing coins in each direction set with a note that ≥95% confidence is required. Claude sees this during signal generation and applies extra caution to recently-expelled coins.
+
+### `whale_stream_debrief.py`
+- **NEW: Score drift early warning (Option B)** — After the existing score drift / gate override block, a new inner block checks for tiers in the 45-54% accuracy warning zone (fires BEFORE the gate at <45%). Sends `⚠️ SCORE DRIFT WARNING` Telegram and writes `score_drift_warning.json` with warned tier details and `since` timestamp. Clears the file automatically when all tiers exit the warning zone.
+- **NEW: P&L accumulation in dim_correlation buckets (Option C)** — Each of the 8 dim_corr buckets now also tracks `pnl_total` (sum of trade P&L) and `pnl_count` (trades with valid pnl). Added to both the confidence proxy and MTF alignment proxy accumulation loops. Debrief now writes these fields alongside `wins`/`losses` in `pattern_memory.json`.
+
+### `morning_briefing.py`
+- **NEW: Score drift early warning section (Option B)** — After the Score Gate override block, checks `score_drift_warning.json`. If present, shows `⚠️ SCORE DRIFT WARNING (since <date>)` with per-tier accuracy and a note that the gate fires if any tier drops below 45%.
+
+### `whale_stream_watchdog.py`
+- **NEW: P&L attribution in Sunday digest (Option C)** — Sunday digest now includes a `💰 P&L Attribution` section showing avg P&L per trade per proxy bucket (conf ≥90%, conf 75-89%, conf <75%, MTF ideal, MTF aligned, MTF counter, MTF sideways) for any bucket with ≥5 trades with P&L data. Uses `pnl_total`/`pnl_count` from `dim_correlation` in `pattern_memory.json`.
+
 ## v47.32 — 2026-06-30 — Probation system; scorer_tune.json; Sunday health digest
 
 ### `whale_stream_debrief.py`

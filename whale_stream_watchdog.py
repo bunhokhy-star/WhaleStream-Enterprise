@@ -633,12 +633,44 @@ if __name__ == "__main__":
             _dim_block_wd = "\n".join(_dim_lines_wd) if _dim_lines_wd else "  (fewer than 10 trades per bucket)"
             _sa_block_wd  = "\n".join(_sa_lines_wd)  if _sa_lines_wd  else "  (no score data yet)"
 
+            # ── P&L attribution by signal proxy (v47.33) ──────────────────────
+            # Show avg P&L per trade per bucket (conf + MTF) using pnl_total/pnl_count
+            # fields now stored in dim_correlation by debrief.
+            _pnl_lines_wd = []
+            try:
+                _pnl_labels_wd = {
+                    "conf_high":    "Conf ≥90%  ",
+                    "conf_med":     "Conf 75-89%",
+                    "conf_low":     "Conf &lt;75%  ",
+                    "mtf_ideal":    "MTF ideal  ",
+                    "mtf_aligned":  "MTF aligned",
+                    "mtf_counter":  "MTF counter",
+                    "mtf_sideways": "MTF sideway",
+                }
+                for _pk_wd, _plbl_wd in _pnl_labels_wd.items():
+                    _pv_wd    = _dc_wd.get(_pk_wd, {})
+                    _pn_cnt   = _pv_wd.get("pnl_count", 0)
+                    _pn_total = _pv_wd.get("pnl_total", 0.0)
+                    if _pn_cnt >= 5:   # require at least 5 trades with P&L data
+                        _avg_pnl = _pn_total / _pn_cnt
+                        _sign    = "+" if _avg_pnl >= 0 else ""
+                        _pnl_lines_wd.append(
+                            f"  {_plbl_wd}: {_sign}{_avg_pnl:.2f}% avg / trade ({_pn_cnt} trades)"
+                        )
+            except Exception:
+                pass
+            _pnl_block_wd = ("\n".join(_pnl_lines_wd)
+                             if _pnl_lines_wd else "  (fewer than 5 trades with P&L data per bucket)")
+
             _sunday_msg = (
                 f"📊 <b>WEEKLY SCORER HEALTH DIGEST</b>\n"
                 f"🗓 {now_str}\n"
                 f"\n"
                 f"<b>🔬 Dim Correlation (win rate per signal proxy):</b>\n"
                 f"{_dim_block_wd}\n"
+                f"\n"
+                f"<b>💰 P&amp;L Attribution (avg P&L per trade per proxy):</b>\n"
+                f"{_pnl_block_wd}\n"
                 f"\n"
                 f"<b>🎯 Score Prediction Accuracy:</b>\n"
                 f"{_sa_block_wd}"

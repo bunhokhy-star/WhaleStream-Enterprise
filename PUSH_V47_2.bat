@@ -1,8 +1,8 @@
 @echo off
 cd /d C:\Users\MAX\WhaleStream
 git add -A
-git commit -m "v47.32 — probation system; scorer_tune.json MTF penalty escalation; Sunday health digest"
+git commit -m "v47.33 — bot probation awareness; score drift warning; P&L attribution in Sunday digest"
 git push
 echo.
-echo Done — v47.32 pushed to GitHub.
+echo Done — v47.33 pushed to GitHub.
 pause

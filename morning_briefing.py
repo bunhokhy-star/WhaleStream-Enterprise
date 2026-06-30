@@ -1164,6 +1164,29 @@ def build_message():
     except Exception:
         pass  # non-critical
 
+    # ── Score drift early warning (v47.33) ───────────────────────────────────
+    # Shows ⚠️ when any tier is in the 45-54% warning zone (pre-gate).
+    try:
+        _sdw_path_mb = os.path.join(BASE_DIR, "score_drift_warning.json")
+        if os.path.exists(_sdw_path_mb):
+            with open(_sdw_path_mb, "r", encoding="utf-8") as _sdwf_mb:
+                _sdw_mb = json.load(_sdwf_mb)
+            _sdw_tiers = _sdw_mb.get("warned_tiers", {})
+            _sdw_since = (_sdw_mb.get("since", "") or "")[:16]
+            if _sdw_tiers:
+                _sdw_lines = [
+                    f"  {t}: {round(v.get('accuracy', 0) * 100, 1)}% accuracy ({v.get('n', 0)} trades)"
+                    for t, v in _sdw_tiers.items()
+                ]
+                lines += [
+                    "",
+                    f"⚠️ SCORE DRIFT WARNING (since {_sdw_since}) — accuracy entering 45-54% zone:",
+                ] + _sdw_lines + [
+                    "  → Gate fires if any tier drops below 45%. Monitor debrief cycles.",
+                ]
+    except Exception:
+        pass  # non-critical
+
     # ── Probation watchlist (v47.32) ──────────────────────────────────────────
     # Coins that expired from auto-blocklist — on 3-trade probation.
     try:

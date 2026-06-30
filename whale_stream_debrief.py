@@ -318,20 +318,27 @@ def save_memory(memory):
     #   Confidence (dim 1 proxy): high/med/low confidence buckets
     #   MTF alignment (dim 6 proxy): ideal/aligned/neutral/counter/sideways
     _dim_corr = {
-        "conf_high":    {"wins": 0, "losses": 0},   # confidence ≥90
-        "conf_med":     {"wins": 0, "losses": 0},   # confidence 75-89
-        "conf_low":     {"wins": 0, "losses": 0},   # confidence <75
-        "mtf_ideal":    {"wins": 0, "losses": 0},   # 4H+1H ideal entry
-        "mtf_aligned":  {"wins": 0, "losses": 0},   # 4H confirms direction, non-ideal 1H
-        "mtf_neutral":  {"wins": 0, "losses": 0},   # no MTF data or unknown
-        "mtf_counter":  {"wins": 0, "losses": 0},   # 4H opposes direction
-        "mtf_sideways": {"wins": 0, "losses": 0},   # 4H sideways (indecision)
+        "conf_high":    {"wins": 0, "losses": 0, "pnl_total": 0.0, "pnl_count": 0},   # confidence ≥90
+        "conf_med":     {"wins": 0, "losses": 0, "pnl_total": 0.0, "pnl_count": 0},   # confidence 75-89
+        "conf_low":     {"wins": 0, "losses": 0, "pnl_total": 0.0, "pnl_count": 0},   # confidence <75
+        "mtf_ideal":    {"wins": 0, "losses": 0, "pnl_total": 0.0, "pnl_count": 0},   # 4H+1H ideal entry
+        "mtf_aligned":  {"wins": 0, "losses": 0, "pnl_total": 0.0, "pnl_count": 0},   # 4H confirms direction, non-ideal 1H
+        "mtf_neutral":  {"wins": 0, "losses": 0, "pnl_total": 0.0, "pnl_count": 0},   # no MTF data or unknown
+        "mtf_counter":  {"wins": 0, "losses": 0, "pnl_total": 0.0, "pnl_count": 0},   # 4H opposes direction
+        "mtf_sideways": {"wins": 0, "losses": 0, "pnl_total": 0.0, "pnl_count": 0},   # 4H sideways (indecision)
     }
     for _d in memory.get("debriefs", []):
         _dout = _d.get("outcome", "").upper()
         if _dout not in ("WIN", "LOSS"):
             continue
         _dis_win = (_dout == "WIN")
+        # Extract P&L for attribution (v47.33) — used alongside wins/losses per bucket
+        try:
+            _d_pnl_val = float(_d.get("pnl") or 0)
+            _d_has_pnl = _d.get("pnl") is not None
+        except (TypeError, ValueError):
+            _d_pnl_val = 0.0
+            _d_has_pnl = False
 
         # Confidence proxy (dim 1)
         try:
@@ -344,6 +351,9 @@ def save_memory(memory):
                 _dck = "conf_low"
             if _dis_win: _dim_corr[_dck]["wins"]   += 1
             else:        _dim_corr[_dck]["losses"] += 1
+            if _d_has_pnl:
+                _dim_corr[_dck]["pnl_total"] += _d_pnl_val
+                _dim_corr[_dck]["pnl_count"] += 1
         except Exception:
             pass
 
@@ -367,6 +377,9 @@ def save_memory(memory):
             _dmk = "mtf_neutral"
         if _dis_win: _dim_corr[_dmk]["wins"]   += 1
         else:        _dim_corr[_dmk]["losses"] += 1
+        if _d_has_pnl:
+            _dim_corr[_dmk]["pnl_total"] += _d_pnl_val
+            _dim_corr[_dmk]["pnl_count"] += 1
 
     memory["dim_correlation"] = _dim_corr
 
@@ -1184,6 +1197,65 @@ def run_debrief(trades):
                     send_telegram("✅ <b>SCORER RECOVERED</b> — all tiers ≥55% accuracy. score_gate_override.json removed; SCORE_MIN_TRADER reverts to default.")
                 except Exception:
                     pass
+
+        # ── Score drift EARLY WARNING (v47.33) ────────────────────────────────
+        # Warning zone: 45-54% accuracy over ≥10 trades (fires BEFORE gate at <45%).
+        # Sends ⚠️ Telegram + writes score_drift_warning.json so morning briefing
+        # can surface it alongside the harder score_gate_override.json alert.
+        try:
+            _sdw_path = os.path.join(SCRIPT_DIR, "score_drift_warning.json")
+            _warn_tiers: list = []
+            _sacc_w = memory.get("score_accuracy", {})
+            for _wt in ("ELITE", "GOOD", "MARGINAL"):
+                _wc = _sacc_w.get(_wt, {}).get("correct", 0)
+                _wi = _sacc_w.get(_wt, {}).get("incorrect", 0)
+                _wn = _wc + _wi
+                if _wn >= 10:
+                    _wacc = _wc / _wn
+                    if 0.45 <= _wacc < 0.55:   # warning zone — below 45% is already handled above
+                        _warn_tiers.append((_wt, _wacc, _wn))
+
+            if _warn_tiers:
+                # Load existing warning file to avoid re-alerting identical state
+                _existing_warn: dict = {}
+                try:
+                    if os.path.exists(_sdw_path):
+                        with open(_sdw_path, "r", encoding="utf-8") as _sdwr:
+                            _existing_warn = json.load(_sdwr)
+                except Exception:
+                    pass
+
+                _new_warn_data = {
+                    "warned_tiers": {t: {"accuracy": round(a, 4), "n": n}
+                                     for t, a, n in _warn_tiers},
+                    "since": _existing_warn.get("since", bkk_now_str()),
+                    "updated_at": bkk_now_str(),
+                    "note": "Score accuracy 45-54%: pre-gate drift warning",
+                }
+
+                _tier_lines = [f"{t}: {a*100:.1f}% ({n} trades)" for t, a, n in _warn_tiers]
+                _warn_msg = (
+                    f"⚠️ <b>SCORE DRIFT WARNING</b>\n"
+                    f"Tier accuracy slipping into 45-54% warning zone "
+                    f"(gate fires at &lt;45%):\n"
+                    + "\n".join(f"  • {l}" for l in _tier_lines)
+                    + "\n\nMonitor debrief cycles — if accuracy drops below 45% the score gate will raise automatically."
+                )
+                send_telegram(_warn_msg)
+                with open(_sdw_path, "w", encoding="utf-8") as _sdww:
+                    json.dump(_new_warn_data, _sdww, indent=2)
+                log(f"   ⚠ Score drift WARNING written: {[t for t,_,_ in _warn_tiers]}")
+
+            else:
+                # No tiers in warning zone — clear stale warning file if present
+                if os.path.exists(_sdw_path):
+                    try:
+                        os.remove(_sdw_path)
+                        log("   ✅ score_drift_warning.json cleared — all tiers exited warning zone")
+                    except Exception:
+                        pass
+        except Exception as _sdw_e:
+            log(f"   ⚠ Score drift warning check failed (non-critical): {_sdw_e}")
 
     except Exception:
         pass  # non-critical
