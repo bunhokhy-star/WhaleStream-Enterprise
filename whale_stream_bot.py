@@ -2395,6 +2395,52 @@ def log_to_google_sheets(data, bkk_time):
         print(f"   🎯 TOP-3 FILTER: {_pre_filter} signals (all kept — already within top-3 per direction)")
     # ── end top-3 filter ─────────────────────────────────────────────────
 
+    # ── PER-COIN 4H REGIME FILTER (v47.27) ───────────────────────────────
+    # Drop LONG signals where the coin's own 4H trend is clearly BEAR.
+    # Drop SHORT signals where the coin's own 4H trend is clearly BULL.
+    # Same SMA20 ±2% logic as BTC regime (reuses Bybit public kline API).
+    # Fails silently on API error — signals are kept, never dropped on timeout.
+    def _get_coin_4h_regime(coin_sym):
+        """Fetch coin's own 4H SMA20 bias. Returns 'BULL', 'BEAR', or 'NEUTRAL'."""
+        try:
+            import requests as _cr
+            _cr_r = _cr.get(
+                "https://api.bybit.com/v5/market/kline",
+                params={"category": "linear", "symbol": f"{coin_sym}USDT",
+                        "interval": "240", "limit": "22"},
+                timeout=5,
+            )
+            _cr_d = _cr_r.json()
+            if _cr_d.get("retCode") != 0:
+                return "NEUTRAL"
+            _cr_cs = _cr_d["result"]["list"]
+            if len(_cr_cs) < 21:
+                return "NEUTRAL"
+            _cr_closes = [float(c[4]) for c in _cr_cs[1:21]]
+            _cr_sma    = sum(_cr_closes) / 20
+            _cr_cur    = float(_cr_cs[0][4])
+            _cr_pct    = (_cr_cur - _cr_sma) / _cr_sma * 100
+            return "BEAR" if _cr_pct < -2.0 else ("BULL" if _cr_pct > 2.0 else "NEUTRAL")
+        except Exception:
+            return "NEUTRAL"   # keep signal on any error
+
+    _regime_kept, _regime_dropped_list = [], []
+    for _csig in all_signals:
+        _csig_coin = _csig.get("coin", "")
+        _csig_dir  = _csig.get("direction", "")
+        _csig_reg  = _get_coin_4h_regime(_csig_coin)
+        _counter   = (_csig_dir == "LONG" and _csig_reg == "BEAR") or \
+                     (_csig_dir == "SHORT" and _csig_reg == "BULL")
+        if _counter:
+            _regime_dropped_list.append(f"{_csig_coin} {_csig_dir}({_csig_reg})")
+            print(f"   🌊 4H COIN FILTER: {_csig_coin} {_csig_dir} dropped — coin 4H is {_csig_reg} (counter-trend)")
+        else:
+            _regime_kept.append(_csig)
+    if _regime_dropped_list:
+        print(f"   🌊 4H COIN FILTER: dropped {len(_regime_dropped_list)} counter-trend → {len(_regime_kept)} signals remain")
+    all_signals = _regime_kept
+    # ── end per-coin 4H regime filter ────────────────────────────────────
+
     if all_signals:
         # ── Dedup: skip same coin+direction already OPEN in last 4h ──
         # Using 4h window (not "today") so stale signals from earlier cycles

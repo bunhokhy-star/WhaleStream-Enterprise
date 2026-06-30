@@ -1782,7 +1782,8 @@ def main():
                 "outcome":     res_status,
                 "tp_hit":      tp_hit or "",
                 "pnl":         pnl,
-                "resolved_at": now_str,  # needed by debrief dedup key
+                "ts":          ts_str,       # signal generation timestamp (v47.27)
+                "resolved_at": now_str,      # needed by debrief dedup key
             })
         else:
             pct_from_entry = (current - entry) / entry * 100 if entry else 0

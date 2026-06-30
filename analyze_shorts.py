@@ -1133,6 +1133,28 @@ def main():
                         _v_icon   = ("✅ Scorer VALIDATED" if _sc_all >= 60 else
                                      ("⚠️ Scorer MARGINAL" if _sc_all >= 50 else "❌ Scorer NEEDS REVIEW"))
                         _tg_lines.append(f"  → {_v_icon} ({_sc_all:.0f}% overall)")
+                    # Actionable recommendations when accuracy < 45% over ≥10 trades (v47.27)
+                    _sacc_actions = []
+                    for _sacc_tier2 in ("ELITE", "GOOD", "MARGINAL"):
+                        _sc2_c = _sacc.get(_sacc_tier2, {}).get("correct", 0)
+                        _sc2_i = _sacc.get(_sacc_tier2, {}).get("incorrect", 0)
+                        _sc2_t = _sc2_c + _sc2_i
+                        if _sc2_t < 10:
+                            continue
+                        _sc2_pct = _sc2_c / _sc2_t * 100
+                        if _sc2_pct < 45:
+                            if _sacc_tier2 == "ELITE":
+                                _sacc_actions.append(
+                                    f"  ⚡ ELITE {_sc2_pct:.0f}% acc — recalibrate dim weights or raise gate to 9")
+                            elif _sacc_tier2 == "GOOD":
+                                _sacc_actions.append(
+                                    f"  ⚡ GOOD {_sc2_pct:.0f}% acc — scores 7-8 underperform; raise gate to 8")
+                            elif _sacc_tier2 == "MARGINAL":
+                                _sacc_actions.append(
+                                    f"  ⚡ MARGINAL {_sc2_pct:.0f}% acc — scorer not flagging losers; review dims 3+5")
+                    if _sacc_actions:
+                        _tg_lines.append("\n⚡ <b>Score Accuracy Actions</b>")
+                        _tg_lines.extend(_sacc_actions)
             except Exception:
                 pass
 

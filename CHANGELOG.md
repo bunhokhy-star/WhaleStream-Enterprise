@@ -1,5 +1,19 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.27 — 2026-06-30 — Fix ts in debrief; score accuracy actions; per-coin 4H regime filter
+
+### `whale_stream_tracker.py`
+- **FIX: `ts` added to debrief payload** — `_newly_resolved.append()` now includes `"ts": ts_str` (the signal generation timestamp from the sheet). Without this, the v47.25 pattern+time AVOID auto-writer could never determine the 4H slot, making the feature permanently silently broken.
+
+### `whale_stream_debrief.py`
+- **FIX: `ts` stored in debrief entry** — `run_debrief()` entry dict now includes `"ts": trade.get("ts", "")`. Stored in `pattern_memory.json` alongside `resolved_at`. The pattern+time AVOID writer in `save_memory()` now has real signal timestamps and will correctly compute BKK 4H slots for combo loss detection.
+
+### `analyze_shorts.py`
+- **NEW: Score accuracy actionable recommendations** — in the weekly health card, after the per-tier accuracy rows, checks each of ELITE/GOOD/MARGINAL for accuracy < 45% over ≥10 trades. If triggered, appends a specific `⚡ Score Accuracy Actions` block with targeted advice: ELITE → recalibrate dim weights or raise gate to 9; GOOD → scores 7-8 underperform, raise gate to 8; MARGINAL → scorer not flagging losers, review dims 3+5.
+
+### `whale_stream_bot.py`
+- **NEW: Per-coin 4H regime filter** — after the top-3 filter, fetches each selected coin's own 4H klines from Bybit public API (same SMA20 ±2% logic as BTC regime). Drops LONG signals where the coin's 4H is BEAR and SHORT signals where coin's 4H is BULL (counter-trend). Logs each drop with `🌊 4H COIN FILTER:`. Fails silently on API timeout — no signals are dropped on error. Applied before the dedup check.
+
 ## v47.26 — 2026-06-30 — Morning score card; scorer pattern WR (dim 7); debrief score accuracy tracking
 
 ### `morning_briefing.py`

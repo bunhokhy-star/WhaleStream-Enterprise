@@ -678,6 +678,7 @@ def run_debrief(trades):
             "outcome":       outcome,
             "tp_hit":        trade.get("tp_hit", ""),
             "resolved_at":   trade.get("resolved_at", ""),   # stored for dedup uniqueness
+            "ts":            trade.get("ts", ""),             # signal generation time (v47.27)
             "pnl":           float(trade.get("pnl", 0) or 0),
             "pattern":       _pattern_str,
             "mtf_bias":      _mtf_bias_parsed,               # e.g. "4H_BULL_1H_PULLBACK"
