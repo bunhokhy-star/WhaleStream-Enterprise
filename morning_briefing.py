@@ -142,6 +142,125 @@ def get_btc_market_bias():
 
 
 # ─────────────────────────────────────────────────────────────
+# MTF LANDSCAPE (v47.20) — top-coin 4H+1H structure at 7am
+# ─────────────────────────────────────────────────────────────
+
+_MTF_COINS = ["BTC", "ETH", "SOL", "BNB", "XRP", "DOGE", "ADA", "AVAX", "LINK", "ARB"]
+
+
+def _classify_4h(candles):
+    """Classify 4H trend: 'BULL', 'BEAR', or 'SIDE'. candles = Bybit list (newest first)."""
+    if len(candles) < 21:
+        return "?"
+    closes  = [float(c[4]) for c in candles[1:21]]   # 20 completed closes
+    sma20   = sum(closes) / 20
+    current = float(candles[0][4])
+    pct     = (current - sma20) / sma20 * 100
+    if pct > 2.0:
+        return "BULL"
+    elif pct < -2.0:
+        return "BEAR"
+    return "SIDE"
+
+
+def _classify_1h(candles, trend_4h):
+    """Classify 1H sub-structure given 4H trend. Returns 4-char label."""
+    if len(candles) < 10:
+        return "????"
+    closes = [float(c[4]) for c in candles[:10]]
+    highs  = [float(c[2]) for c in candles[:10]]
+    lows   = [float(c[3]) for c in candles[:10]]
+    sma5   = sum(closes[:5]) / 5
+    current = closes[0]
+    rng_hi  = max(highs)
+    rng_lo  = min(lows)
+    rng_w   = rng_hi - rng_lo if rng_hi > rng_lo else 1e-9
+    pos     = (current - rng_lo) / rng_w   # 0=bottom, 1=top
+
+    if trend_4h == "BULL":
+        if current < sma5:
+            return "PULL"   # pullback — ideal LONG setup
+        return "TOP " if pos > 0.70 else ("BOT " if pos < 0.30 else "RANG")
+    elif trend_4h == "BEAR":
+        if current > sma5:
+            return "BNCE"   # bounce — ideal SHORT setup
+        return "TOP " if pos > 0.70 else ("BOT " if pos < 0.30 else "RANG")
+    else:                    # SIDEWAYS 4H
+        return "TOP " if pos > 0.70 else ("BOT " if pos < 0.30 else "RANG")
+
+
+def fetch_top_coin_mtf_summary():
+    """
+    Fetch 4H+1H klines for top coins and return a compact MTF landscape string.
+    Uses Bybit public API — no auth required.
+    Returns multiline string ready for Telegram HTML.
+    """
+    rows = []
+    ideal_longs  = []
+    ideal_shorts = []
+
+    for coin in _MTF_COINS:
+        symbol = coin + "USDT"
+        try:
+            r4 = requests.get(
+                "https://api.bybit.com/v5/market/kline",
+                params={"category": "linear", "symbol": symbol, "interval": "240", "limit": "22"},
+                timeout=8,
+            )
+            d4 = r4.json()
+            c4 = d4.get("result", {}).get("list", []) if d4.get("retCode") == 0 else []
+
+            r1 = requests.get(
+                "https://api.bybit.com/v5/market/kline",
+                params={"category": "linear", "symbol": symbol, "interval": "60", "limit": "12"},
+                timeout=8,
+            )
+            d1 = r1.json()
+            c1 = d1.get("result", {}).get("list", []) if d1.get("retCode") == 0 else []
+
+            tf4 = _classify_4h(c4)
+            h1  = _classify_1h(c1, tf4)
+
+            icon = "📈" if tf4 == "BULL" else ("📉" if tf4 == "BEAR" else "↔️ ")
+            star = ""
+            if tf4 == "BULL" and h1 == "PULL":
+                star = "⭐"
+                ideal_longs.append(coin)
+            elif tf4 == "BEAR" and h1 == "BNCE":
+                star = "⭐"
+                ideal_shorts.append(coin)
+
+            rows.append(f"  {icon}{star:<1} {coin:<5} 4H:{tf4:<4} 1H:{h1}")
+        except Exception:
+            rows.append(f"  ❓  {coin:<5} (timeout)")
+
+    # Pull mtf_stats from pattern_memory.json for context
+    try:
+        _mem_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pattern_memory.json")
+        with open(_mem_path, encoding="utf-8") as _mf:
+            _mem = json.load(_mf)
+        _mtf_stats = _mem.get("mtf_stats", {})
+        _strong = [b for b, d in _mtf_stats.items()
+                   if d.get("wins", 0) + d.get("losses", 0) >= 3
+                   and d["wins"] / (d["wins"] + d["losses"]) >= 0.60]
+        _weak   = [b for b, d in _mtf_stats.items()
+                   if d.get("wins", 0) + d.get("losses", 0) >= 3
+                   and d["wins"] / (d["wins"] + d["losses"]) < 0.40]
+        if _strong or _weak:
+            rows.append(f"  — History: ✅strong={','.join(_strong) or 'none'}  🚫weak={','.join(_weak) or 'none'}")
+    except Exception:
+        pass
+
+    if ideal_longs:
+        rows.append(f"  ⭐LONG setups: {', '.join(ideal_longs)}")
+    if ideal_shorts:
+        rows.append(f"  ⭐SHORT setups: {', '.join(ideal_shorts)}")
+    rows.append("  ↳ ⭐= ideal entry  |  VETO if 4H=SIDE")
+
+    return "\n".join(rows)
+
+
+# ─────────────────────────────────────────────────────────────
 # HELPERS
 # ─────────────────────────────────────────────────────────────
 
@@ -851,6 +970,17 @@ def build_message():
         "🤖 OVERNIGHT AGENT COVERAGE",
         _agent_coverage_section(),
     ]
+
+    # ── MTF Landscape — 4H+1H structure for top coins (v47.20) ───
+    try:
+        _mtf_text = fetch_top_coin_mtf_summary()
+        lines += [
+            "",
+            "🔭 MTF LANDSCAPE (4H+1H structure)",
+            _mtf_text,
+        ]
+    except Exception as _mtfe:
+        lines += ["", f"🔭 MTF Landscape: (fetch failed: {_mtfe})"]
 
     return "\n".join(lines)
 

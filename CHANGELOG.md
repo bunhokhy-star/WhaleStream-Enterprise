@@ -1,5 +1,19 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.20 — 2026-06-30 — MTF backfill + morning MTF landscape + trade_logger mtf_bias field
+
+### `backfill_mtf_bias.py` (NEW)
+- **NEW: One-time backfill script** — loads `pattern_memory.json`, re-extracts `mtf_bias` from the `pattern` field of every existing debrief entry using the same `\[([A-Z0-9_]{5,30})\]` regex. Writes updated bias, then rebuilds `mtf_stats` from scratch. Creates a `.pre_backfill_bak` backup first. Prints a full bias WR summary table after completion. Safe to re-run (idempotent).
+
+### `morning_briefing.py`
+- **NEW: MTF Landscape section** — `fetch_top_coin_mtf_summary()` fetches 4H×22 + 1H×12 klines for 10 top coins (BTC/ETH/SOL/BNB/XRP/DOGE/ADA/AVAX/LINK/ARB) from Bybit public API. Classifies each coin as 4H:BULL/BEAR/SIDE and 1H:PULL/BNCE/RANG/TOP/BOT. ⭐ marks ideal LONG (4H:BULL + 1H:PULL) and SHORT (4H:BEAR + 1H:BNCE) setups. Pulls historical mtf_stats from pattern_memory.json and surfaces strong/weak biases. Added at end of morning Telegram message before `return`. Fails silently on timeout.
+- **NEW: Helper functions** — `_classify_4h(candles)`, `_classify_1h(candles, trend_4h)`, `_MTF_COINS` list.
+
+### `trade_logger.py`
+- **NEW: `mtf_bias` field** — `import re` added to module-level imports. In `sync_from_sheets()`, after extracting `pattern`, regex extracts `mtf_bias` (e.g. `"4H_BULL_1H_PULLBACK"`) from the pattern string. Field added to `trades.append({...})`. Added to `_export_csv()` fieldnames after `pattern`. Enables per-MTF-bias win rate analysis on trade history.
+
+---
+
 ## v47.19 — 2026-06-30 — MTF intelligence loop complete: scorer dimension 6; Strategist reads mtf_stats; debrief Telegram shows bias tag
 
 ### `signal_scorer.py`

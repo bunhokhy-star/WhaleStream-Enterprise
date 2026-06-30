@@ -42,6 +42,7 @@ import io
 import sys
 import csv
 import json
+import re
 from datetime import datetime, timezone, timedelta
 
 BKK = timezone(timedelta(hours=7))   # Bangkok timezone (UTC+7) — used everywhere
@@ -207,7 +208,7 @@ def _export_csv(trades: list):
     fieldnames = [
         "id", "coin", "direction", "category",
         "entry_price", "exit_price", "tp_hit", "pnl_pct", "pnl_usd",
-        "pattern", "signal_score", "opened_at", "closed_at",
+        "pattern", "mtf_bias", "signal_score", "opened_at", "closed_at",
         "bybit_order_id", "conf_pct",
     ]
     with open(TRADE_LOG_CSV, "w", newline="", encoding="utf-8") as f:
@@ -248,6 +249,9 @@ def sync_from_sheets() -> int:
         direction  = "LONG" if "LONG" in _dir_raw else ("SHORT" if "SHORT" in _dir_raw else _dir_raw)
         conf_raw   = row[COL_CONF].strip()               if len(row) > COL_CONF        else ""
         pattern    = row[COL_PATTERN].strip()            if len(row) > COL_PATTERN     else ""
+        # Extract MTF bias embedded in pattern string (e.g. "Bull flag [4H_BULL_1H_PULLBACK]")
+        _mtf_m   = re.search(r'\[([A-Z0-9_]{5,30})\]', pattern)
+        mtf_bias = _mtf_m.group(1) if _mtf_m and _mtf_m.group(1).startswith(("4H_", "MTF_")) else ""
         opened_at  = row[COL_TIMESTAMP].strip()          if len(row) > COL_TIMESTAMP   else ""
         entry_px   = row[COL_ENTRY_PRICE].strip()        if len(row) > COL_ENTRY_PRICE else ""
         exit_px    = row[COL_EXIT_PRICE].strip()         if len(row) > COL_EXIT_PRICE  else ""
@@ -291,6 +295,7 @@ def sync_from_sheets() -> int:
             "pnl_usd":       pnl_usd,
             "conf_pct":      conf_pct,
             "pattern":       pattern,
+            "mtf_bias":      mtf_bias,   # e.g. "4H_BULL_1H_PULLBACK" — NEW v47.20
             "signal_score":  None,   # filled by signal_scorer when available
             "opened_at":     opened_at,
             "closed_at":     closed_at,
