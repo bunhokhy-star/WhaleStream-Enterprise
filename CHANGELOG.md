@@ -15,6 +15,10 @@
 ### `morning_briefing.py`
 - **Fear & Greed Index** — New `_get_fear_greed()` fetches from `api.alternative.me/fng/` each morning. Score + emoji injected into the daily Telegram briefing. Macro alerts: score<25 = `⚠️ EXTREME FEAR — system favours SHORTs`; score>80 = `⚠️ EXTREME GREED — LONG risk elevated`.
 
+### `whale_stream_market_intel.py` (NEW standalone module)
+- **Standalone market intelligence utility** — Provides `get_fear_greed()`, `get_funding_oi()`, `get_coin_indicators()`, `run_market_intel()`, and `load_market_context()` as reusable functions. Can be run independently to pre-populate market data before the bot cycle.
+- **`market_context.json`** — Shared cache file written by bot.py each cycle (F&G text + per-coin RSI/EMA/vol/signal) and loadable by any agent via `load_market_context()`. Also now written directly by bot.py from already-fetched data to avoid duplicate API calls.
+
 ## v47.45 — 2026-06-30 — Bear regime tightening: PENDLE block + BEAR LONG slots 2→1
 
 ### `whale_stream_bot.py`

@@ -3168,6 +3168,22 @@ def main():
         if len(batches) > 1:
             batches[1] = batches[1] + f"\n\n{_indicator_text}\n"
 
+    # ── Write market_context.json for cross-agent data sharing (v47.46) ──────
+    # Other agents (strategist, morning briefing) can load this file to avoid
+    # duplicate API calls and to share F&G + indicator data within the same cycle.
+    try:
+        _mc_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "market_context.json")
+        _mc_data = {
+            "generated_at":    datetime.now(BKK).isoformat(),
+            "fear_greed_text": fear_greed,
+            "indicators":      {_c: _v for _c, _v in _tech_indicators.items()},
+        }
+        with open(_mc_path, "w", encoding="utf-8") as _mcf:
+            json.dump(_mc_data, _mcf, indent=2)
+        print(f"   ✅ market_context.json written ({len(_tech_indicators)} coins)")
+    except Exception as _mc_err:
+        print(f"   ⚠ market_context.json write skipped: {_mc_err}")
+
     # ── Step 4: Analyze with Claude — 2 separate calls to exploit prompt caching ──
     # v45.2: Batch 1 WRITES the system-prompt cache (4,442 tokens at 125% cost).
     #         Batch 2 READS the cache within the same run  (4,442 tokens at  10% cost).
