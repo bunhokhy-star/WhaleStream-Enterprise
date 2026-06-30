@@ -319,7 +319,20 @@ COL_STATUS     = 11
 # Signals below this floor are skipped even if Strategist approved.
 # Strategist already auto-vetoes score < 4; this is a belt-and-suspenders
 # floor for signals that bypassed scorer (e.g. Strategist ran without scorer).
-SCORE_MIN_TRADER = 5
+SCORE_MIN_TRADER = 5   # default — may be overridden by scorer_config.json (auto-tuned by debrief)
+# Load auto-tuned score floor if debrief has written one (v47.23)
+try:
+    _scfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scorer_config.json")
+    if os.path.exists(_scfg_path):
+        with open(_scfg_path, "r", encoding="utf-8") as _scf:
+            _scfg = json.load(_scf)
+        if "SCORE_MIN_TRADER" in _scfg:
+            SCORE_MIN_TRADER = int(_scfg["SCORE_MIN_TRADER"])
+            print(f"   🎛 scorer_config.json: SCORE_MIN_TRADER overridden to {SCORE_MIN_TRADER} "
+                  f"(auto-tuned at {_scfg.get('auto_tuned_at','?')})")
+except Exception:
+    pass   # non-critical — falls back to constant above
+
 # Columns 12-16: tracker columns (read by SL-to-BE and other logic)
 COL_ENTRY_PRICE = 12   # tracker: actual fill price (avgPrice from Bybit)
 COL_EXIT_PRICE  = 13   # tracker: actual exit price

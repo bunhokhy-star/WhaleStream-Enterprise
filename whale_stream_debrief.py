@@ -281,6 +281,35 @@ def save_memory(memory):
             score_tier_stats[_tier]["losses"] += 1
     memory["score_tier_stats"] = score_tier_stats
 
+    # Auto-tune score floor (v47.23): if tier 5-6 underperforms, raise gate to 6
+    # Threshold: ≥8 trades in tier 5-6 AND WR < 45% → write scorer_config.json
+    # trader.py reads this at startup to override SCORE_MIN_TRADER constant.
+    try:
+        _t56 = score_tier_stats.get("5-6", {})
+        _t56_w = _t56.get("wins", 0)
+        _t56_l = _t56.get("losses", 0)
+        _t56_n = _t56_w + _t56_l
+        _cfg_path = os.path.join(SCRIPT_DIR, "scorer_config.json")
+        if _t56_n >= 8:
+            _t56_wr = _t56_w / _t56_n
+            _new_floor = 6 if _t56_wr < 0.45 else 5
+            _old_cfg = {}
+            try:
+                with open(_cfg_path, "r", encoding="utf-8") as _cf:
+                    _old_cfg = json.load(_cf)
+            except Exception:
+                pass
+            if _old_cfg.get("SCORE_MIN_TRADER") != _new_floor:
+                _cfg_data = {"SCORE_MIN_TRADER": _new_floor,
+                             "auto_tuned_at": bkk_now_str(),
+                             "basis": f"tier5-6: {_t56_w}W/{_t56_l}L = {_t56_wr*100:.1f}% WR"}
+                with open(_cfg_path, "w", encoding="utf-8") as _cf:
+                    json.dump(_cfg_data, _cf, indent=2)
+                log(f"   🎛 AUTO-TUNE: SCORE_MIN_TRADER → {_new_floor} "
+                    f"(tier5-6 WR={_t56_wr*100:.1f}% over {_t56_n} trades) → scorer_config.json")
+    except Exception as _at_e:
+        log(f"   ⚠ Auto-tune write failed (non-critical): {_at_e}")
+
     try:
         _tmp = MEMORY_FILE + ".tmp"
         with open(_tmp, "w", encoding="utf-8") as f:
@@ -606,8 +635,10 @@ def run_debrief(trades):
         pnl_str   = f"{d['pnl']:+.1f}%" if d.get("pnl") is not None else ""
         consensus = d.get("consensus", "")
         mtf_tag   = f" [{d['mtf_bias']}]" if d.get("mtf_bias") else ""
+        _sc       = d.get("score")
+        score_tag = f" 📊{_sc:.0f}/10" if _sc is not None else ""
         lines.append(
-            f"  {icon} <b>{d['coin']} {d['direction']}</b> [{d['entry_quality']}]{mtf_tag} {pnl_str}\n"
+            f"  {icon} <b>{d['coin']} {d['direction']}</b> [{d['entry_quality']}]{mtf_tag}{score_tag} {pnl_str}\n"
             f"  Why: {d['why']}\n"
             f"  {flag_icon} Lesson: {d['lesson']}\n"
             f"  🤝 {consensus}"

@@ -1174,6 +1174,33 @@ def fetch_signal_graveyard():
         except Exception:
             pass   # non-critical
 
+        # ── Option A (v47.23): Inject recent AVOID lessons per coin ──────────
+        # Debrief agent writes per-coin AVOID lessons to pattern_memory coin_lessons.
+        # Claude sees these at signal-generation time — mistakes not repeated at source.
+        try:
+            _mem_path3 = os.path.join(os.path.dirname(__file__), "pattern_memory.json")
+            if os.path.exists(_mem_path3):
+                with open(_mem_path3, "r", encoding="utf-8") as _mf3:
+                    _mem3 = json.load(_mf3)
+                _coin_lessons = _mem3.get("coin_lessons", {})
+                _avoid_lines = []
+                for _coin_name, _dirs in _coin_lessons.items():
+                    for _dir_name, _lessons in _dirs.items():
+                        # Only inject AVOID-flagged lessons
+                        _avoid = [l for l in _lessons if l.startswith("[AVOID]")]
+                        for _lesson_txt in _avoid[-2:]:  # keep last 2 per coin+direction
+                            _avoid_lines.append(
+                                f"  ⛔ {_coin_name} {_dir_name}: {_lesson_txt[len('[AVOID]'):].strip()}"
+                            )
+                if _avoid_lines:
+                    graveyard_text += (
+                        "\n\nRECENT AVOID LESSONS (from post-trade debrief — DO NOT repeat these):\n"
+                        + "\n".join(_avoid_lines[:15])  # cap at 15 to stay within token budget
+                    )
+        except Exception:
+            pass   # non-critical — graveyard still works without lessons
+        # ── end AVOID lessons ─────────────────────────────────────────────────
+
         print(f"   ✓ Signal Graveyard: {len(recent)} trades (overall {win_rate:.0f}% WR | long {long_wr:.0f}% | short {short_wr:.0f}%)")
         if blacklisted:
             print(f"   🚫 Short blacklist: {', '.join(blacklisted)}")

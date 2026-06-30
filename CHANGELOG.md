@@ -1,5 +1,22 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.23 — 2026-06-30 — AVOID lesson injection; auto-tune score floor; weekly Telegram health card
+
+### `whale_stream_bot.py`
+- **NEW: AVOID lessons injected into signal-generation prompt** — after adaptive confidence floors block in `fetch_signal_graveyard()`, reads `coin_lessons` from `pattern_memory.json`, extracts all `[AVOID]`-flagged lessons per coin+direction, injects up to last 2 per coin (capped at 15 total) into `graveyard_text` under `RECENT AVOID LESSONS` header. Claude now sees specific post-trade loss lessons at signal-generation time — mistakes are stopped at the source, not just filtered downstream. Fails silently.
+
+### `whale_stream_debrief.py`
+- **NEW: Score tag in Telegram debrief message** — each trade entry now shows `📊X/10` score (from `strat_decision.get("score")`) inline after MTF tag: `✅ BTC LONG [A][4H_BULL_1H_PULLBACK] 📊8/10 +12.4%`. Shows `null` trades as no tag (score unavailable for pre-v47.21 trades).
+- **NEW: Auto-tune score floor** — in `save_memory()`, after computing `score_tier_stats`: if tier `5-6` has ≥8 trades and WR < 45%, writes `{"SCORE_MIN_TRADER": 6}` to `scorer_config.json`. If WR recovers ≥45%, writes floor back to 5. Logs the change with basis. System self-improves without manual intervention.
+
+### `whale_stream_trader.py`
+- **NEW: Read `scorer_config.json` at startup** — immediately after `SCORE_MIN_TRADER = 5` constant, checks for `scorer_config.json` written by debrief auto-tune. If present and valid, overrides the constant. Prints `🎛 scorer_config.json: SCORE_MIN_TRADER overridden to 6`. Falls back silently to constant 5 if file absent or corrupt.
+
+### `analyze_shorts.py`
+- **NEW: Weekly Telegram health card** — at end of `main()`, sends compact ops channel message: Gate 1/3 status, LONG/SHORT WR, score tier WR table (from `pattern_memory.json`), top 3 LONG coins by WR, top 3 MTF biases, chronic miss coins. Runs every Sunday automatically (tracker already calls analyze_shorts weekly). Fails silently.
+
+---
+
 ## v47.22 — 2026-06-30 — Scorer feedback loop; dynamic signal count; entry hit-rate analysis
 
 ### `whale_stream_debrief.py`

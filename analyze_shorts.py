@@ -920,5 +920,93 @@ def main():
         f.write("\n".join(lines))
     print(f"\nAnalysis saved to: {OUT_FILE}")
 
+    # ── Weekly Telegram Health Card (v47.23) ──────────────────────────────────
+    # Sends a compact system health card to ops Telegram channel.
+    # Runs every Sunday automatically (tracker calls analyze_shorts every Sunday).
+    try:
+        import requests as _tgreq
+
+        _tg_lines = ["📊 <b>WHALE-STREAM WEEKLY HEALTH CARD</b>"]
+        _tg_lines.append(f"  {datetime.now().strftime('%Y-%m-%d')} — {len(resolved)} resolved trades total\n")
+
+        # Gate status
+        _g1_str = "✅ CLEARED" if _g1_ok else f"❌ {len(resolved)}/150"
+        _g3_str = "✅ PASS" if _g3_ok else f"❌ {_short_wr_sum:.1f}%"
+        _tg_lines.append(
+            f"🏁 <b>Gates</b>  G1:{_g1_str}  G3:{_g3_str}\n"
+            f"  LONG WR: {_long_wr_sum:.1f}%  SHORT WR: {_short_wr_sum:.1f}%"
+        )
+
+        # Score tier WR (if available)
+        _stats_path = os.path.join(SCRIPT_DIR, "pattern_memory.json")
+        if os.path.exists(_stats_path):
+            try:
+                with open(_stats_path, "r", encoding="utf-8") as _sf:
+                    _smem = json.load(_sf)
+                _sts = _smem.get("score_tier_stats", {})
+                _scored_total = sum(
+                    _sts.get(t, {}).get("wins", 0) + _sts.get(t, {}).get("losses", 0)
+                    for t in ("0-4", "5-6", "7-8", "9-10")
+                )
+                if _scored_total > 0:
+                    _tg_lines.append("\n📈 <b>Score Tier WR</b>")
+                    for _tier in ("9-10", "7-8", "5-6", "0-4"):
+                        _tw = _sts.get(_tier, {}).get("wins", 0)
+                        _tl = _sts.get(_tier, {}).get("losses", 0)
+                        _tt = _tw + _tl
+                        if _tt == 0:
+                            continue
+                        _twr = _tw / _tt * 100
+                        _icon = "⭐" if _tier == "9-10" else ("✅" if _twr >= 55 else ("⚠️" if _twr >= 40 else "❌"))
+                        _tg_lines.append(f"  {_icon} Score {_tier}: {_twr:.0f}% WR ({_tw}W/{_tl}L)")
+            except Exception:
+                pass
+
+        # Top 3 coins by LONG WR (≥3 trades)
+        _top_coins = [(c, n, w, wr, ap) for c, n, w, wr, ap in long_coin_table if n >= 3][:3]
+        if _top_coins:
+            _tg_lines.append("\n🏆 <b>Top LONG Coins</b>")
+            for _cn, _n, _w, _wr, _ap in _top_coins:
+                _ap_str = f"{_ap:+.1f}%" if _ap is not None else "n/a"
+                _tg_lines.append(f"  ⭐ {_cn}: {_wr*100:.0f}% WR ({_n}T) avg {_ap_str}")
+
+        # Top 3 MTF biases
+        if os.path.exists(_stats_path):
+            try:
+                _mtf_s = _smem.get("mtf_stats", {})
+                _mtf_rows2 = []
+                for _bias, _bs in _mtf_s.items():
+                    _bw = _bs.get("wins", 0)
+                    _bl = _bs.get("losses", 0)
+                    _bt = _bw + _bl
+                    if _bt < 3:
+                        continue
+                    _mtf_rows2.append((_bias, _bw, _bl, _bt, _bw / _bt * 100))
+                _mtf_rows2.sort(key=lambda x: -x[4])
+                if _mtf_rows2:
+                    _tg_lines.append("\n🔭 <b>Top MTF Biases</b>")
+                    for _bias, _bw, _bl, _bt, _bwr in _mtf_rows2[:3]:
+                        _bicon = "✅" if _bwr >= 60 else ("⚠️" if _bwr >= 45 else "🚫")
+                        _tg_lines.append(f"  {_bicon} {_bias}: {_bwr:.0f}% ({_bw}W/{_bl}L)")
+            except Exception:
+                pass
+
+        # Chronic miss coins
+        _chronic_miss = [r[0] for r in _coin_rows if r[4] >= 0.70] if '_coin_rows' in dir() else []
+        if _chronic_miss:
+            _tg_lines.append(f"\n⚠️ <b>Chronic Miss Coins</b> (≥70% expiry)")
+            _tg_lines.append(f"  {', '.join(_chronic_miss[:5])} — widen entry zones")
+
+        _tg_msg = "\n".join(_tg_lines)
+        _tgreq.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={"chat_id": TELEGRAM_CHAT_ID, "text": _tg_msg, "parse_mode": "HTML"},
+            timeout=10,
+        )
+        print("   ✅ Weekly health card sent to Telegram ops channel")
+    except Exception as _tge:
+        print(f"   ⚠ Weekly Telegram health card failed (non-critical): {_tge}")
+    # ── end weekly health card ─────────────────────────────────────────────────
+
 if __name__ == "__main__":
     main()
