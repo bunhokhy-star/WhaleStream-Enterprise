@@ -734,6 +734,23 @@ def build_strategist_user_message(signals, history, positions, balance, drawdown
         if not _is_bl_long and not _is_bl_short and _pb_key in _probation_set:
             lines.append(f"  🔶 ON PROBATION — expired from auto-blocklist; monitor closely")
 
+        # ── Chronic loser veto flag (v47.35) ─────────────────────────────────
+        # If this coin's all-time avg P&L < -1% over ≥10 trades → warn Claude.
+        try:
+            if memory:
+                _cs_v = memory.get("coin_stats", {}).get(_coin_up, {})
+                _cs_cnt = _cs_v.get("pnl_count", 0)
+                _cs_tot = _cs_v.get("pnl_total", 0.0)
+                if _cs_cnt >= 10:
+                    _cs_avg = _cs_tot / _cs_cnt
+                    if _cs_avg < -1.0:
+                        lines.append(
+                            f"  ❌ CHRONIC LOSER — avg P&L {_cs_avg:.2f}%/trade "
+                            f"over {_cs_cnt} trades; require 95%+ confidence before approving"
+                        )
+        except Exception:
+            pass  # non-critical
+
         if not trades:
             lines.append(f"  History    : No resolved trades yet on this coin+direction")
         else:

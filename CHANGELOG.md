@@ -1,5 +1,20 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.35 — 2026-06-30 — Strategist P&L veto; exit quality tracking; bot soft-avoid list
+
+### `whale_stream_strategist.py`
+- **NEW: Chronic loser veto flag (Option A)** — After the probation warning for each signal, reads `coin_stats` from `pattern_memory.json` (already loaded as `memory`). If the coin has ≥10 trades with P&L data and avg P&L < -1%/trade, appends `❌ CHRONIC LOSER — avg X.XX%/trade over N trades; require 95%+ confidence before approving` to the signal context block. Gives Claude data-driven P&L evidence to reject historically cash-negative coins. Fails silently.
+
+### `whale_stream_debrief.py`
+- **NEW: Exit quality tracking by score tier (Option B)** — After the `score_accuracy` block, iterates all debrief records and classifies each resolved trade by score tier (ELITE/GOOD/MARGINAL/LOW) and exit type (TP1/TP2/TP3/TP4/SL/other). Writes `pattern_memory["exit_stats"]` with per-tier counts for each exit slot + total. Enables calibration checks: are ELITE signals actually hitting TP3/TP4, or mostly TP1?
+
+### `morning_briefing.py`
+- **NEW: Exit quality section (Option B)** — Reads `exit_stats` from `pattern_memory.json`. For each of ELITE/GOOD/MARGINAL with ≥5 trades, shows `🎯 EXIT QUALITY` line: `ELITE (N trades): TP1:x, TP2:y, TP3:z, SL:w`. Silent when fewer than 5 trades per tier. Placed before the coin P&L section.
+
+### `whale_stream_bot.py`
+- **NEW: BOT_SOFT_AVOID module-level load (Option C)** — At startup, reads `pattern_memory.json` coin_stats. Any coin with avg P&L < -0.5% over ≥10 trades is added to `BOT_SOFT_AVOID` set. Prints startup summary if any coins qualify. Fails silently.
+- **NEW: Soft-avoid graveyard injection (Option C)** — After the probation caution block, if `BOT_SOFT_AVOID` is non-empty, appends an `UNDERPERFORMING COINS` section to `graveyard_text` listing all soft-avoid coins with a note that they require 95%+ confidence. Weaker than the hard blocklist — Claude can still include these if the setup is clean.
+
 ## v47.34 — 2026-06-30 — Strategist drift awareness; coin P&L tracking; Sunday probation review
 
 ### `whale_stream_strategist.py`

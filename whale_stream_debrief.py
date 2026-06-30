@@ -332,6 +332,36 @@ def save_memory(memory):
             _score_accuracy[_acc_tier]["incorrect"] += 1
     memory["score_accuracy"] = _score_accuracy
 
+    # Exit quality tracking by score tier (v47.35) ─────────────────────────────
+    # Tracks which TP level (or SL) was hit per score tier.
+    # Helps assess whether TP targets are calibrated for ELITE vs GOOD vs MARGINAL.
+    _exit_tiers = ("ELITE", "GOOD", "MARGINAL", "LOW")
+    _exit_slots  = ("TP1", "TP2", "TP3", "TP4", "SL", "other")
+    _exit_stats  = {t: {s: 0 for s in _exit_slots} | {"total": 0} for t in _exit_tiers}
+    for _ed in memory.get("debriefs", []):
+        _esc = _ed.get("score")
+        if _esc is None:
+            continue
+        try:
+            _esc = float(_esc)
+        except (TypeError, ValueError):
+            continue
+        _eout = _ed.get("outcome", "").upper()
+        if _eout not in ("WIN", "LOSS"):
+            continue
+        _etier = ("ELITE" if _esc >= 9 else "GOOD" if _esc >= 7 else
+                  "MARGINAL" if _esc >= 5 else "LOW")
+        _etp   = (_ed.get("tp_hit", "") or "").upper().strip()
+        if _eout == "LOSS":
+            _ekey = "SL"
+        elif _etp.startswith("TP") and _etp in ("TP1", "TP2", "TP3", "TP4"):
+            _ekey = _etp
+        else:
+            _ekey = "other"
+        _exit_stats[_etier][_ekey]    += 1
+        _exit_stats[_etier]["total"]  += 1
+    memory["exit_stats"] = _exit_stats
+
     # Per-proxy win correlation (v47.31) — identifies miscalibrated scorer dimensions
     # Tracks two inferable proxies from stored debrief fields:
     #   Confidence (dim 1 proxy): high/med/low confidence buckets

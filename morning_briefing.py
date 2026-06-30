@@ -1125,6 +1125,32 @@ def build_message():
     except Exception:
         pass  # non-critical
 
+    # ── Exit quality by score tier (v47.35) ──────────────────────────────────
+    # Shows TP hit distribution per tier so we know if TP targets are calibrated.
+    try:
+        _eq_path_mb = os.path.join(BASE_DIR, "pattern_memory.json")
+        if os.path.exists(_eq_path_mb):
+            with open(_eq_path_mb, "r", encoding="utf-8") as _eqf_mb:
+                _eq_mem_mb = json.load(_eqf_mb)
+            _eq_stats = _eq_mem_mb.get("exit_stats", {})
+            _eq_rows  = []
+            for _eq_tier in ("ELITE", "GOOD", "MARGINAL"):
+                _eq_tv = _eq_stats.get(_eq_tier, {})
+                _eq_n  = _eq_tv.get("total", 0)
+                if _eq_n < 5:
+                    continue
+                _eq_parts = []
+                for _eq_slot in ("TP1", "TP2", "TP3", "TP4", "SL"):
+                    _eq_cnt = _eq_tv.get(_eq_slot, 0)
+                    if _eq_cnt:
+                        _eq_parts.append(f"{_eq_slot}:{_eq_cnt}")
+                if _eq_parts:
+                    _eq_rows.append(f"  {_eq_tier:<8} ({_eq_n} trades): {', '.join(_eq_parts)}")
+            if _eq_rows:
+                lines += ["", "🎯 EXIT QUALITY (TP distribution by score tier)"] + _eq_rows
+    except Exception:
+        pass  # non-critical
+
     # ── Coin-level P&L performance (v47.34) ──────────────────────────────────
     # Reads coin_stats from pattern_memory.json; shows avg P&L/trade for coins
     # with ≥5 closed trades. Top 5 by avg P&L + bottom 3 by avg P&L.

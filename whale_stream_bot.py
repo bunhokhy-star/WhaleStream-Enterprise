@@ -216,6 +216,26 @@ try:
 except Exception:
     pass  # fail silently — non-critical
 
+# ── Soft-avoid from coin P&L (v47.35) ────────────────────────────────────────
+# Coins with avg P&L < -0.5% over ≥10 trades in pattern_memory coin_stats.
+# Injected into graveyard prompt — Claude sees these as historically cash-negative
+# and applies a higher confidence bar before including them in a signal batch.
+BOT_SOFT_AVOID: set = set()
+try:
+    _pm_path_bot = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pattern_memory.json")
+    if os.path.exists(_pm_path_bot):
+        with open(_pm_path_bot, "r", encoding="utf-8") as _pmf_bot:
+            _pm_data_bot = json.load(_pmf_bot)
+        for _sa_coin, _sa_v in _pm_data_bot.get("coin_stats", {}).items():
+            _sa_cnt = _sa_v.get("pnl_count", 0)
+            _sa_tot = _sa_v.get("pnl_total", 0.0)
+            if _sa_cnt >= 10 and (_sa_tot / _sa_cnt) < -0.5:
+                BOT_SOFT_AVOID.add(_sa_coin.upper())
+    if BOT_SOFT_AVOID:
+        print(f"   ⚠ SOFT-AVOID (avg P&L <-0.5%, ≥10 trades): {sorted(BOT_SOFT_AVOID)}")
+except Exception:
+    pass  # fail silently — non-critical
+
 # ── Malformed coin blocklist (BOTH directions) ────────────────────────────────
 # Coins that consistently generate invalid SL levels in EITHER direction.
 # The AI keeps picking these but always places SL on the wrong side of entry,
@@ -1330,6 +1350,18 @@ def fetch_signal_graveyard():
         except Exception:
             pass   # non-critical
         # ── end Probation coin caution ────────────────────────────────────────
+
+        # ── Task 5 (v47.35): Soft-avoid from coin P&L ────────────────────────
+        try:
+            if BOT_SOFT_AVOID:
+                graveyard_text += (
+                    "\n\nUNDERPERFORMING COINS (historically negative avg P&L — P&L-driven caution, not a hard block):\n"
+                    "  ⚠ SOFT-AVOID: " + ", ".join(sorted(BOT_SOFT_AVOID))
+                    + " — avg P&L below -0.5% over ≥10 trades; only include if setup is exceptionally clean (95%+ confidence)"
+                )
+        except Exception:
+            pass  # non-critical
+        # ── end Soft-avoid injection ──────────────────────────────────────────
 
         print(f"   ✓ Signal Graveyard: {len(recent)} trades (overall {win_rate:.0f}% WR | long {long_wr:.0f}% | short {short_wr:.0f}%)")
         if blacklisted:
