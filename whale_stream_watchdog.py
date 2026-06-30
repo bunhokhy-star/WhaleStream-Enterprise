@@ -718,6 +718,40 @@ if __name__ == "__main__":
             except Exception:
                 _prob_block_wd = "  (probation data unavailable)"
 
+            # ── Coin P&L leaderboard (v47.36) ─────────────────────────────────
+            # Top 5 and bottom 5 coins by avg P&L/trade from coin_stats.
+            _lb_block_wd = ""
+            try:
+                _cs_wd = _pm_wd.get("coin_stats", {})
+                _lb_rows = []
+                for _lbc, _lbv in _cs_wd.items():
+                    _lb_cnt = _lbv.get("pnl_count", 0)
+                    _lb_tot = _lbv.get("pnl_total", 0.0)
+                    _lb_w   = _lbv.get("wins", 0)
+                    _lb_l   = _lbv.get("losses", 0)
+                    _lb_n   = _lb_w + _lb_l
+                    if _lb_cnt >= 5:
+                        _lb_avg = _lb_tot / _lb_cnt
+                        _lb_wr  = (_lb_w / _lb_n * 100) if _lb_n else 0.0
+                        _lb_rows.append((_lbc, _lb_avg, _lb_wr, _lb_cnt))
+                if _lb_rows:
+                    _lb_rows.sort(key=lambda x: x[1], reverse=True)
+                    _lb_top = _lb_rows[:5]
+                    _lb_bot = _lb_rows[-5:] if len(_lb_rows) > 5 else []
+                    def _fmt_lb(r, icon):
+                        _n, _avg, _wr, _cnt = r
+                        _sign = "+" if _avg >= 0 else ""
+                        return f"  {icon} {_n:<10} {_sign}{_avg:.2f}%/trade  WR:{_wr:.0f}%  ({_cnt})"
+                    _lb_lines = [_fmt_lb(r, "✅") for r in _lb_top]
+                    if _lb_bot:
+                        _lb_lines.append("  ─")
+                        _lb_lines += [_fmt_lb(r, "❌") for r in _lb_bot]
+                    _lb_block_wd = "\n".join(_lb_lines)
+                else:
+                    _lb_block_wd = "  (fewer than 5 trades with P&L data per coin)"
+            except Exception:
+                _lb_block_wd = "  (leaderboard unavailable)"
+
             _sunday_msg = (
                 f"📊 <b>WEEKLY SCORER HEALTH DIGEST</b>\n"
                 f"🗓 {now_str}\n"
@@ -734,6 +768,9 @@ if __name__ == "__main__":
                 f"\n"
                 f"<b>🔶 Probation Week-in-Review:</b>\n"
                 f"{_prob_block_wd}\n"
+                f"\n"
+                f"<b>🏆 Coin P&amp;L Leaderboard (top 5 / bottom 5, ≥5 trades):</b>\n"
+                f"{_lb_block_wd}\n"
                 f"\n"
                 f"✅ = ≥60% WR  ⚠️ = 45-59%  ❌ = &lt;45%"
             )

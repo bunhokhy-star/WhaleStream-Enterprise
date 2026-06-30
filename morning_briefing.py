@@ -1151,6 +1151,27 @@ def build_message():
     except Exception:
         pass  # non-critical
 
+    # ── TP calibration suggestion (v47.36) ───────────────────────────────────
+    # Shows when debrief detects ELITE signals skewing heavily toward TP1 or TP3+.
+    try:
+        _tpc_path_mb = os.path.join(BASE_DIR, "tp_calibration.json")
+        if os.path.exists(_tpc_path_mb):
+            with open(_tpc_path_mb, "r", encoding="utf-8") as _tpcf_mb:
+                _tpc_mb = json.load(_tpcf_mb)
+            _tpc_issue = _tpc_mb.get("issue", "")
+            _tpc_note  = _tpc_mb.get("note", "")
+            _tpc_since = (_tpc_mb.get("updated_at", "") or "")[:16]
+            _tpc_n     = _tpc_mb.get("elite_total", 0)
+            if _tpc_issue and _tpc_note:
+                _tpc_icon = "⚠️" if _tpc_issue == "TP_TOO_AGGRESSIVE" else "📈"
+                lines += [
+                    "",
+                    f"{_tpc_icon} TP CALIBRATION ALERT (since {_tpc_since}, {_tpc_n} ELITE trades):",
+                    f"  {_tpc_note}",
+                ]
+    except Exception:
+        pass  # non-critical
+
     # ── Coin-level P&L performance (v47.34) ──────────────────────────────────
     # Reads coin_stats from pattern_memory.json; shows avg P&L/trade for coins
     # with ≥5 closed trades. Top 5 by avg P&L + bottom 3 by avg P&L.

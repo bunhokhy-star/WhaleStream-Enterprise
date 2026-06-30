@@ -236,6 +236,24 @@ try:
 except Exception:
     pass  # fail silently — non-critical
 
+# ── Win-streak coins from coin_stats (v47.36) ─────────────────────────────────
+# Coins with ≥3 consecutive wins in pattern_memory coin_stats.
+# Injected into graveyard prompt as a positive signal — Claude is encouraged
+# to include hot-streak coins at lower confidence (≥85% vs normal floor).
+BOT_WIN_STREAK: set = set()
+try:
+    _pm_path_ws = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pattern_memory.json")
+    if os.path.exists(_pm_path_ws):
+        with open(_pm_path_ws, "r", encoding="utf-8") as _pmf_ws:
+            _pm_data_ws = json.load(_pmf_ws)
+        for _ws_coin, _ws_v in _pm_data_ws.get("coin_stats", {}).items():
+            if _ws_v.get("consecutive_wins", 0) >= 3:
+                BOT_WIN_STREAK.add(_ws_coin.upper())
+    if BOT_WIN_STREAK:
+        print(f"   ✅ WIN-STREAK (≥3 consecutive wins): {sorted(BOT_WIN_STREAK)}")
+except Exception:
+    pass  # fail silently — non-critical
+
 # ── Malformed coin blocklist (BOTH directions) ────────────────────────────────
 # Coins that consistently generate invalid SL levels in EITHER direction.
 # The AI keeps picking these but always places SL on the wrong side of entry,
@@ -1362,6 +1380,18 @@ def fetch_signal_graveyard():
         except Exception:
             pass  # non-critical
         # ── end Soft-avoid injection ──────────────────────────────────────────
+
+        # ── v47.36C: Win-streak coins — positive momentum signal ─────────────
+        try:
+            if BOT_WIN_STREAK:
+                graveyard_text += (
+                    "\n\nHOT-STREAK COINS (≥3 consecutive wins — momentum is on their side):\n"
+                    "  ✅ WIN STREAK: " + ", ".join(sorted(BOT_WIN_STREAK))
+                    + " — currently on a winning run; you may include these at slightly lower confidence (≥85%) if the setup is clean"
+                )
+        except Exception:
+            pass  # non-critical
+        # ── end Win-streak injection ──────────────────────────────────────────
 
         print(f"   ✓ Signal Graveyard: {len(recent)} trades (overall {win_rate:.0f}% WR | long {long_wr:.0f}% | short {short_wr:.0f}%)")
         if blacklisted:

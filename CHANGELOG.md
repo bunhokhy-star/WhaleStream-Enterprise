@@ -1,5 +1,21 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.36 — 2026-06-30 — Sunday coin leaderboard; TP calibration alert; consecutive win streak
+
+### `whale_stream_watchdog.py`
+- **NEW: Coin P&L leaderboard in Sunday digest (Option A)** — Sunday Telegram now includes a `🏆 Coin P&L Leaderboard` block. Reads `coin_stats` from `pattern_memory.json`, filters coins with ≥5 P&L trades, sorts by avg P&L/trade, and shows top 5 (✅) and bottom 5 (❌) with avg P&L, WR%, and trade count. Silent fallback on error.
+
+### `whale_stream_debrief.py`
+- **NEW: TP calibration suggestion (Option B)** — After `memory["exit_stats"]` is written, reads the ELITE tier totals. If ≥10 ELITE trades: if TP1 rate > 60% writes `tp_calibration.json` with `issue: TP_TOO_AGGRESSIVE` and an advisory note; if TP3+TP4 rate > 60% writes with `issue: TP_TOO_CONSERVATIVE`; otherwise deletes the file if it exists. Fails silently.
+- **NEW: Consecutive win tracking in coin_stats (Option C)** — The coin_stats builder loop now computes `consecutive_wins` (mirror of `consecutive_losses`): iterates most-recent-first, counts WINs until first non-WIN. Added to each `coin_stats[c]` entry alongside `consecutive_losses`. Stored in `pattern_memory.json`.
+
+### `morning_briefing.py`
+- **NEW: TP calibration alert section (Option B)** — Before the coin P&L section, checks `tp_calibration.json`. If present, shows a `⚠️ TP CALIBRATION ALERT` (too aggressive) or `📈 TP CALIBRATION ALERT` (too conservative) with the advisory note, since-date, and ELITE trade count. Silent when file absent.
+
+### `whale_stream_bot.py`
+- **NEW: BOT_WIN_STREAK module-level load (Option C)** — At startup, reads `pattern_memory.json` coin_stats. Any coin with `consecutive_wins ≥ 3` is added to `BOT_WIN_STREAK` set. Prints startup summary if any coins qualify. Fails silently.
+- **NEW: Win-streak graveyard injection (Option C)** — After the soft-avoid block, if `BOT_WIN_STREAK` is non-empty, appends a `HOT-STREAK COINS` section to `graveyard_text` listing win-streak coins. Claude is encouraged to include these at slightly lower confidence (≥85%) when the setup is clean — the inverse of the soft-avoid warning.
+
 ## v47.35 — 2026-06-30 — Strategist P&L veto; exit quality tracking; bot soft-avoid list
 
 ### `whale_stream_strategist.py`

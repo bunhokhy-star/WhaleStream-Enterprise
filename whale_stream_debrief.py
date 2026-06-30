@@ -241,6 +241,13 @@ def save_memory(memory):
                 consec += 1
             else:
                 break
+        # Consecutive wins (v47.36) — positive mirror of consecutive_losses
+        consec_wins = 0
+        for d in c_debriefs:
+            if d.get("outcome", "").upper() == "WIN":
+                consec_wins += 1
+            else:
+                break
         # Accumulate all-time wins / losses / P&L per coin (v47.34)
         _cw = sum(1 for d in c_debriefs if d.get("outcome", "").upper() == "WIN")
         _cl = sum(1 for d in c_debriefs if d.get("outcome", "").upper() == "LOSS")
@@ -256,6 +263,7 @@ def save_memory(memory):
                     pass
         coin_stats[c] = {
             "consecutive_losses": consec,
+            "consecutive_wins":   consec_wins,
             "wins":      _cw,
             "losses":    _cl,
             "pnl_total": round(_cpnl_total, 4),
@@ -361,6 +369,58 @@ def save_memory(memory):
         _exit_stats[_etier][_ekey]    += 1
         _exit_stats[_etier]["total"]  += 1
     memory["exit_stats"] = _exit_stats
+
+    # TP calibration suggestion (v47.36) ─────────────────────────────────────
+    # If ELITE signals are mostly stopping at TP1, TPs may be too aggressive.
+    # If ELITE signals are >60% TP3+, TPs may be too conservative.
+    # Writes tp_calibration.json when imbalance detected; clears it when balanced.
+    try:
+        _tpc_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tp_calibration.json")
+        _elite_es = _exit_stats.get("ELITE", {})
+        _tpc_total = _elite_es.get("total", 0)
+        if _tpc_total >= 10:
+            _tpc_tp1    = _elite_es.get("TP1", 0)
+            _tpc_tp34   = _elite_es.get("TP3", 0) + _elite_es.get("TP4", 0)
+            _tpc_tp1_rt = _tpc_tp1  / _tpc_total
+            _tpc_hi_rt  = _tpc_tp34 / _tpc_total
+            if _tpc_tp1_rt > 0.60:
+                _tpc_msg = (
+                    f"ELITE signals stopping mostly at TP1 "
+                    f"({_tpc_tp1}/{_tpc_total} = {_tpc_tp1_rt*100:.0f}%) — "
+                    f"TPs may be too aggressive; consider tightening TP2/TP3 targets"
+                )
+                _tpc_data = {
+                    "issue":      "TP_TOO_AGGRESSIVE",
+                    "tp1_rate":   round(_tpc_tp1_rt, 3),
+                    "tp34_rate":  round(_tpc_hi_rt, 3),
+                    "elite_total": _tpc_total,
+                    "note":       _tpc_msg,
+                    "updated_at": datetime.now(BKK).strftime("%Y-%m-%d %H:%M"),
+                }
+                with open(_tpc_path, "w", encoding="utf-8") as _tpcf:
+                    json.dump(_tpc_data, _tpcf, indent=2)
+            elif _tpc_hi_rt > 0.60:
+                _tpc_msg = (
+                    f"ELITE signals frequently reaching TP3+ "
+                    f"({_tpc_tp34}/{_tpc_total} = {_tpc_hi_rt*100:.0f}%) — "
+                    f"TPs may be too conservative; consider widening TP2/TP3 targets"
+                )
+                _tpc_data = {
+                    "issue":      "TP_TOO_CONSERVATIVE",
+                    "tp1_rate":   round(_tpc_tp1_rt, 3),
+                    "tp34_rate":  round(_tpc_hi_rt, 3),
+                    "elite_total": _tpc_total,
+                    "note":       _tpc_msg,
+                    "updated_at": datetime.now(BKK).strftime("%Y-%m-%d %H:%M"),
+                }
+                with open(_tpc_path, "w", encoding="utf-8") as _tpcf:
+                    json.dump(_tpc_data, _tpcf, indent=2)
+            else:
+                # Balanced — clear any stale calibration file
+                if os.path.exists(_tpc_path):
+                    os.remove(_tpc_path)
+    except Exception:
+        pass  # non-critical
 
     # Per-proxy win correlation (v47.31) — identifies miscalibrated scorer dimensions
     # Tracks two inferable proxies from stored debrief fields:
