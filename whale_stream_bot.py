@@ -3623,6 +3623,14 @@ def main():
     # ── LONG coin whitelist: non-proven coins need conf≥95% (v47.43) ─────────
     # Proven = ≥3 LONG trades AND ≥60% WR in trade_log.json.
     # Eliminates the 0W/1L exploratory junk that drags LONG WR to 50%.
+    try:
+        _lwl_log_path = os.path.join(SCRIPT_DIR, "trade_log.json")
+        with open(_lwl_log_path, "r", encoding="utf-8") as _lwl_f:
+            resolved = json.load(_lwl_f)
+        if not isinstance(resolved, list):
+            resolved = []
+    except Exception:
+        resolved = []
     _lwl_wr = {}
     for _r in resolved:
         if _r.get("direction") != "LONG":
