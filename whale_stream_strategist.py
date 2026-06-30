@@ -682,6 +682,24 @@ def build_strategist_user_message(signals, history, positions, balance, drawdown
     except Exception:
         pass  # fail silently — non-critical
 
+    # ── Load score drift warning (v47.34) ────────────────────────────────────
+    # When scorer accuracy is in the 45-54% warning zone, tighten auto-skip:
+    # demote review signals with score = 4 → skipped (effective floor 4 → 5).
+    _score_drift_active: bool = False
+    _score_drift_tiers:  dict = {}
+    try:
+        _sdw_path_st = os.path.join(os.path.dirname(os.path.abspath(__file__)), "score_drift_warning.json")
+        if os.path.exists(_sdw_path_st):
+            with open(_sdw_path_st, "r", encoding="utf-8") as _sdwf_st:
+                _sdw_st = json.load(_sdwf_st)
+            _score_drift_tiers = _sdw_st.get("warned_tiers", {})
+            if _score_drift_tiers:
+                _score_drift_active = True
+                print(f"   ⚠ SCORE DRIFT active — raising auto-skip floor 4 → 5 "
+                      f"(tiers: {list(_score_drift_tiers.keys())})")
+    except Exception:
+        pass  # fail silently — non-critical
+
     for s in signals:
         key   = (s["coin"], s["direction"])
         trades = history.get(key, [])
@@ -1345,7 +1363,19 @@ def main():
             for s in (strong_sigs + review_sigs + skipped_sigs)
         }
 
-        # Auto-veto SKIP signals (score < 4) — save Claude tokens
+        # ── Score drift tightening (v47.34) ──────────────────────────────────
+        # Scorer in 45-54% warning zone → raise effective floor from 4 to 5.
+        # Move review_sigs with score exactly 4 into skipped_sigs.
+        if _score_drift_active:
+            _drift_demoted = [s for s in review_sigs if (s.get("score") or 0) <= 4]
+            _drift_kept    = [s for s in review_sigs if (s.get("score") or 0) > 4]
+            if _drift_demoted:
+                skipped_sigs = list(skipped_sigs) + _drift_demoted
+                review_sigs  = _drift_kept
+                print(f"   ⚠ DRIFT MODE: demoted {len(_drift_demoted)} score-4 signal(s) to SKIP "
+                      f"({', '.join(s['coin']+' '+s['direction'] for s in _drift_demoted)})")
+
+        # Auto-veto SKIP signals (score < 4, or score 4 when drift active) — save Claude tokens
         auto_vetoed = []
         if skipped_sigs:
             for s in skipped_sigs:

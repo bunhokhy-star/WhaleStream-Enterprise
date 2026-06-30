@@ -229,7 +229,7 @@ def save_memory(memory):
     memory["avoid_patterns"]  = sorted(avoid_patterns)
     memory["prefer_patterns"] = sorted(prefer_patterns)
 
-    # Compute consecutive_losses per coin (most recent trades first)
+    # Compute consecutive_losses per coin + P&L stats (v47.34) — most recent first.
     # Stored separately so coin_lessons[coin] direction-loop is not disturbed.
     coin_stats = {}
     for c in coin_lessons:
@@ -241,7 +241,26 @@ def save_memory(memory):
                 consec += 1
             else:
                 break
-        coin_stats[c] = {"consecutive_losses": consec}
+        # Accumulate all-time wins / losses / P&L per coin (v47.34)
+        _cw = sum(1 for d in c_debriefs if d.get("outcome", "").upper() == "WIN")
+        _cl = sum(1 for d in c_debriefs if d.get("outcome", "").upper() == "LOSS")
+        _cpnl_total = 0.0
+        _cpnl_count = 0
+        for _cd in c_debriefs:
+            _cpnl_raw = _cd.get("pnl")
+            if _cpnl_raw is not None:
+                try:
+                    _cpnl_total += float(_cpnl_raw)
+                    _cpnl_count += 1
+                except (TypeError, ValueError):
+                    pass
+        coin_stats[c] = {
+            "consecutive_losses": consec,
+            "wins":      _cw,
+            "losses":    _cl,
+            "pnl_total": round(_cpnl_total, 4),
+            "pnl_count": _cpnl_count,
+        }
     memory["coin_stats"] = coin_stats
 
     # Compute MTF bias win rates across all debriefs

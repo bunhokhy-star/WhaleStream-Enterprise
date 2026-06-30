@@ -1125,6 +1125,43 @@ def build_message():
     except Exception:
         pass  # non-critical
 
+    # ── Coin-level P&L performance (v47.34) ──────────────────────────────────
+    # Reads coin_stats from pattern_memory.json; shows avg P&L/trade for coins
+    # with ≥5 closed trades. Top 5 by avg P&L + bottom 3 by avg P&L.
+    try:
+        _cp_path_mb = os.path.join(BASE_DIR, "pattern_memory.json")
+        if os.path.exists(_cp_path_mb):
+            with open(_cp_path_mb, "r", encoding="utf-8") as _cpf_mb:
+                _cp_mem_mb = json.load(_cpf_mb)
+            _cp_stats = _cp_mem_mb.get("coin_stats", {})
+            _cp_rows = []
+            for _cpk, _cpv in _cp_stats.items():
+                _cp_pnl_cnt = _cpv.get("pnl_count", 0)
+                _cp_pnl_tot = _cpv.get("pnl_total", 0.0)
+                _cp_wins    = _cpv.get("wins", 0)
+                _cp_losses  = _cpv.get("losses", 0)
+                _cp_ntrades = _cp_wins + _cp_losses
+                if _cp_pnl_cnt >= 5:
+                    _cp_avg = _cp_pnl_tot / _cp_pnl_cnt
+                    _cp_wr  = (_cp_wins / _cp_ntrades * 100) if _cp_ntrades else 0.0
+                    _cp_rows.append((_cpk, _cp_avg, _cp_wr, _cp_pnl_cnt))
+            if _cp_rows:
+                _cp_rows.sort(key=lambda x: x[1], reverse=True)
+                _cp_top  = _cp_rows[:5]
+                _cp_bot  = _cp_rows[-3:] if len(_cp_rows) > 5 else []
+                def _fmt_cp(row):
+                    _n, _avg, _wr, _cnt = row
+                    _sign = "+" if _avg >= 0 else ""
+                    _icon = "✅" if _avg > 0 else "❌"
+                    return f"  {_icon} {_n:<10} {_sign}{_avg:.2f}%/trade  WR:{_wr:.0f}%  ({_cnt} trades)"
+                _cp_lines = [_fmt_cp(r) for r in _cp_top]
+                if _cp_bot:
+                    _cp_lines.append("  ─ worst ─")
+                    _cp_lines += [_fmt_cp(r) for r in _cp_bot]
+                lines += ["", "📊 COIN PERFORMANCE (avg P&L/trade, ≥5 trades)"] + _cp_lines
+    except Exception:
+        pass  # non-critical
+
     # ── Auto-blocklist summary (v47.30) ───────────────────────────────────────
     try:
         _bl_path_mb = os.path.join(BASE_DIR, "coin_blocklist_auto.json")

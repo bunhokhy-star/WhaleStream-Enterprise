@@ -1,5 +1,20 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.34 — 2026-06-30 — Strategist drift awareness; coin P&L tracking; Sunday probation review
+
+### `whale_stream_strategist.py`
+- **NEW: Score drift warning load (Option A)** — at the start of `build_strategist_user_message()`, reads `score_drift_warning.json`. If present and has `warned_tiers`, sets `_score_drift_active = True` and prints a notice with affected tiers.
+- **NEW: Score-4 demotion in drift mode (Option A)** — between `score_all_signals()` and the auto-veto block, when `_score_drift_active` is set, any `review_sigs` signal with score ≤ 4 is demoted to `skipped_sigs`. The auto-skip floor tightens 4 → 5 when accuracy is in the 45-54% warning zone, without requiring a full gate override.
+
+### `whale_stream_debrief.py`
+- **NEW: Per-coin P&L stats in coin_stats (Option B)** — the `coin_stats` builder loop now also computes `wins`, `losses`, `pnl_total`, `pnl_count` per coin across all debrief history. Each `coin_stats[c]` entry now contains: `consecutive_losses`, `wins`, `losses`, `pnl_total` (rounded to 4dp), `pnl_count`. Stored in `pattern_memory.json["coin_stats"]` for use by morning_briefing.
+
+### `morning_briefing.py`
+- **NEW: Coin performance section (Option B)** — reads `coin_stats` from `pattern_memory.json`. For coins with ≥5 trades with P&L data, shows `📊 COIN PERFORMANCE` section with avg P&L/trade and WR. Top 5 by avg P&L shown first; bottom 3 shown below a separator. Silent if no coins qualify.
+
+### `whale_stream_watchdog.py`
+- **NEW: Probation week-in-review in Sunday digest (Option C)** — Sunday Telegram now includes a `🔶 Probation Week-in-Review` block. Shows: (1) coins newly added to `coin_blocklist_auto.json` within the past 7 days (from `blocked_since`), (2) all coins currently in `blocklist_watchlist.json` with probation trades remaining and start date. Silent fallback to "(probation data unavailable)" on error.
+
 ## v47.33 — 2026-06-30 — Bot probation awareness; score drift warning; P&L attribution
 
 ### `whale_stream_bot.py`

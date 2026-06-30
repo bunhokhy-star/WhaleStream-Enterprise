@@ -662,6 +662,62 @@ if __name__ == "__main__":
             _pnl_block_wd = ("\n".join(_pnl_lines_wd)
                              if _pnl_lines_wd else "  (fewer than 5 trades with P&L data per bucket)")
 
+            # ── Probation week-in-review (v47.34) ─────────────────────────────
+            # Show coins newly blocked this week + current probation list
+            _prob_block_wd = ""
+            try:
+                _now_wd  = datetime.now(BKK)
+                _7d_ago  = _now_wd - timedelta(days=7)
+                _newly_blocked_wd = []
+
+                # Coins blocked within the last 7 days
+                _bl_path_wd = os.path.join(BASE_DIR, "coin_blocklist_auto.json")
+                if os.path.exists(_bl_path_wd):
+                    with open(_bl_path_wd, "r", encoding="utf-8") as _blf_wd:
+                        _bl_wd = json.load(_blf_wd)
+                    _bs_wd = _bl_wd.get("blocked_since", {})
+                    for _bk_wd, _bsince_wd in _bs_wd.items():
+                        try:
+                            _bdt_wd = datetime.fromisoformat(_bsince_wd).replace(tzinfo=BKK) \
+                                      if _bsince_wd else None
+                        except Exception:
+                            _bdt_wd = None
+                        if _bdt_wd and _bdt_wd >= _7d_ago:
+                            _newly_blocked_wd.append(f"  🚫 {_bk_wd} (since {_bsince_wd[:10]})")
+
+                # Current probation watchlist
+                _prob_wl_wd = []
+                _wlp_path_wd = os.path.join(BASE_DIR, "blocklist_watchlist.json")
+                if os.path.exists(_wlp_path_wd):
+                    with open(_wlp_path_wd, "r", encoding="utf-8") as _wlpf_wd:
+                        _wlp_wd = json.load(_wlpf_wd)
+                    for _wpentry_wd in _wlp_wd.get("watchlist", {}).values():
+                        _wpc  = _wpentry_wd.get("coin", "")
+                        _wpd  = _wpentry_wd.get("direction", "")
+                        _wpt  = _wpentry_wd.get("probation_trades", 3)
+                        _wps  = (_wpentry_wd.get("probation_started", "") or "")[:10]
+                        if _wpc and _wpd:
+                            _prob_wl_wd.append(
+                                f"  🔶 {_wpc} {_wpd} — {_wpt} trade(s) left (since {_wps})"
+                            )
+
+                _prob_parts = []
+                if _newly_blocked_wd:
+                    _prob_parts.append(
+                        "Newly blocked this week:\n" + "\n".join(_newly_blocked_wd)
+                    )
+                else:
+                    _prob_parts.append("Newly blocked this week: none")
+                if _prob_wl_wd:
+                    _prob_parts.append(
+                        "Currently on probation:\n" + "\n".join(_prob_wl_wd)
+                    )
+                else:
+                    _prob_parts.append("Currently on probation: none")
+                _prob_block_wd = "\n\n".join(_prob_parts)
+            except Exception:
+                _prob_block_wd = "  (probation data unavailable)"
+
             _sunday_msg = (
                 f"📊 <b>WEEKLY SCORER HEALTH DIGEST</b>\n"
                 f"🗓 {now_str}\n"
@@ -675,6 +731,9 @@ if __name__ == "__main__":
                 f"<b>🎯 Score Prediction Accuracy:</b>\n"
                 f"{_sa_block_wd}"
                 f"{_st_note_wd}\n"
+                f"\n"
+                f"<b>🔶 Probation Week-in-Review:</b>\n"
+                f"{_prob_block_wd}\n"
                 f"\n"
                 f"✅ = ≥60% WR  ⚠️ = 45-59%  ❌ = &lt;45%"
             )
