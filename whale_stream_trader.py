@@ -183,6 +183,20 @@ ORDER_CONTEXT_FILE   = os.path.join(SCRIPT_DIR, "order_context.json")
 # Coins with poor historical LONG win rate — skip LONG signals for these
 LONG_COIN_AVOID_LIST = ["COMP", "HYPE", "ZRO", "QNT", "WIF", "WLD", "XLM", "ENA"]   # must match LONG_COIN_BLOCKLIST in bot.py
 
+# ── Dynamic blocklist from weekly scorecard YES replies (v47.44) ───────────────
+try:
+    _dbl_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dynamic_blocklist.json")
+    if os.path.exists(_dbl_path):
+        with open(_dbl_path, "r", encoding="utf-8") as _dbl_f:
+            _dbl_data = json.load(_dbl_f)
+        _dbl_longs = [c.upper() for c in _dbl_data.get("LONG", [])
+                      if c.upper() not in LONG_COIN_AVOID_LIST]
+        LONG_COIN_AVOID_LIST = LONG_COIN_AVOID_LIST + _dbl_longs
+        if _dbl_longs:
+            print(f"   🚫 DYNAMIC BLOCK (LONG): {', '.join(_dbl_longs)} loaded from dynamic_blocklist.json")
+except Exception:
+    pass  # fail silently — static list still applies
+
 def log(msg):
     """Write to console and trader_log.txt with timestamp."""
     bkk = datetime.now(BKK).strftime("%Y-%m-%d %H:%M BKK")

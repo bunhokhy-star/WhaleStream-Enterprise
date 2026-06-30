@@ -1,5 +1,22 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.44 — 2026-06-30 — Intelligent business layer: weekly scorecard + YES/NO auto-block
+
+### `whale_stream_weekly.py` (NEW)
+- **Weekly scorecard** — runs every Monday 07:00 BKK. Compares this week vs last week: balance growth, win rate trend, P&L, best/worst coin. Generates ONE recommendation (block a chronic loser, raise confidence floor, or keep going). Sends to Telegram. Writes `pending_recommendation.json` for command handler to act on.
+
+### `telegram_commands.py` (NEW)
+- **YES/NO command handler** — runs every hour. Polls Telegram for YES/NO replies to the weekly recommendation. YES → applies the action (writes `dynamic_blocklist.json` or `floor_override.json`). NO → clears the pending recommendation. Recommendations expire after 48h automatically.
+
+### `whale_stream_bot.py`
+- **Dynamic blocklist** — loads `dynamic_blocklist.json` at startup and merges into `LONG_COIN_BLOCKLIST` / `SHORT_COIN_BLOCKLIST`. Coins blocked via Telegram YES reply are active from the next Bot cycle without any code edit.
+
+### `whale_stream_trader.py`
+- **Dynamic blocklist** — loads `dynamic_blocklist.json` at startup and merges into `LONG_COIN_AVOID_LIST`. Stays in sync with bot.py automatically.
+
+### `ADD_WEEKLY_TASK.bat` (NEW)
+- Schedules `WhaleStream-Weekly` (Mon 00:00 UTC = 07:00 BKK) and `WhaleStream-Commands` (every hour) in Windows Task Scheduler.
+
 ## v47.43 — 2026-06-30 — Signal quality sprint #3: LONG proven whitelist (prompt + code filter), SHORT proven list (prompt)
 
 ### `whale_stream_bot.py`

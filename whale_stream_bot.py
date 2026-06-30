@@ -196,6 +196,25 @@ try:
 except Exception:
     pass  # fail silently — hardcoded blocklist still applies
 
+# ── Dynamic blocklist from weekly scorecard YES replies (v47.44) ───────────────
+# telegram_commands.py writes dynamic_blocklist.json when user replies YES to
+# a weekly recommendation. Merged here at startup — no code edits needed.
+try:
+    _dyn_bl_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dynamic_blocklist.json")
+    if os.path.exists(_dyn_bl_path):
+        with open(_dyn_bl_path, "r", encoding="utf-8") as _dbl_f:
+            _dyn_bl_data = json.load(_dbl_f)
+        _dyn_long  = set(c.upper() for c in _dyn_bl_data.get("LONG", []))
+        _dyn_short = set(c.upper() for c in _dyn_bl_data.get("SHORT", []))
+        if _dyn_long:
+            LONG_COIN_BLOCKLIST  = LONG_COIN_BLOCKLIST  | _dyn_long
+            print(f"   🚫 DYNAMIC BLOCK (LONG):  {', '.join(sorted(_dyn_long))} — user-confirmed via weekly scorecard")
+        if _dyn_short:
+            SHORT_COIN_BLOCKLIST = SHORT_COIN_BLOCKLIST | _dyn_short
+            print(f"   🚫 DYNAMIC BLOCK (SHORT): {', '.join(sorted(_dyn_short))} — user-confirmed via weekly scorecard")
+except Exception:
+    pass  # fail silently — hardcoded blocklists still apply
+
 # ── Probation watchlist (v47.33) ──────────────────────────────────────────────
 # Coins that recently expired from the auto-blocklist and are on 3-trade probation.
 # Loaded once at startup — inject into graveyard prompt so Claude knows not to
