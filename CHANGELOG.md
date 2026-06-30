@@ -1,5 +1,17 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.29 — 2026-06-30 — SHORT auto-blocklist; score dim 7 in display; real-time tier drift alert
+
+### `whale_stream_debrief.py`
+- **NEW: SHORT auto-blocklist writer** — expanded the existing LONG auto-blocklist block to also compute SHORT direction. Both LONG and SHORT blocked coins (≥3 losses + 0 wins) are now computed in one loop and written together to `coin_blocklist_auto.json` as `{"blocked_longs": [...], "blocked_shorts": [...], "updated_at": "..."}`. Logged with 🚫 icon for each direction.
+- **NEW: Real-time score tier drift alert** — immediately after the main debrief `send_telegram()`, checks `memory["score_accuracy"]` for ELITE/GOOD/MARGINAL tiers. If any tier has ≥10 trades and accuracy < 45%, fires a separate 🚨 `SCORER DRIFT ALERT` Telegram to the ops channel with tier-specific advice (ELITE → recalibrate dim weights; GOOD → raise gate to 8; MARGINAL → review dims 3+5). Runs after `save_memory()` so accuracy is freshly updated. Fails silently — non-critical.
+
+### `whale_stream_bot.py`
+- **NEW: SHORT auto-blocklist reader at startup** — immediately after `SHORT_COIN_BLOCKLIST` definition, reads `coin_blocklist_auto.json` (if it exists) and merges `blocked_shorts` list into `SHORT_COIN_BLOCKLIST` via set union. Logged with 🚫 icon. Fails silently — hardcoded blocklist always applies.
+
+### `signal_scorer.py`
+- **FIX: `PatWR` now shown in `format_score_for_prompt()`** — dimension 7 (`pattern_wr`) was being scored and stored in `score_breakdown` but was missing from the formatted display string fed to Strategist and Trader. Added `PatWR:{pwr_fmt}` as the 7th field. Display now shows all 7 dims: `Conf`, `Regime`, `WR`, `Corr`, `Pat`, `MTF`, `PatWR`.
+
 ## v47.28 — 2026-06-30 — Auto-blocklist from debrief; Strategist 4H regime; score trend in briefing
 
 ### `whale_stream_debrief.py`

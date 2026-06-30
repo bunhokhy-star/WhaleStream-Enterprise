@@ -152,6 +152,20 @@ SHORT_COIN_BLOCKLIST = {
     "INJ",   # 0W/2L — 0% WR, avg -59.8%  ← added v46.5
     "AVAX",  # 0W/1L — 0% WR, avg -49.1%  ← added v46.5
 }
+# ── Auto-blocklist SHORT coins from debrief data (v47.29) ──────────────────────
+# coin_blocklist_auto.json now includes blocked_shorts (≥3 SHORT losses + 0 wins).
+# Merged at startup — no manual edit needed. Runs AFTER SHORT_COIN_BLOCKLIST defined.
+try:
+    _auto_bl_short_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "coin_blocklist_auto.json")
+    if os.path.exists(_auto_bl_short_path):
+        with open(_auto_bl_short_path, "r", encoding="utf-8") as _abls_f:
+            _auto_bl_short_data = json.load(_abls_f)
+        _auto_bl_short_coins = set(c.upper() for c in _auto_bl_short_data.get("blocked_shorts", []))
+        SHORT_COIN_BLOCKLIST = SHORT_COIN_BLOCKLIST | _auto_bl_short_coins
+        if _auto_bl_short_coins:
+            print(f"   🚫 AUTO-BLOCKLIST SHORT: {', '.join(sorted(_auto_bl_short_coins))} added from coin_blocklist_auto.json")
+except Exception:
+    pass  # fail silently — hardcoded blocklist still applies
 
 # ── LONG coin blocklist (code-level enforcement) ──────────────────────────────
 # Populated when a coin shows 0% LONG WR over 2+ LONG trades with clearly negative avg P&L.

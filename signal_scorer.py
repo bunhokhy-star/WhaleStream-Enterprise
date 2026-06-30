@@ -450,6 +450,8 @@ def format_score_for_prompt(signal: dict) -> str:
     pts     = lambda key: bd.get(key, (0, ""))[0]
     mtf_raw = pts('mtf_bias')
     mtf_fmt = f"+{mtf_raw}" if mtf_raw >= 0 else str(mtf_raw)
+    pwr_raw = pts('pattern_wr')                          # dim 7 — live debrief WR (v47.29 shown)
+    pwr_fmt = f"+{pwr_raw}" if pwr_raw >= 0 else str(pwr_raw)
     return (
         f"Score: {score}/10 [{verdict}] | "
         f"Conf:+{pts('confidence')} "
@@ -457,7 +459,8 @@ def format_score_for_prompt(signal: dict) -> str:
         f"WR:+{pts('win_rate')} "
         f"Corr:+{pts('correlation')} "
         f"Pat:+{pts('pattern')} "
-        f"MTF:{mtf_fmt}"
+        f"MTF:{mtf_fmt} "
+        f"PatWR:{pwr_fmt}"
     )
 
 
