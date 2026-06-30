@@ -1,5 +1,14 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.42 — 2026-06-30 — Signal quality sprint #2: ENA blocklist, streak trap warning, H SHORT floor, bear SHORT expansion
+
+### `whale_stream_bot.py`
+- **`LONG_COIN_BLOCKLIST` — added ENA** — ENA: SHORT already blocked (0W/5L); LONG also losing (0W/1L). Both directions now permanently blocked.
+- **Graveyard streak trap warning** — New code block after the `L_AVOID` list injection: iterates all resolved trades, groups by coin+direction, counts consecutive losses at the tail. If ≥3 consecutive same-direction losses AND ≥4 total trades AND coin not already in blocklist → injects `⚠ STREAK TRAP: {COIN} {DIR} — NW/ML all-time but K consecutive recent losses. Graveyard WR inflated by early wins. Do NOT boost confidence. Apply standard floor.` Targets the EIGEN-pattern (4W then 4L = graveyard still says "proven winner").
+- **SHORT slot expansion in BTC bear regime** — When `btc_24h_pct ≤ -3.0` (same threshold as LONG cap), `_n_short` is expanded from 3 → 4 to compensate for the suppressed LONG slot. Applied inside the BTC 24h override block immediately after the LONG cap logic.
+- **H SHORT price floor** — After the top-N signal filter, looks up H's spot price from `all_coins`. If H price < $0.05, removes all H SHORT signals from `signal_data["shorts"]` and prints a suppression notice. Rationale: at near-zero prices TP levels compress and squeeze risk spikes; bot was taking 11 H SHORTs in a single day when price was ~$0.06.
+- **Version banner** updated to v47.42 (4 locations).
+
 ## v47.41 — 2026-06-30 — Signal quality sprint: BTC 24h LONG suppression + coin blocklist updates
 
 ### `whale_stream_bot.py`

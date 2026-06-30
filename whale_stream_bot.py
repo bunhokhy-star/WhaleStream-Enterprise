@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v47.41   —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v47.42   —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 coins from CoinGecko (free, no key)     ║
@@ -179,6 +179,7 @@ LONG_COIN_BLOCKLIST = {
     "WIF",   # 1W/4L — 25% WR, avg -48.7% ← added v46.62 (2026-06-26)
     "WLD",   # 0W/2L — 0% WR, counter-trend coin ← added v47.5 (2026-06-28)
     "XLM",   # 0W/2L — 0% LONG WR (also SHORT-blocked) ← added v47.41
+    "ENA",   # 0W/1L — SHORT already blocked; LONG also losing ← added v47.42
 }
 # ── Auto-blocklist from debrief data (v47.28) ──────────────────────────────────
 # coin_blocklist_auto.json written by debrief save_memory() whenever a coin
@@ -342,7 +343,7 @@ except ImportError:
     MISSION_PROMPT = ""
     def print_mission_banner(): pass
 
-WHALE_STREAM_PROMPT = """WHALE-STREAM v47.41 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
+WHALE_STREAM_PROMPT = """WHALE-STREAM v47.42 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
 ROLE:
 You are an Institutional Multi-Agent Trading Committee composed of:
 • Market Regime Analyst • Smart Money Concepts Specialist • Quantitative Momentum Analyst • Liquidity & Stop-Hunt Analyst • Wyckoff Structure Analyst • Relative Strength Analyst • Breakout Probability Engine • Reversal Probability Engine • Continuation Probability Engine • Risk Management Committee
@@ -1198,6 +1199,40 @@ def fetch_signal_graveyard():
         _long_avoid_extra = [c for c in _long_avoid if c not in LONG_COIN_BLOCKLIST]
         if _long_avoid_extra:
             lines.append(f"🚫 L_AVOID(0%WR≥2T): {', '.join(_long_avoid_extra)} — skip unless conf≥97%")
+
+        # ── Streak warning: graveyard memory trap (v47.42) ───────────────────
+        # Detects coins with ≥3 consecutive same-direction losses at the tail of their history.
+        # Target: EIGEN-pattern — early wins inflate graveyard WR, hiding momentum exhaustion.
+        _streak_warns = []
+        for _dir_key, _dir_label, _dir_blocklist in [
+            ("LONG",  "LONG",  LONG_COIN_BLOCKLIST),
+            ("SHORT", "SHORT", SHORT_COIN_BLOCKLIST),
+        ]:
+            _dir_trades = [r for r in resolved if r["direction"] == _dir_key]
+            _by_coin = {}
+            for _r in _dir_trades:
+                _by_coin.setdefault(_r["coin"], []).append(_r)
+            for _coin, _coin_trades in _by_coin.items():
+                if _coin in _dir_blocklist:
+                    continue   # already blocked — no need to warn
+                if len(_coin_trades) < 4:
+                    continue   # too few trades; skip to avoid noise
+                _consec_losses = 0
+                for _t in reversed(_coin_trades):
+                    if _t["status"] == "LOSS":
+                        _consec_losses += 1
+                    else:
+                        break
+                if _consec_losses >= 3:
+                    _sw_wins = sum(1 for _t in _coin_trades if _t["status"] == "WIN")
+                    _sw_loss = len(_coin_trades) - _sw_wins
+                    _streak_warns.append(
+                        f"⚠ STREAK TRAP: {_coin} {_dir_label} — "
+                        f"{_sw_wins}W/{_sw_loss}L all-time but {_consec_losses} consecutive recent losses. "
+                        f"Graveyard WR inflated by early wins. Do NOT boost confidence. Apply standard floor."
+                    )
+        for _sw in _streak_warns:
+            lines.append(_sw)
 
         graveyard_text = "\n".join(lines)
 
@@ -2285,7 +2320,7 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     shorts = data.get("shorts", [])
 
     lines = []
-    lines.append(f"🐳 WHALE-STREAM v47.41")
+    lines.append(f"🐳 WHALE-STREAM v47.42")
     lines.append(f"📅 {ts}")
 
     # ── Market regime summary ─────────────────────────────────
@@ -2864,7 +2899,7 @@ def main():
 
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🐳  WHALE-STREAM v47.41  — AUTO BOT STARTING    ║")
+    print("║   🐳  WHALE-STREAM v47.42  — AUTO BOT STARTING    ║")
     print("╚══════════════════════════════════════════════════╝")
     # Check conservative flag early so we can show it in the startup banner
     _short_conservative_early = os.path.exists(os.path.join(SCRIPT_DIR, "short_conservative.flag"))
@@ -3144,6 +3179,11 @@ def main():
             _n_long = 1
             _regime_note += f" | BTC24h {btc_24h_pct:+.1f}%→max1L"
             print(f"   📉 BTC 24h override: {btc_24h_pct:+.1f}% → LONGs capped at 1")
+    # ── SHORT slot expansion: compensate suppressed LONGs in bear regime (v47.42) ──
+    if btc_24h_pct <= -3.0 and _n_short < 4:
+        _n_short = 4
+        _regime_note += f" | BTC24h bear→4S"
+        print(f"   📈 BTC 24h bear: SHORT slots expanded 3→4 (compensates for LONG suppression)")
     # ── end BTC 24h LONG override ─────────────────────────────────────────────
     print(f"   📡 BTC 4H Regime: {_regime_note} → keeping top {_n_long}🟢 + {_n_short}🔴")
     # ── end dynamic count ─────────────────────────────────────────────────────
@@ -3165,6 +3205,20 @@ def main():
         print(f"   🎯 TOP-N FILTER: {_raw_n_long}🟢 + {_raw_n_short}🔴 raw → kept top {len(signal_data['longs'])}🟢 + {len(signal_data['shorts'])}🔴 ({_n_top_dropped} dropped)")
     else:
         print(f"   🎯 TOP-N FILTER: already within limit — no signals dropped")
+    # ── H SHORT price floor (v47.42) — suppress H SHORT when price < $0.05 ────
+    # At near-zero prices TP levels compress and a squeeze reversal can hurt many
+    # simultaneously-open H SHORT positions (bot was taking 11 H SHORTs in one day).
+    _h_coin = next((c for c in all_coins if (c.get("symbol") or "").upper() == "H"), None)
+    if _h_coin:
+        _h_price = float(_h_coin.get("current_price") or 999)
+        if _h_price < 0.05:
+            _h_short_before = len(signal_data["shorts"])
+            signal_data["shorts"] = [s for s in signal_data["shorts"]
+                                      if not (str(s.get("coin", "")).upper() == "H"
+                                              and s.get("direction") == "SHORT")]
+            _h_dropped = _h_short_before - len(signal_data["shorts"])
+            if _h_dropped > 0:
+                print(f"   🚫 H SHORT floor: price ${_h_price:.4f} < $0.05 → {_h_dropped} H SHORT(s) suppressed")
     # ── end top-N filter ──────────────────────────────────────────────────────
 
     tg_msg = build_telegram_message(signal_data, bkk_time, graveyard_text=graveyard)
