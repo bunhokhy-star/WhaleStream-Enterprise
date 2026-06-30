@@ -235,6 +235,7 @@ def save_memory(memory):
     for c in coin_lessons:
         c_debriefs = [d for d in memory.get("debriefs", []) if d.get("coin", "") == c]
         c_debriefs.sort(key=lambda d: d.get("debrief_at", ""), reverse=True)
+        c_debriefs = c_debriefs[:30]  # v47.37B: time-decay — only last 30 trades per coin
         consec = 0
         for d in c_debriefs:
             if d.get("outcome", "").upper() == "LOSS":

@@ -1,8 +1,8 @@
 @echo off
 cd /d C:\Users\MAX\WhaleStream
 git add -A
-git commit -m "v47.36 — Sunday coin leaderboard; TP calibration alert; consecutive win streak"
+git commit -m "v47.37 — strategist win-streak awareness; coin_stats time-decay; morning momentum"
 git push
 echo.
-echo Done — v47.36 pushed to GitHub.
+echo Done — v47.37 pushed to GitHub.
 pause

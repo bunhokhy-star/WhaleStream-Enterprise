@@ -1209,6 +1209,34 @@ def build_message():
     except Exception:
         pass  # non-critical
 
+    # ── Momentum section (v47.37C) ────────────────────────────────────────────
+    try:
+        _mom_path_mb = os.path.join(BASE_DIR, "pattern_memory.json")
+        if os.path.exists(_mom_path_mb):
+            with open(_mom_path_mb, "r", encoding="utf-8") as _momf_mb:
+                _mom_mem = json.load(_momf_mb)
+            _mom_cs = _mom_mem.get("coin_stats", {})
+            _hot_coins  = []
+            _cold_coins = []
+            for _mc, _mv in _mom_cs.items():
+                _mcw = _mv.get("consecutive_wins", 0)
+                _mcl = _mv.get("consecutive_losses", 0)
+                if _mcw >= 3:
+                    _hot_coins.append((_mc, _mcw))
+                elif _mcl >= 3:
+                    _cold_coins.append((_mc, _mcl))
+            _hot_coins.sort(key=lambda x: x[1], reverse=True)
+            _cold_coins.sort(key=lambda x: x[1], reverse=True)
+            if _hot_coins or _cold_coins:
+                _mom_lines = []
+                if _hot_coins:
+                    _mom_lines.append("  🔥 Hot:  " + "  ".join(f"{c}({n}W)" for c, n in _hot_coins))
+                if _cold_coins:
+                    _mom_lines.append("  🧊 Cold: " + "  ".join(f"{c}({n}L)" for c, n in _cold_coins))
+                lines += ["", "🔥 MOMENTUM (consecutive streak ≥3)"] + _mom_lines
+    except Exception:
+        pass  # non-critical
+
     # ── Auto-blocklist summary (v47.30) ───────────────────────────────────────
     try:
         _bl_path_mb = os.path.join(BASE_DIR, "coin_blocklist_auto.json")

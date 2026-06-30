@@ -751,6 +751,19 @@ def build_strategist_user_message(signals, history, positions, balance, drawdown
         except Exception:
             pass  # non-critical
 
+        # Win-streak awareness (v47.37A) — positive mirror of chronic loser veto.
+        try:
+            if memory:
+                _ws_v = memory.get("coin_stats", {}).get(_coin_up, {})
+                _ws_streak = _ws_v.get("consecutive_wins", 0)
+                if _ws_streak >= 3:
+                    lines.append(
+                        f"  ✅ WIN STREAK — {_ws_streak} consecutive wins on this coin; "
+                        f"slightly lower confidence bar (≥85%) is acceptable if the setup is clean"
+                    )
+        except Exception:
+            pass  # non-critical
+
         if not trades:
             lines.append(f"  History    : No resolved trades yet on this coin+direction")
         else:

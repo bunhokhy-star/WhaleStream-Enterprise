@@ -1,5 +1,16 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.37 — 2026-06-30 — Strategist win-streak awareness; coin_stats time-decay; morning momentum section
+
+### `whale_stream_strategist.py`
+- **NEW: Win-streak awareness (Option A)** — After the chronic loser veto block, reads `consecutive_wins` from `coin_stats` for the current signal coin. If ≥3 consecutive wins, appends `✅ WIN STREAK — N consecutive wins; slightly lower confidence bar (≥85%) is acceptable if the setup is clean`. Positive mirror of the chronic loser veto — gives Claude momentum context to approve hot-streak coins more readily.
+
+### `whale_stream_debrief.py`
+- **NEW: Coin_stats time-decay to last 30 trades (Option B)** — After sorting `c_debriefs` most-recent-first, slices to `[:30]` before computing `consecutive_losses`, `consecutive_wins`, wins/losses counts, and P&L totals. Ensures all coin_stats metrics (soft-avoid, win-streak, chronic loser) reflect current form rather than being diluted by stale history from months ago.
+
+### `morning_briefing.py`
+- **NEW: Momentum section (Option C)** — After the coin performance section, reads `coin_stats` from `pattern_memory.json`. Coins with `consecutive_wins ≥ 3` are listed as `🔥 Hot: COIN(NW)...`; coins with `consecutive_losses ≥ 3` as `🧊 Cold: COIN(NL)...`. Both sorted by streak length descending. Section header: `🔥 MOMENTUM (consecutive streak ≥3)`. Silent when no coins qualify or fewer than 3 in either direction. Gives the trader a daily at-a-glance view of which coins are running hot vs struggling.
+
 ## v47.36 — 2026-06-30 — Sunday coin leaderboard; TP calibration alert; consecutive win streak
 
 ### `whale_stream_watchdog.py`
