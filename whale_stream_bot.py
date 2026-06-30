@@ -1137,6 +1137,43 @@ def fetch_signal_graveyard():
         except Exception as _mtf_e:
             pass   # non-critical — graveyard still works without mtf table
 
+        # ── Task 3 (v47.21): Adaptive confidence floors from coin_stats ─────
+        # Raise the effective bar for habitually weak coins; note strong ones.
+        try:
+            _mem_path2 = os.path.join(os.path.dirname(__file__), "pattern_memory.json")
+            if os.path.exists(_mem_path2):
+                with open(_mem_path2, "r", encoding="utf-8") as _mf2:
+                    _mem2 = json.load(_mf2)
+                _coin_stats = _mem2.get("coin_stats", {})
+                _weak_floors  = []   # coins needing higher confidence bar
+                _strong_notes = []   # coins with proven track record
+                for _cn, _cs in _coin_stats.items():
+                    _cw  = _cs.get("wins", 0)
+                    _cl  = _cs.get("losses", 0)
+                    _ct  = _cw + _cl
+                    if _ct < 3:
+                        continue
+                    _cwr = 100 * _cw / _ct
+                    if _cwr < 40:
+                        _weak_floors.append(f"{_cn}(WR={_cwr:.0f}%,{_ct}T→require≥93%)")
+                    elif _cwr >= 70 and _ct >= 5:
+                        _strong_notes.append(f"{_cn}(WR={_cwr:.0f}%,{_ct}T)")
+                if _weak_floors or _strong_notes:
+                    _adaptive_lines = ["\n\nADAPTIVE CONFIDENCE FLOORS (from trade history):"]
+                    if _weak_floors:
+                        _adaptive_lines.append(
+                            "⬆️  RAISE FLOOR — these coins have poor WR; require ≥93% confidence:\n"
+                            + "  " + ", ".join(_weak_floors)
+                        )
+                    if _strong_notes:
+                        _adaptive_lines.append(
+                            "✅  PROVEN coins — standard 88% floor applies; they have delivered:\n"
+                            + "  " + ", ".join(_strong_notes)
+                        )
+                    graveyard_text += "\n".join(_adaptive_lines)
+        except Exception:
+            pass   # non-critical
+
         print(f"   ✓ Signal Graveyard: {len(recent)} trades (overall {win_rate:.0f}% WR | long {long_wr:.0f}% | short {short_wr:.0f}%)")
         if blacklisted:
             print(f"   🚫 Short blacklist: {', '.join(blacklisted)}")

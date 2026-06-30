@@ -1231,6 +1231,12 @@ def main():
             icon       = "✅" if verdict == "STRONG" else ("⚠️" if verdict == "REVIEW" else "⛔")
             print(f"   {icon} {s['coin']} {s['direction']} — {score_line}")
 
+        # Build score map so trader can gate on score without re-scoring
+        _score_map = {
+            (s["coin"].upper(), s.get("direction", "").upper()): s.get("score", 0)
+            for s in (strong_sigs + review_sigs + skipped_sigs)
+        }
+
         # Auto-veto SKIP signals (score < 4) — save Claude tokens
         auto_vetoed = []
         if skipped_sigs:
@@ -1243,6 +1249,7 @@ def main():
                     "decision":  "VETO",
                     "grade":     "D",
                     "reason":    reason,
+                    "score":     s.get("score", 0),   # v47.21 — trader gates on this
                 })
                 log(f"Scorer SKIP: {s['coin']} {s['direction']} (score={s.get('score', 0)}/10)")
                 print(f"   ⛔ AUTO-SKIP: {s['coin']} {s['direction']} score {s.get('score', 0)}/10")
@@ -1361,6 +1368,14 @@ def main():
     # Append so the full picture is visible in the decisions file + Telegram.
     all_decisions = regime_vetoed + auto_vetoed + parsed.get("decisions", [])
     parsed["decisions"] = all_decisions
+
+    # ── Annotate each Claude decision with its scorer score (v47.21) ─
+    # Trader reads this to apply the score floor gate without re-scoring.
+    if _SCORER_AVAILABLE:
+        for _d in parsed["decisions"]:
+            if "score" not in _d:   # don't overwrite auto_vetoed entries already annotated
+                _key = (_d.get("coin","").upper(), _d.get("direction","").upper())
+                _d["score"] = _score_map.get(_key, None)
 
     # ── Enrich and tally ─────────────────────────────────────────
     approved = sum(1 for d in parsed.get("decisions", []) if d.get("decision") == "APPROVE")

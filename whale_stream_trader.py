@@ -311,8 +311,15 @@ COL_TP1        = 5
 COL_TP2        = 6
 COL_TP3        = 7
 COL_TP4        = 8
+COL_PATTERN    = 9   # pattern string written by bot.py (e.g. "Bull flag [4H_BULL_1H_PULLBACK]")
 COL_TIMESTAMP  = 10
 COL_STATUS     = 11
+
+# Minimum signal score to trade (set by signal_scorer.py 0-10 scale).
+# Signals below this floor are skipped even if Strategist approved.
+# Strategist already auto-vetoes score < 4; this is a belt-and-suspenders
+# floor for signals that bypassed scorer (e.g. Strategist ran without scorer).
+SCORE_MIN_TRADER = 5
 # Columns 12-16: tracker columns (read by SL-to-BE and other logic)
 COL_ENTRY_PRICE = 12   # tracker: actual fill price (avgPrice from Bybit)
 COL_EXIT_PRICE  = 13   # tracker: actual exit price
@@ -1276,6 +1283,42 @@ def _sweep_missing_sl(data_rows):
 
 
 # ─────────────────────────────────────────────────────────────
+# MTF FRESHNESS CHECK (v47.21)
+# Re-checks BTC 4H bias at :20 vs what bot saw at :00.
+# If bias has flipped, LONGs get a size penalty in a now-BEAR market
+# and SHORTs get a size penalty in a now-BULL market.
+# ─────────────────────────────────────────────────────────────
+
+def get_btc_4h_bias_fresh():
+    """
+    Fetch current BTC 4H bias from Bybit public kline API (no auth).
+    Returns: ("BULL" | "BEAR" | "NEUTRAL", pct_from_sma20)
+    Used by trader at :20 to detect intra-cycle regime shifts since bot ran at :00.
+    """
+    try:
+        import requests as _req
+        r = _req.get(
+            "https://api.bybit.com/v5/market/kline",
+            params={"category": "linear", "symbol": "BTCUSDT", "interval": "240", "limit": "22"},
+            timeout=8,
+        )
+        data = r.json()
+        if data.get("retCode") != 0:
+            return "NEUTRAL", 0.0
+        candles = data["result"]["list"]
+        if len(candles) < 21:
+            return "NEUTRAL", 0.0
+        closes  = [float(c[4]) for c in candles[1:21]]
+        sma20   = sum(closes) / 20
+        current = float(candles[0][4])
+        pct     = (current - sma20) / sma20 * 100
+        bias    = "BEAR" if pct < -2.0 else ("BULL" if pct > 2.0 else "NEUTRAL")
+        return bias, round(pct, 2)
+    except Exception:
+        return "NEUTRAL", 0.0
+
+
+# ─────────────────────────────────────────────────────────────
 # MAIN
 # ─────────────────────────────────────────────────────────────
 
@@ -1681,6 +1724,7 @@ def main():
     DECISIONS_FILE = os.path.join(SCRIPT_DIR, "strategist_decisions.json")
     _strat_vetoes  = set()    # set of (coin, direction) pairs to skip
     _strat_reduces = set()    # set of (coin, direction) pairs to trade at 50% size
+    _strat_scores  = {}       # {(coin, direction): score} from signal_scorer (v47.21)
     _strat_loaded  = False
     _strat_data    = {}    # safe default — prevents NameError if outer try silently fails
     if os.path.exists(DECISIONS_FILE):
@@ -1693,6 +1737,8 @@ def main():
                     _strat_vetoes.add(_key)
                 elif _d.get("decision") == "REDUCE_SIZE":
                     _strat_reduces.add(_key)
+                if _d.get("score") is not None:
+                    _strat_scores[_key] = _d["score"]   # v47.21 score gate
             _strat_loaded = True
             log(f"STRATEGIST loaded — {len(_strat_vetoes)} veto(s), {len(_strat_reduces)} reduce(s)  "
                 f"(run: {_strat_data.get('run_at','?')})")
@@ -1761,6 +1807,14 @@ def main():
     skip_counts = load_skip_counts()
     skipped_shorts = []       # coins skipped due to SHORT REPAIR MODE
 
+    # ── MTF freshness: re-check BTC 4H bias at :20 (v47.21) ────────────────
+    # Bot runs at :00 with BTC bias from earlier candles; by :20 the market may have
+    # shifted. Fetch fresh bias once here and use it as a counter-trend size penalty.
+    _fresh_btc_bias, _fresh_btc_pct = get_btc_4h_bias_fresh()
+    print(f"   🔭 BTC 4H fresh bias: {_fresh_btc_bias} ({_fresh_btc_pct:+.1f}% vs SMA20)")
+    log(f"MTF FRESH: BTC 4H = {_fresh_btc_bias} ({_fresh_btc_pct:+.1f}%)")
+    # ── end MTF freshness fetch ──────────────────────────────────────────────
+
     for sheet_row_idx, row in open_trades:
         coin       = row[COL_COIN].strip()
         signal     = row[COL_SIGNAL].strip()
@@ -1822,6 +1876,22 @@ def main():
             continue
         # ── end LONG_COIN_AVOID_LIST ───────────────────────────────────────────
 
+        # ── Signal Score Gate (v47.21) — skip if scorer quality below floor ───
+        # Strategist writes per-signal score to decisions JSON after scoring.
+        # Belt-and-suspenders: catches signals that bypassed scorer this cycle.
+        _dir_key = ("LONG" if side == "Buy" else "SHORT")
+        _sig_score = _strat_scores.get((coin.upper(), _dir_key))
+        if _sig_score is not None and _sig_score < SCORE_MIN_TRADER:
+            _score_msg = (f"⏭ SCORE GATE: {coin} {_dir_key} — "
+                          f"score {_sig_score}/10 < floor {SCORE_MIN_TRADER} — skipping")
+            log(_score_msg)
+            print(f"   {_score_msg}")
+            print()
+            continue
+        if _sig_score is not None:
+            print(f"   📊 Score: {_sig_score}/10 ≥ floor {SCORE_MIN_TRADER} — pass")
+        # ── end Score Gate ─────────────────────────────────────────────────────
+
         # ── Strategist VETO / REDUCE check ─────────────────────────────────────
         _strat_key = (coin.upper(), "LONG" if side == "Buy" else "SHORT")
         if _strat_key in _strat_vetoes:
@@ -1857,6 +1927,32 @@ def main():
             print(f"   ⚠️ STRATEGIST REDUCE: {coin} {_strat_key[1]} — trading at {_coin_size_mult:.2f}x size (was {_size_mult:.2f}x)")
             log(f"STRATEGIST REDUCE: {coin} {_strat_key[1]} — size {_size_mult:.2f}x → {_coin_size_mult:.2f}x")
         # ── end Strategist check ───────────────────────────────────────────────
+
+        # ── MTF freshness penalty (v47.21) ─────────────────────────────────
+        # If BTC 4H bias has shifted counter to this signal direction since
+        # the bot ran at :00, apply an additional 0.5× size penalty.
+        # Does NOT hard-skip — Strategist already handled that layer.
+        # Fails silently if API was unreachable (_fresh_btc_bias == "NEUTRAL").
+        if _fresh_btc_bias != "NEUTRAL":
+            _sig_dir = "LONG" if side == "Buy" else "SHORT"
+            _counter_trend = (
+                (_sig_dir == "LONG"  and _fresh_btc_bias == "BEAR") or
+                (_sig_dir == "SHORT" and _fresh_btc_bias == "BULL")
+            )
+            if _counter_trend:
+                _new_mult = round(_coin_size_mult * 0.5, 3)
+                _mtf_msg = (
+                    f"🔭 MTF SHIFT: {coin} {_sig_dir} is counter to fresh BTC 4H "
+                    f"({_fresh_btc_bias} {_fresh_btc_pct:+.1f}%) — "
+                    f"size reduced {_coin_size_mult:.2f}x → {_new_mult:.2f}x"
+                )
+                log(_mtf_msg)
+                print(f"   {_mtf_msg}")
+                _coin_size_mult = _new_mult
+            else:
+                print(f"   ✅ MTF aligned: {coin} {'LONG' if side=='Buy' else 'SHORT'} "
+                      f"with BTC 4H {_fresh_btc_bias} — no penalty")
+        # ── end MTF freshness penalty ────────────────────────────────────────
 
         # Skip if already have a position OR an unfilled order
         if symbol in already_active:

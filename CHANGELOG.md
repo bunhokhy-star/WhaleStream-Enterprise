@@ -1,5 +1,21 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.21 — 2026-06-30 — Signal score gate; adaptive confidence floors; MTF freshness re-check
+
+### `whale_stream_strategist.py`
+- **NEW: Score annotation on all decisions** — after scoring, builds `_score_map = {(coin, direction): score}` from all signal tiers. Adds `"score"` field to every `auto_vetoed` entry and to all entries in `parsed["decisions"]` that lack a score (belt-and-suspenders annotation). Trader can now read per-signal score directly from `strategist_decisions.json`.
+
+### `whale_stream_trader.py`
+- **NEW: `SCORE_MIN_TRADER = 5`** — hard floor on signal quality score. Signals with `score < 5` are skipped before Strategist VETO check. Logs `⏭ SCORE GATE:` with score and floor. Belt-and-suspenders after Strategist auto-vetoes at score < 4.
+- **NEW: `_strat_scores` dict** — loaded alongside `_strat_vetoes`/`_strat_reduces` from `strategist_decisions.json`. Keys are `(coin, direction)` tuples; values are numeric scores 0–10.
+- **NEW: `get_btc_4h_bias_fresh()`** — fetches BTC 4H klines from Bybit public API (no auth), classifies bias as BULL/BEAR/NEUTRAL using SMA20 ±2% threshold. Called once per trader run. Returns `(bias, pct_from_sma20)`.
+- **NEW: MTF freshness penalty** — after Strategist REDUCE check, if `_fresh_btc_bias != "NEUTRAL"` and signal is counter-trend (LONG in BEAR or SHORT in BULL), applies 0.5× additional size reduction with `🔭 MTF SHIFT:` log entry. Fails silently when API is unreachable. Does not hard-skip — Strategist already handles that layer.
+
+### `whale_stream_bot.py`
+- **NEW: Adaptive confidence floors** — in `fetch_signal_graveyard()`, reads `coin_stats` from `pattern_memory.json`. Coins with WR < 40% (≥3 trades) get `require ≥93% confidence` injected into the Claude prompt. Coins with WR ≥ 70% (≥5 trades) are flagged as PROVEN. Fails silently if pattern_memory.json not yet present. Per-coin history now directly shapes signal confidence thresholds.
+
+---
+
 ## v47.20 — 2026-06-30 — MTF backfill + morning MTF landscape + trade_logger mtf_bias field
 
 ### `backfill_mtf_bias.py` (NEW)
