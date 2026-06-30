@@ -1089,6 +1089,27 @@ def build_message():
     except Exception:
         pass  # score trend is non-critical
 
+    # ── Auto-blocklist summary (v47.30) ───────────────────────────────────────
+    try:
+        _bl_path_mb = os.path.join(BASE_DIR, "coin_blocklist_auto.json")
+        if os.path.exists(_bl_path_mb):
+            with open(_bl_path_mb, "r", encoding="utf-8") as _blf_mb:
+                _bl_mb = json.load(_blf_mb)
+            _bl_longs  = _bl_mb.get("blocked_longs",  [])
+            _bl_shorts = _bl_mb.get("blocked_shorts", [])
+            if _bl_longs or _bl_shorts:
+                _bl_parts = []
+                if _bl_longs:
+                    _bl_parts.append(f"LONGS [{', '.join(_bl_longs)}]")
+                if _bl_shorts:
+                    _bl_parts.append(f"SHORTS [{', '.join(_bl_shorts)}]")
+                lines += [
+                    "",
+                    f"🚫 AUTO-BLOCKED (debrief ≥3L/0W): {' | '.join(_bl_parts)}",
+                ]
+    except Exception:
+        pass  # non-critical
+
     lines += [
         "",
         f"🔄 Monitor: {monitor_status}",

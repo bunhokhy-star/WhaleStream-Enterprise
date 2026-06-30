@@ -657,6 +657,19 @@ def build_strategist_user_message(signals, history, positions, balance, drawdown
     lines = []
     lines.append("=== PROPOSED SIGNALS FROM BOT ===")
 
+    # ── Load auto-blocklist once for the signal loop (v47.30) ────────────────
+    _auto_bl_long_set  = set()
+    _auto_bl_short_set = set()
+    try:
+        _abl_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "coin_blocklist_auto.json")
+        if os.path.exists(_abl_path):
+            with open(_abl_path, "r", encoding="utf-8") as _ablf:
+                _abl_data = json.load(_ablf)
+            _auto_bl_long_set  = set(c.upper() for c in _abl_data.get("blocked_longs",  []))
+            _auto_bl_short_set = set(c.upper() for c in _abl_data.get("blocked_shorts", []))
+    except Exception:
+        pass  # fail silently — non-critical
+
     for s in signals:
         key   = (s["coin"], s["direction"])
         trades = history.get(key, [])
@@ -676,6 +689,15 @@ def build_strategist_user_message(signals, history, positions, balance, drawdown
                       (s["direction"] == "SHORT" and _coin_4h == "BULL")
         _regime_suffix = " ⚠️ counter-trend" if _is_counter else (" ✅ aligned" if _coin_4h != "NEUTRAL" else "")
         lines.append(f"  4H Regime  : {_coin_4h}{_regime_suffix}")
+
+        # ── Auto-blocklist warning (v47.30) ──────────────────────────────────
+        _coin_up = s["coin"].upper()
+        _is_bl_long  = (s["direction"] == "LONG"  and _coin_up in _auto_bl_long_set)
+        _is_bl_short = (s["direction"] == "SHORT" and _coin_up in _auto_bl_short_set)
+        if _is_bl_long:
+            lines.append(f"  ⚠️ AUTO-BLOCKED (LONG) — ≥3 losses / 0 wins in debrief history")
+        elif _is_bl_short:
+            lines.append(f"  ⚠️ AUTO-BLOCKED (SHORT) — ≥3 losses / 0 wins in debrief history")
 
         if not trades:
             lines.append(f"  History    : No resolved trades yet on this coin+direction")

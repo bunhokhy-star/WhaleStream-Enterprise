@@ -333,6 +333,20 @@ try:
 except Exception:
     pass   # non-critical — falls back to constant above
 
+# Emergency override (v47.30): written by debrief when any score tier accuracy < 45%.
+# Takes priority over scorer_config.json — reverted automatically when scorer recovers.
+try:
+    _sgov_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "score_gate_override.json")
+    if os.path.exists(_sgov_path):
+        with open(_sgov_path, "r", encoding="utf-8") as _sgof:
+            _sgov = json.load(_sgof)
+        if "SCORE_MIN_TRADER" in _sgov:
+            SCORE_MIN_TRADER = int(_sgov["SCORE_MIN_TRADER"])
+            print(f"   🚨 score_gate_override.json active: SCORE_MIN_TRADER raised to {SCORE_MIN_TRADER} "
+                  f"(scorer drift — since {_sgov.get('since', '?')})")
+except Exception:
+    pass   # non-critical — scorer_config.json value already applied above
+
 # Columns 12-16: tracker columns (read by SL-to-BE and other logic)
 COL_ENTRY_PRICE = 12   # tracker: actual fill price (avgPrice from Bybit)
 COL_EXIT_PRICE  = 13   # tracker: actual exit price

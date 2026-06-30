@@ -1,5 +1,19 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.30 — 2026-06-30 — Blocklist in Strategist + briefing; score gate auto-tune
+
+### `whale_stream_strategist.py`
+- **NEW: Auto-blocklist awareness in Strategist user message** — `build_strategist_user_message()` reads `coin_blocklist_auto.json` once before the signal loop (fails silently). For each signal coin, if direction matches a debrief-blocked coin (≥3L/0W), adds `⚠️ AUTO-BLOCKED (LONG/SHORT)` line after the 4H Regime line. Claude now sees the block warning before deciding APPROVE/REDUCE/VETO — second line of defence.
+
+### `morning_briefing.py`
+- **NEW: Auto-blocklist summary in morning brief** — after the Score Trend section, reads `coin_blocklist_auto.json` and if any coins are blocked, adds a `🚫 AUTO-BLOCKED (debrief ≥3L/0W):` line showing `LONGS [X,Y] | SHORTS [Z]`. Zero-lines when no coins are blocked. Fails silently.
+
+### `whale_stream_debrief.py`
+- **NEW: Score gate auto-tune** — immediately after the drift alert `send_telegram()` block, writes `score_gate_override.json` with `SCORE_MIN_TRADER=7` whenever any tier fires a drift alert (accuracy < 45%). If ALL tiers recover to ≥55% over ≥10 trades on a subsequent debrief run, deletes the override and sends a recovery Telegram. Override is additive (never lowers a manually elevated floor).
+
+### `whale_stream_trader.py`
+- **NEW: Score gate emergency override reader** — after the `scorer_config.json` read block, reads `score_gate_override.json` (if present) and applies `SCORE_MIN_TRADER` with override. Takes priority over auto-tune (scorer_config). Logged with 🚨 icon showing the gate value and the `since` timestamp from debrief. Falls back silently when file is absent.
+
 ## v47.29 — 2026-06-30 — SHORT auto-blocklist; score dim 7 in display; real-time tier drift alert
 
 ### `whale_stream_debrief.py`

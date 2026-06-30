@@ -813,6 +813,52 @@ def run_debrief(trades):
                 + "\n\nReview signal_scorer.py dims and thresholds."
             )
             send_telegram(_alert_msg)
+
+        # ── Score gate auto-tune (v47.30) ─────────────────────────────────────
+        # If any tier drifted, bump SCORE_MIN_TRADER to 7 via score_gate_override.json.
+        # If ALL tracked tiers have recovered (≥55% over ≥10 trades), revert the override.
+        _sgov_path = os.path.join(SCRIPT_DIR, "score_gate_override.json")
+        if _drift_alerts:
+            # Write / refresh the override
+            _current_override = 5   # default floor
+            try:
+                if os.path.exists(_sgov_path):
+                    with open(_sgov_path, "r", encoding="utf-8") as _sgr:
+                        _current_override = int(json.load(_sgr).get("SCORE_MIN_TRADER", 5))
+            except Exception:
+                pass
+            _new_floor = max(_current_override, 7)   # bump to at least 7; never lower
+            try:
+                with open(_sgov_path, "w", encoding="utf-8") as _sgw:
+                    json.dump({
+                        "SCORE_MIN_TRADER": _new_floor,
+                        "reason":           "scorer drift >45% threshold — auto-bumped by debrief",
+                        "since":            bkk_now_str(),
+                    }, _sgw, indent=2)
+                log(f"   🎛 score_gate_override.json written: SCORE_MIN_TRADER={_new_floor}")
+            except Exception as _sge:
+                log(f"   ⚠ score_gate_override write failed: {_sge}")
+        else:
+            # Check for recovery — all tiers ≥55% over ≥10 trades → revert override
+            _all_recovered = True
+            for _r_tier in ("ELITE", "GOOD", "MARGINAL"):
+                _rc = _sacc_fresh.get(_r_tier, {}).get("correct", 0)
+                _ri = _sacc_fresh.get(_r_tier, {}).get("incorrect", 0)
+                _rt = _rc + _ri
+                if _rt < 10:
+                    _all_recovered = False   # insufficient data — leave override in place
+                    break
+                if _rc / _rt < 0.55:
+                    _all_recovered = False
+                    break
+            if _all_recovered and os.path.exists(_sgov_path):
+                try:
+                    os.remove(_sgov_path)
+                    log("   ✅ score_gate_override.json REMOVED — all tiers ≥55% accuracy (scorer recovered)")
+                    send_telegram("✅ <b>SCORER RECOVERED</b> — all tiers ≥55% accuracy. score_gate_override.json removed; SCORE_MIN_TRADER reverts to default.")
+                except Exception:
+                    pass
+
     except Exception:
         pass  # non-critical
 
