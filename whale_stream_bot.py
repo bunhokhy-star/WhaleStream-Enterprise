@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v47.43   —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v47.45   —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 coins from CoinGecko (free, no key)     ║
@@ -179,7 +179,8 @@ LONG_COIN_BLOCKLIST = {
     "WIF",   # 1W/4L — 25% WR, avg -48.7% ← added v46.62 (2026-06-26)
     "WLD",   # 0W/2L — 0% WR, counter-trend coin ← added v47.5 (2026-06-28)
     "XLM",   # 0W/2L — 0% LONG WR (also SHORT-blocked) ← added v47.41
-    "ENA",   # 0W/1L — SHORT already blocked; LONG also losing ← added v47.43
+    "ENA",    # 0W/1L — SHORT already blocked; LONG also losing ← added v47.43
+    "PENDLE", # 1W/3L — 25% WR (206-trade analysis Jun 2026) ← added v47.45
 }
 # ── Auto-blocklist from debrief data (v47.28) ──────────────────────────────────
 # coin_blocklist_auto.json written by debrief save_memory() whenever a coin
@@ -362,7 +363,7 @@ except ImportError:
     MISSION_PROMPT = ""
     def print_mission_banner(): pass
 
-WHALE_STREAM_PROMPT = """WHALE-STREAM v47.43 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
+WHALE_STREAM_PROMPT = """WHALE-STREAM v47.45 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
 ROLE:
 You are an Institutional Multi-Agent Trading Committee composed of:
 • Market Regime Analyst • Smart Money Concepts Specialist • Quantitative Momentum Analyst • Liquidity & Stop-Hunt Analyst • Wyckoff Structure Analyst • Relative Strength Analyst • Breakout Probability Engine • Reversal Probability Engine • Continuation Probability Engine • Risk Management Committee
@@ -2374,7 +2375,7 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     shorts = data.get("shorts", [])
 
     lines = []
-    lines.append(f"🐳 WHALE-STREAM v47.43")
+    lines.append(f"🐳 WHALE-STREAM v47.45")
     lines.append(f"📅 {ts}")
 
     # ── Market regime summary ─────────────────────────────────
@@ -2953,7 +2954,7 @@ def main():
 
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🐳  WHALE-STREAM v47.43  — AUTO BOT STARTING    ║")
+    print("║   🐳  WHALE-STREAM v47.45  — AUTO BOT STARTING    ║")
     print("╚══════════════════════════════════════════════════╝")
     # Check conservative flag early so we can show it in the startup banner
     _short_conservative_early = os.path.exists(os.path.join(SCRIPT_DIR, "short_conservative.flag"))
@@ -3197,9 +3198,9 @@ def main():
     # Signal count rules:
     #   NEUTRAL (sideways):       2 LONG + 2 SHORT  — fewer bets in choppy market
     #   BULL (weak, 2-5%):        3 LONG + 2 SHORT  — favour trend direction
-    #   BEAR (weak, -5 to -2%):   2 LONG + 3 SHORT
+    #   BEAR (weak, -5 to -2%):   1 LONG + 3 SHORT  — v47.45: 2→1 (proven coins only)
     #   Strong BULL (abs>5%):     4 LONG + 2 SHORT  — strong trend = more LONG opportunity
-    #   Strong BEAR (abs>5%):     2 LONG + 4 SHORT
+    #   Strong BEAR (abs>5%):     1 LONG + 4 SHORT  — v47.45: 2→1 (proven coins only)
     _abs_pct = abs(_btc_regime_pct)
     if _btc_regime == "NEUTRAL":
         _n_long, _n_short = 2, 2
@@ -3213,11 +3214,11 @@ def main():
             _regime_note = f"BULL ({_btc_regime_pct:+.1f}%) — standard 3+2"
     else:  # BEAR
         if _abs_pct > 5.0:
-            _n_long, _n_short = 2, 4
-            _regime_note = f"STRONG BEAR ({_btc_regime_pct:+.1f}%) — aggressive 2+4"
+            _n_long, _n_short = 1, 4  # v47.45: was 2+4 — 1 proven LONG only in strong bear
+            _regime_note = f"STRONG BEAR ({_btc_regime_pct:+.1f}%) — aggressive 1+4"
         else:
-            _n_long, _n_short = 2, 3
-            _regime_note = f"BEAR ({_btc_regime_pct:+.1f}%) — standard 2+3"
+            _n_long, _n_short = 1, 3  # v47.45: was 2+3 — 1 proven LONG only in bear
+            _regime_note = f"BEAR ({_btc_regime_pct:+.1f}%) — standard 1+3"
     # ── BTC 24h LONG count override (v47.41) ─────────────────────────────────
     # Hard cap on LONGs when BTC is dropping hard intraday.
     # Root cause: Jun 22-25 2026 — BTC fell 8%+ over 48h; bot generated 15+ LONGs that

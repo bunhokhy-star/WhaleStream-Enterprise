@@ -181,7 +181,7 @@ SHORT_RECOVERY_COINS = {"H", "FF"}  # approved recovery coins (bypass SHORT REPA
 ORDER_CONTEXT_FILE   = os.path.join(SCRIPT_DIR, "order_context.json")
 
 # Coins with poor historical LONG win rate — skip LONG signals for these
-LONG_COIN_AVOID_LIST = ["COMP", "HYPE", "ZRO", "QNT", "WIF", "WLD", "XLM", "ENA"]   # must match LONG_COIN_BLOCKLIST in bot.py
+LONG_COIN_AVOID_LIST = ["COMP", "HYPE", "ZRO", "QNT", "WIF", "WLD", "XLM", "ENA", "PENDLE"]   # must match LONG_COIN_BLOCKLIST in bot.py
 
 # ── Dynamic blocklist from weekly scorecard YES replies (v47.44) ───────────────
 try:

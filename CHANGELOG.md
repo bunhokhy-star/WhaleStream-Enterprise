@@ -1,5 +1,15 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.45 — 2026-06-30 — Bear regime tightening: PENDLE block + BEAR LONG slots 2→1
+
+### `whale_stream_bot.py`
+- **`LONG_COIN_BLOCKLIST` — added PENDLE** — 1W/3L = 25% WR across 206-trade Jun 2026 analysis. Permanently blocked from LONG signals.
+- **BEAR regime LONG slots reduced 2→1** — Standard BEAR: was 2+3, now 1+3. Strong BEAR (>5%): was 2+4, now 1+4. Rationale: all BEAR regime loss clusters in Jun 22–26 data came from the 2nd LONG slot; the 1st slot (proven whitelist only, via v47.43 filter) survived, the 2nd slot did not. Combined with the BTC 24h override (≤−3% → 0 LONGs), the effective cascade is now: mild bear → 1 proven LONG only; moderate bear → 0 LONGs.
+- **Version banner** updated to v47.45 (4 locations).
+
+### `whale_stream_trader.py`
+- **`LONG_COIN_AVOID_LIST` — added PENDLE** — Must match `LONG_COIN_BLOCKLIST` in bot.py. Trader now skips PENDLE LONG orders from trader side as a backstop.
+
 ## v47.44 — 2026-06-30 — Intelligent business layer: weekly scorecard + YES/NO auto-block
 
 ### `whale_stream_weekly.py` (NEW)
