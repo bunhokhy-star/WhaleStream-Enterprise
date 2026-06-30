@@ -262,14 +262,83 @@ def save_memory(memory):
                     _cpnl_count += 1
                 except (TypeError, ValueError):
                     pass
+        # Per-coin TP profile (v47.39B) — track which exit level each coin hits
+        _tp_profile: dict = {"TP1": 0, "TP2": 0, "TP3": 0, "TP4": 0, "SL": 0}
+        for _cd in c_debriefs:
+            _cd_out = _cd.get("outcome", "").upper()
+            _cd_tp  = (_cd.get("tp_hit", "") or "").upper().strip()
+            if _cd_out == "LOSS":
+                _tp_profile["SL"] += 1
+            elif _cd_tp in ("TP1", "TP2", "TP3", "TP4"):
+                _tp_profile[_cd_tp] += 1
+        # Direction-specific consecutive streaks (v47.39C)
+        _long_dbs  = [d for d in c_debriefs if d.get("direction", "").upper() == "LONG"]
+        _short_dbs = [d for d in c_debriefs if d.get("direction", "").upper() == "SHORT"]
+        consec_wins_long = consec_losses_long = 0
+        for _d3 in _long_dbs:
+            if _d3.get("outcome", "").upper() == "WIN":
+                consec_wins_long += 1
+            else:
+                break
+        for _d3 in _long_dbs:
+            if _d3.get("outcome", "").upper() == "LOSS":
+                consec_losses_long += 1
+            else:
+                break
+        consec_wins_short = consec_losses_short = 0
+        for _d3 in _short_dbs:
+            if _d3.get("outcome", "").upper() == "WIN":
+                consec_wins_short += 1
+            else:
+                break
+        for _d3 in _short_dbs:
+            if _d3.get("outcome", "").upper() == "LOSS":
+                consec_losses_short += 1
+            else:
+                break
         coin_stats[c] = {
-            "consecutive_losses": consec,
-            "consecutive_wins":   consec_wins,
-            "wins":      _cw,
-            "losses":    _cl,
-            "pnl_total": round(_cpnl_total, 4),
-            "pnl_count": _cpnl_count,
+            "consecutive_losses":  consec,
+            "consecutive_wins":    consec_wins,
+            "consecutive_wins_long":    consec_wins_long,
+            "consecutive_wins_short":   consec_wins_short,
+            "consecutive_losses_long":  consec_losses_long,
+            "consecutive_losses_short": consec_losses_short,
+            "wins":       _cw,
+            "losses":     _cl,
+            "pnl_total":  round(_cpnl_total, 4),
+            "pnl_count":  _cpnl_count,
+            "tp_profile": _tp_profile,
         }
+    # Carry forward max_consecutive_wins_ever + personal best alert (v47.39F)
+    try:
+        _old_cs_pb = memory.get("coin_stats", {})
+        for _pbc, _pbv in coin_stats.items():
+            _new_streak = _pbv.get("consecutive_wins", 0)
+            _old_max    = _old_cs_pb.get(_pbc, {}).get("max_consecutive_wins_ever", 0)
+            _new_max    = max(_new_streak, _old_max)
+            coin_stats[_pbc]["max_consecutive_wins_ever"] = _new_max
+            if _new_streak > _old_max and _new_streak >= 3:
+                send_telegram(
+                    f"🏆 <b>NEW WIN RECORD</b> — {_pbc}\n"
+                    f"<b>{_new_streak} consecutive wins</b> — new all-time high!\n"
+                    f"Previous record: {_old_max}  Keep the momentum going! 🚀"
+                )
+    except Exception:
+        pass  # non-critical
+    # Win-streak broken alert (v47.38A) — fires when a hot coin just lost.
+    try:
+        _old_cs_wb = memory.get("coin_stats", {})
+        for _wbc, _wbv in coin_stats.items():
+            _old_streak_wb = _old_cs_wb.get(_wbc, {}).get("consecutive_wins", 0)
+            _new_streak_wb = _wbv.get("consecutive_wins", 0)
+            if _old_streak_wb >= 3 and _new_streak_wb == 0:
+                send_telegram(
+                    f"📉 <b>WIN STREAK BROKEN</b> — {_wbc}\n"
+                    f"Was on <b>{_old_streak_wb} consecutive wins</b> — just LOST\n"
+                    f"Momentum may have shifted; monitor closely"
+                )
+    except Exception:
+        pass  # non-critical
     memory["coin_stats"] = coin_stats
 
     # Compute MTF bias win rates across all debriefs
@@ -340,6 +409,35 @@ def save_memory(memory):
         else:
             _score_accuracy[_acc_tier]["incorrect"] += 1
     memory["score_accuracy"] = _score_accuracy
+
+    # Score calibration drift (v47.39D) — write flag when ELITE signals lose >40%
+    try:
+        _elite_acc       = _score_accuracy.get("ELITE", {})
+        _elite_correct   = _elite_acc.get("correct", 0)
+        _elite_incorrect = _elite_acc.get("incorrect", 0)
+        _elite_total     = _elite_correct + _elite_incorrect
+        _cd_flag_path    = os.path.join(SCRIPT_DIR, "calibration_drift.json")
+        if _elite_total >= 10:
+            _elite_loss_rate = _elite_incorrect / _elite_total
+            if _elite_loss_rate > 0.40:
+                import json as _json_cd
+                _cd_data = {
+                    "issue":           "ELITE_SIGNALS_UNDERPERFORMING",
+                    "elite_loss_rate": round(_elite_loss_rate, 3),
+                    "elite_total":     _elite_total,
+                    "elite_incorrect": _elite_incorrect,
+                    "note": (f"ELITE signals (score≥9) losing {_elite_loss_rate*100:.0f}% "
+                             f"({_elite_incorrect}/{_elite_total}) — scorer may need recalibration"),
+                    "flagged_at": datetime.now(BKK).strftime("%Y-%m-%d %H:%M"),
+                }
+                with open(_cd_flag_path, "w", encoding="utf-8") as _cdf:
+                    _json_cd.dump(_cd_data, _cdf, indent=2)
+                log(f"   ⚠ CALIBRATION DRIFT: ELITE loss rate {_elite_loss_rate*100:.0f}% → flag written")
+            else:
+                if os.path.exists(_cd_flag_path):
+                    os.remove(_cd_flag_path)
+    except Exception:
+        pass  # non-critical
 
     # Exit quality tracking by score tier (v47.35) ─────────────────────────────
     # Tracks which TP level (or SL) was hit per score tier.
@@ -437,6 +535,7 @@ def save_memory(memory):
         "mtf_counter":  {"wins": 0, "losses": 0, "pnl_total": 0.0, "pnl_count": 0},   # 4H opposes direction
         "mtf_sideways": {"wins": 0, "losses": 0, "pnl_total": 0.0, "pnl_count": 0},   # 4H sideways (indecision)
     }
+    _dim_age_now = datetime.now(BKK)  # for pattern memory aging (v47.39E)
     for _d in memory.get("debriefs", []):
         _dout = _d.get("outcome", "").upper()
         if _dout not in ("WIN", "LOSS"):
@@ -449,6 +548,16 @@ def save_memory(memory):
         except (TypeError, ValueError):
             _d_pnl_val = 0.0
             _d_has_pnl = False
+        # Pattern memory aging (v47.39E) — debriefs >60 days weighted 0.5×
+        _d_age_wt = 1.0
+        try:
+            _d_ts_raw = (_d.get("debrief_at") or _d.get("resolved_at") or "")[:16]
+            if _d_ts_raw:
+                _d_dt = datetime.strptime(_d_ts_raw, "%Y-%m-%d %H:%M").replace(tzinfo=BKK)
+                if (_dim_age_now - _d_dt).days >= 60:
+                    _d_age_wt = 0.5
+        except Exception:
+            pass
 
         # Confidence proxy (dim 1)
         try:
@@ -459,11 +568,11 @@ def save_memory(memory):
                 _dck = "conf_med"
             else:
                 _dck = "conf_low"
-            if _dis_win: _dim_corr[_dck]["wins"]   += 1
-            else:        _dim_corr[_dck]["losses"] += 1
+            if _dis_win: _dim_corr[_dck]["wins"]   += _d_age_wt
+            else:        _dim_corr[_dck]["losses"] += _d_age_wt
             if _d_has_pnl:
-                _dim_corr[_dck]["pnl_total"] += _d_pnl_val
-                _dim_corr[_dck]["pnl_count"] += 1
+                _dim_corr[_dck]["pnl_total"] += _d_pnl_val * _d_age_wt
+                _dim_corr[_dck]["pnl_count"] += _d_age_wt
         except Exception:
             pass
 
@@ -485,11 +594,11 @@ def save_memory(memory):
             _dmk = "mtf_counter"
         else:
             _dmk = "mtf_neutral"
-        if _dis_win: _dim_corr[_dmk]["wins"]   += 1
-        else:        _dim_corr[_dmk]["losses"] += 1
+        if _dis_win: _dim_corr[_dmk]["wins"]   += _d_age_wt
+        else:        _dim_corr[_dmk]["losses"] += _d_age_wt
         if _d_has_pnl:
-            _dim_corr[_dmk]["pnl_total"] += _d_pnl_val
-            _dim_corr[_dmk]["pnl_count"] += 1
+            _dim_corr[_dmk]["pnl_total"] += _d_pnl_val * _d_age_wt
+            _dim_corr[_dmk]["pnl_count"] += _d_age_wt
 
     memory["dim_correlation"] = _dim_corr
 

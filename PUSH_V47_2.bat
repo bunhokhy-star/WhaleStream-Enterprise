@@ -1,8 +1,8 @@
 @echo off
 cd /d C:\Users\MAX\WhaleStream
 git add -A
-git commit -m "v47.37 — strategist win-streak awareness; coin_stats time-decay; morning momentum"
+git commit -m "v47.39 — 12 backlog items: TP profile, dir-specific momentum, calibration drift, pattern aging, win record, P&L velocity, open trade risk, streak boost, 6th slot, corr guard, WoW, fatigue"
 git push
 echo.
-echo Done — v47.37 pushed to GitHub.
+echo Done — v47.39 pushed to GitHub.
 pause

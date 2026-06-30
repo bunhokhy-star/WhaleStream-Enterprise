@@ -2530,6 +2530,63 @@ def log_to_google_sheets(data, bkk_time):
         print(f"   🎯 TOP-3 FILTER: {_pre_filter} signals (all kept — already within top-3 per direction)")
     # ── end top-3 filter ─────────────────────────────────────────────────
 
+    # ── Streak-aware 6th slot (v47.39I) ──────────────────────────────────
+    # If BOT_WIN_STREAK is non-empty, check for a win-streak coin that was
+    # cut by the top-3 filter. Allow one bonus signal (4th+ rank) from a
+    # hot coin — but only if it wasn't already included after filtering.
+    try:
+        if BOT_WIN_STREAK:
+            _included_keys = {f"{s.get('coin','').upper()}_{s['direction']}" for s in all_signals}
+            _overflow_sigs = (
+                sorted(_longs_all,  key=_parse_conf_val, reverse=True)[3:] +
+                sorted(_shorts_all, key=_parse_conf_val, reverse=True)[3:]
+            )
+            _streak_bonus = None
+            _streak_bonus_cf = -1.0
+            for _ov in _overflow_sigs:
+                _ov_coin = _ov.get("coin", "").upper()
+                _ov_key  = f"{_ov_coin}_{_ov['direction']}"
+                if _ov_coin in BOT_WIN_STREAK and _ov_key not in _included_keys:
+                    _ov_cf = _parse_conf_val(_ov)
+                    if _ov_cf > _streak_bonus_cf:
+                        _streak_bonus_cf = _ov_cf
+                        _streak_bonus = _ov
+            if _streak_bonus:
+                all_signals.append(_streak_bonus)
+                print(f"   🔥 STREAK SLOT: +{_streak_bonus.get('coin')} {_streak_bonus['direction']} "
+                      f"({_streak_bonus_cf:.0f}%) — win-streak bonus 6th signal")
+    except Exception:
+        pass  # non-critical
+    # ── end streak slot ───────────────────────────────────────────────────
+
+    # ── Coin correlation guard (v47.39J) ─────────────────────────────────
+    # If the same coin appears as both LONG and SHORT after filtering,
+    # drop the lower-confidence direction to avoid contradictory orders.
+    try:
+        _cg_long_map  = {}   # coin → signal
+        _cg_short_map = {}   # coin → signal
+        for _cgs in all_signals:
+            _cg_coin = _cgs.get("coin", "").upper()
+            if _cgs["direction"] == "LONG":
+                _cg_long_map[_cg_coin] = _cgs
+            else:
+                _cg_short_map[_cg_coin] = _cgs
+        _conflict_coins = set(_cg_long_map) & set(_cg_short_map)
+        for _cc in _conflict_coins:
+            _cl_sig = _cg_long_map[_cc]
+            _cs_sig = _cg_short_map[_cc]
+            if _parse_conf_val(_cl_sig) >= _parse_conf_val(_cs_sig):
+                all_signals.remove(_cs_sig)
+                print(f"   🔀 CORR GUARD: {_cc} LONG+SHORT conflict — dropped lower-conf SHORT "
+                      f"({_parse_conf_val(_cs_sig):.0f}% < {_parse_conf_val(_cl_sig):.0f}%)")
+            else:
+                all_signals.remove(_cl_sig)
+                print(f"   🔀 CORR GUARD: {_cc} LONG+SHORT conflict — dropped lower-conf LONG "
+                      f"({_parse_conf_val(_cl_sig):.0f}% < {_parse_conf_val(_cs_sig):.0f}%)")
+    except Exception:
+        pass  # non-critical
+    # ── end correlation guard ─────────────────────────────────────────────
+
     # ── PER-COIN 4H REGIME FILTER (v47.27) ───────────────────────────────
     # Drop LONG signals where the coin's own 4H trend is clearly BEAR.
     # Drop SHORT signals where the coin's own 4H trend is clearly BULL.

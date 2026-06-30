@@ -108,6 +108,19 @@ try:
 except Exception:
     pass   # fail silently — defaults already set
 
+# ── Coin momentum from coin_stats (dimension 8, v47.38) ──────
+# +1 if coin has ≥3 consecutive wins; -1 if ≥5 consecutive losses.
+# Loaded once at import time; stale between bot restarts (acceptable).
+_COIN_MOMENTUM: dict = {}
+try:
+    _cm_path_sc = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pattern_memory.json")
+    if os.path.exists(_cm_path_sc):
+        with open(_cm_path_sc, "r", encoding="utf-8") as _cmf_sc:
+            import json as _json_cm
+            _COIN_MOMENTUM = _json_cm.load(_cmf_sc).get("coin_stats", {})
+except Exception:
+    pass  # fail silently — non-critical
+
 # ── Pattern WR cache (dimension 7, v47.26) ────────────────────
 # Loaded once at scorer import time from pattern_memory.json.
 # Maps normalised pattern_key → {wins, losses} from live debrief history.
@@ -385,7 +398,26 @@ def score_signal(signal: dict, market_bias: str, history: dict, positions: dict)
     d7_pts, d7_reason = _score_pattern_wr(pattern)             # Live pattern WR (-1 to +1, v47.26)
 
     base_score  = d1_pts + d2_pts + d3_pts + d4_pts + d5_pts
-    total_score = max(0, min(10, base_score + d6_pts + d7_pts))  # clamp 0-10 after adjustments
+
+    # Dimension 8: momentum adjustment — direction-specific (v47.39C)
+    d8_pts, d8_reason = 0, "no streak data +0"
+    try:
+        _cm_v = _COIN_MOMENTUM.get(coin, {})
+        # Prefer direction-specific streak fields; fall back to global
+        if direction == "LONG":
+            _cw_str = _cm_v.get("consecutive_wins_long",    _cm_v.get("consecutive_wins", 0))
+            _cl_str = _cm_v.get("consecutive_losses_long",  _cm_v.get("consecutive_losses", 0))
+        else:  # SHORT
+            _cw_str = _cm_v.get("consecutive_wins_short",   _cm_v.get("consecutive_wins", 0))
+            _cl_str = _cm_v.get("consecutive_losses_short", _cm_v.get("consecutive_losses", 0))
+        if _cw_str >= 3:
+            d8_pts, d8_reason = 1, f"{_cw_str}-{direction}-win streak +1"
+        elif _cl_str >= 5:
+            d8_pts, d8_reason = -1, f"{_cl_str}-{direction}-loss streak -1"
+    except Exception:
+        pass
+
+    total_score = max(0, min(10, base_score + d6_pts + d7_pts + d8_pts))  # clamp 0-10
 
     if total_score >= STRONG_MIN:
         verdict = "STRONG"
@@ -402,14 +434,16 @@ def score_signal(signal: dict, market_bias: str, history: dict, positions: dict)
         "pattern":      (d5_pts, d5_reason),
         "mtf_bias":     (d6_pts, d6_reason),    # signed: can be negative
         "pattern_wr":   (d7_pts, d7_reason),    # live debrief WR adjustment (-1/0/+1)
+        "momentum":     (d8_pts, d8_reason),    # streak adjustment (-1/0/+1, v47.38)
     }
 
     mtf_sign = f"+{d6_pts}" if d6_pts >= 0 else str(d6_pts)
     pwr_sign  = f"+{d7_pts}" if d7_pts >= 0 else str(d7_pts)
+    mom_sign  = f"+{d8_pts}" if d8_pts >= 0 else str(d8_pts)
     summary = (
         f"{coin} {direction} — Score {total_score}/10 [{verdict}] | "
         f"Conf:{d1_pts} Regime:{d2_pts} WR:{d3_pts} Corr:{d4_pts} Pat:{d5_pts} "
-        f"MTF:{mtf_sign} PatWR:{pwr_sign}"
+        f"MTF:{mtf_sign} PatWR:{pwr_sign} Mom:{mom_sign}"
     )
 
     return {

@@ -1,5 +1,43 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.39 — 2026-06-30 — 12 backlog items
+
+### `whale_stream_debrief.py`
+- **#2 Per-coin TP profile** — coin_stats now tracks `tp_profile: {TP1, TP2, TP3, TP4, SL}` counts per coin from all resolved debriefs.
+- **#3 Direction-specific momentum** — coin_stats now stores `consecutive_wins_long`, `consecutive_wins_short`, `consecutive_losses_long`, `consecutive_losses_short` computed separately from LONG vs SHORT debrief history.
+- **#4 Score calibration drift** — After updating `score_accuracy`, checks ELITE tier. If ≥10 ELITE trades and loss rate >40%, writes `calibration_drift.json` with loss rate and advisory. Clears file when rate recovers.
+- **#5 Pattern memory aging** — In the `dim_correlation` rebuild loop, debriefs older than 60 days contribute weight 0.5× (wins, losses, pnl_total, pnl_count all scaled). Keeps pattern stats recency-weighted.
+- **#6 Personal best win alert** — Carries forward `max_consecutive_wins_ever` per coin across debrief runs. When current streak > prior max AND ≥3 wins, fires Telegram: `🏆 NEW WIN RECORD — COIN N consecutive wins — new all-time high!`
+
+### `signal_scorer.py`
+- **#3 Direction-specific d8** — Momentum dimension 8 now uses `consecutive_wins_long`/`consecutive_losses_long` for LONG signals and `_short` variants for SHORT, falling back to global fields if direction-specific ones absent.
+
+### `whale_stream_trader.py`
+- **#1 Win-streak ELITE size boost** — After score-based size multiplier, if coin has `consecutive_wins ≥ 3` AND signal tier is ELITE, applies 1.25× boost to `_coin_size_mult`, capped at 1.25. Fails silently — never blocks a trade.
+
+### `whale_stream_bot.py`
+- **#9 Streak-aware 6th slot** — After top-3 long + top-3 short are selected, checks overflow signals for any coin in `BOT_WIN_STREAK`. Highest-confidence qualifying overflow signal is appended as a 6th slot. Only one bonus signal; no duplicates of already-included coins.
+- **#10 Coin correlation guard** — After slot selection, scans for any coin appearing as both LONG and SHORT in `all_signals`. Drops the lower-confidence direction. Prevents hedging the same coin.
+
+### `whale_stream_watchdog.py`
+- **#7 P&L weekly velocity alert** — Every 4h cycle, reads `pattern_memory.json` debriefs and computes last-7-day vs prior-7-day P&L sums (requires ≥3 trades in each window). If last 7d is worse than prior 7d, sends Telegram with delta and deduplicates via `pv_velocity_alert.json` (one alert per ISO week).
+- **#11 Week-over-week Sunday summary** — Sunday Telegram now includes this-week vs last-week comparison: WR%, avg P&L, trade count, best and worst coin for each period.
+- **#12 Pattern fatigue Sunday alert** — Sunday Telegram flags any pattern that is >40% of this week's signals AND has below-average WR, warning of over-reliance.
+
+### `morning_briefing.py`
+- **#8 Open trade risk summary** — New `parse_open_risk()` function cross-references live Bybit positions with Google Sheets OPEN rows to compute SL distance % and TP1 distance % per position. Displayed in morning briefing after the positions section as `⚠️ OPEN TRADE RISK` with R:R ratio and 🚨 warning when SL is <1.5% away.
+
+## v47.38 — 2026-06-30 — Win-streak broken alert; losing streak watchdog; scorer momentum dimension
+
+### `whale_stream_debrief.py`
+- **NEW: Win-streak broken alert (Option A)** — Before overwriting `memory["coin_stats"]`, compares the OLD coin_stats with the freshly computed one. Any coin that previously had `consecutive_wins ≥ 3` and now has `consecutive_wins == 0` (meaning it just lost) triggers an immediate Telegram: `📉 WIN STREAK BROKEN — COIN was on N consecutive wins — just LOST`. Fires in real time per trade resolution, not just at Sunday digest.
+
+### `whale_stream_watchdog.py`
+- **NEW: Intra-week losing streak alert (Option B)** — Every 4h cycle, reads `pattern_memory.json` coin_stats and scans for coins with `consecutive_losses ≥ 3`. Only fires a Telegram when a coin's streak count INCREASES past what was last alerted (dedup via `losing_streak_alert.json`). CRITICAL tier (≥5L) and WARNING tier (3-4L) shown separately. File is updated each cycle so recovering coins drop off automatically.
+
+### `signal_scorer.py`
+- **NEW: Momentum dimension 8 (Option C)** — Module-level `_COIN_MOMENTUM` dict loaded from `pattern_memory.json` coin_stats at import time. In `score_signal()`, computes `d8_pts`: `+1` if coin has `consecutive_wins ≥ 3`; `-1` if `consecutive_losses ≥ 5`; `0` otherwise. Applied to `total_score` after d6/d7 with same 0-10 clamp. Added to `breakdown` as `"momentum"` and to `summary` as `Mom:+1/0/-1`. Makes the signal score directly reflect coin momentum state — hot-streak coins score 1pt higher, cold-streak coins 1pt lower.
+
 ## v47.37 — 2026-06-30 — Strategist win-streak awareness; coin_stats time-decay; morning momentum section
 
 ### `whale_stream_strategist.py`

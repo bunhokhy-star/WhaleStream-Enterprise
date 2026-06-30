@@ -333,6 +333,82 @@ def parse_positions():
 
 
 # ─────────────────────────────────────────────────────────────
+# 2b. OPEN TRADE RISK SUMMARY (v47.39H)
+# Cross-reference positions (avgPrice) with Google Sheets (SL, TP1).
+# ─────────────────────────────────────────────────────────────
+
+def parse_open_risk():
+    """
+    Returns list of risk dicts per open position:
+      {coin, side, avg_price, sl, tp1, sl_dist_pct, tp1_dist_pct}
+    sl_dist_pct > 0 = distance to SL in %; tp1_dist_pct > 0 = distance to TP1.
+    Returns [] on any error or when no matching Sheets OPEN rows.
+    """
+    positions = parse_positions()
+    if not positions:
+        return []
+
+    # Build map: coin (e.g. "BTC") → {avgPrice, side}
+    avg_map: dict = {}
+    for p in positions:
+        coin = p["symbol"].replace("USDT", "").upper()
+        avg_map[coin] = {"avgPrice": p["avgPrice"], "side": p["side"]}
+
+    # Read Google Sheets OPEN rows for SL and TP1
+    try:
+        from google.oauth2.service_account import Credentials as _GCreds2
+        from gspread.client import Client as _GClient2
+        _SCOPES2 = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive",
+        ]
+        _creds_path2 = os.path.join(BASE_DIR, GOOGLE_CREDENTIALS_FILE)
+        if not os.path.exists(_creds_path2):
+            return []
+        _creds2  = _GCreds2.from_service_account_file(_creds_path2, scopes=_SCOPES2)
+        _client2 = _GClient2(auth=_creds2)
+        _sheet2  = _client2.open_by_key(GOOGLE_SHEET_ID).sheet1
+        _rows2   = _sheet2.get_all_values()[1:]   # skip header
+    except Exception:
+        return []
+
+    def _parse_price_mb(raw):
+        nums = re.findall(r'[\d]+\.?[\d]*', str(raw).replace(",", ""))
+        return float(nums[0]) if nums else None
+
+    result = []
+    for row in _rows2:
+        while len(row) < 12:
+            row.append("")
+        if row[_COL_STATUS].strip().upper() != "OPEN":
+            continue
+        coin_raw = row[0].strip().upper()
+        if coin_raw not in avg_map:
+            continue
+        sl_val  = _parse_price_mb(row[4])   # col 4 = Stop Loss
+        tp1_val = _parse_price_mb(row[5])   # col 5 = TP1
+        avg     = avg_map[coin_raw]["avgPrice"]
+        side    = avg_map[coin_raw]["side"]
+        sl_dist = tp1_dist = None
+        if avg and sl_val:
+            sl_dist  = ((avg - sl_val) / avg * 100 if side == "Buy"   # LONG
+                        else (sl_val - avg) / avg * 100)               # SHORT
+        if avg and tp1_val:
+            tp1_dist = ((tp1_val - avg) / avg * 100 if side == "Buy"
+                        else (avg - tp1_val) / avg * 100)
+        result.append({
+            "coin":          coin_raw,
+            "side":          side,
+            "avg_price":     avg,
+            "sl":            row[4].strip(),
+            "tp1":           row[5].strip(),
+            "sl_dist_pct":   sl_dist,
+            "tp1_dist_pct":  tp1_dist,
+        })
+    return result
+
+
+# ─────────────────────────────────────────────────────────────
 # 3. ANALYSIS  (from analysis_shorts.txt summary block)
 # ─────────────────────────────────────────────────────────────
 
@@ -771,9 +847,10 @@ def build_message():
                         if btc_price is not None and btc_sma is not None else "BTC SMA unavailable (Bybit offline?)")
 
     # ── Data ──
-    bal      = parse_balance()
+    bal       = parse_balance()
     positions = parse_positions()
-    analysis = parse_analysis()
+    open_risk = parse_open_risk()   # SL/TP1 distance per open position (v47.39H)
+    analysis  = parse_analysis()
     monitor_dt, monitor_ago = parse_monitor_heartbeat()
     fills_24h = parse_last_fills_24h()
     trader   = parse_trader_activity()
@@ -979,6 +1056,23 @@ def build_message():
         f"🏦 OPEN POSITIONS ({pos_count})",
     ]
     lines.extend(pos_lines if pos_lines else ["  (none)"])
+
+    # ── Open trade risk summary (v47.39H) ────────────────────────────────────
+    if open_risk:
+        lines.append("")
+        lines.append("⚠️ OPEN TRADE RISK")
+        for _r in open_risk:
+            _side_icon = "🟢" if _r["side"] == "Buy" else "🔴"
+            _sl_str  = (f"{_r['sl_dist_pct']:.1f}%"  if _r['sl_dist_pct']  is not None else "N/A")
+            _tp_str  = (f"{_r['tp1_dist_pct']:.1f}%" if _r['tp1_dist_pct'] is not None else "N/A")
+            _rr_str  = ""
+            if _r['sl_dist_pct'] and _r['tp1_dist_pct'] and _r['sl_dist_pct'] > 0:
+                _rr_str = f"  R:R={_r['tp1_dist_pct']/_r['sl_dist_pct']:.1f}"
+            _sl_warn = " 🚨" if (_r['sl_dist_pct'] is not None and _r['sl_dist_pct'] < 1.5) else ""
+            lines.append(
+                f"  {_side_icon} {_r['coin']:<6} SL:{_sl_str}{_sl_warn}  TP1:{_tp_str}{_rr_str}"
+            )
+    # ── end open trade risk ───────────────────────────────────────────────────
 
     # ── Yesterday's P&L from Google Sheets ──
     if yesterday_pnl is None:

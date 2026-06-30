@@ -2010,6 +2010,25 @@ def main():
             print(f"   📐 Final size after score: {_coin_size_mult:.2f}x (score {_score_tier})")
         # ── end score-based size ─────────────────────────────────────────────
 
+        # ── Win-streak ELITE size boost (v47.39A) ────────────────────────────
+        # When coin has ≥3 consecutive wins AND signal is ELITE (score≥9),
+        # apply 25% size bonus. Cap total mult at 1.25× to avoid overexposure.
+        try:
+            _ws_pm_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pattern_memory.json")
+            if os.path.exists(_ws_pm_path):
+                with open(_ws_pm_path, "r", encoding="utf-8") as _wsf:
+                    _ws_coin_stats = json.load(_wsf).get("coin_stats", {})
+                _ws_consec = _ws_coin_stats.get(coin.upper(), {}).get("consecutive_wins", 0)
+                if _ws_consec >= 3 and _score_tier == "ELITE":
+                    _pre_boost = _coin_size_mult
+                    _coin_size_mult = min(round(_coin_size_mult * 1.25, 3), 1.25)
+                    log(f"STREAK BOOST: {coin} — {_ws_consec}-win streak + ELITE → "
+                        f"{_pre_boost:.2f}x × 1.25 → {_coin_size_mult:.2f}x (cap 1.25)")
+                    print(f"   🔥 WIN STREAK BOOST: {coin} {_ws_consec}W + ELITE → {_coin_size_mult:.2f}x")
+        except Exception:
+            pass  # non-critical — never block a trade due to bonus sizing
+        # ── end win-streak ELITE boost ────────────────────────────────────────
+
         # Skip if already have a position OR an unfilled order
         if symbol in already_active:
             print(f"   ⚠ Already have an active position/order for {symbol} — skipping")

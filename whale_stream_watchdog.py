@@ -562,6 +562,97 @@ if __name__ == "__main__":
 
     _watchdog_health = "CRITICAL" if trader_critical else ("AMBER" if issues_with_fixes else "GREEN")
 
+    # ── Intra-week losing streak alert (v47.38B) ──────────────────────────────
+    # Runs every 4h cycle. Only fires when a coin's streak count INCREASES past
+    # a threshold for the first time (dedup via losing_streak_alert.json).
+    try:
+        _ls_pm_path  = os.path.join(BASE_DIR, "pattern_memory.json")
+        _ls_sen_path = os.path.join(BASE_DIR, "losing_streak_alert.json")
+        if os.path.exists(_ls_pm_path):
+            with open(_ls_pm_path, "r", encoding="utf-8") as _ls_pmf:
+                _ls_pm = json.load(_ls_pmf)
+            _ls_cs = _ls_pm.get("coin_stats", {})
+            # Load previous alert state
+            _ls_prev = {}
+            if os.path.exists(_ls_sen_path):
+                with open(_ls_sen_path, "r", encoding="utf-8") as _ls_senf:
+                    _ls_prev = json.load(_ls_senf)
+            _ls_critical, _ls_warning, _ls_new_state = [], [], {}
+            for _lsc, _lsv in _ls_cs.items():
+                _lscl = _lsv.get("consecutive_losses", 0)
+                if _lscl >= 3:
+                    _ls_new_state[_lsc] = _lscl
+                    if _lscl > _ls_prev.get(_lsc, 0):  # only alert if streak got worse
+                        if _lscl >= 5:
+                            _ls_critical.append((_lsc, _lscl))
+                        else:
+                            _ls_warning.append((_lsc, _lscl))
+            if _ls_critical or _ls_warning:
+                _ls_parts = []
+                if _ls_critical:
+                    _ls_critical.sort(key=lambda x: x[1], reverse=True)
+                    _ls_parts.append("🔴 <b>CRITICAL (≥5L):</b> " + "  ".join(f"{c}({n}L)" for c, n in _ls_critical))
+                if _ls_warning:
+                    _ls_warning.sort(key=lambda x: x[1], reverse=True)
+                    _ls_parts.append("⚠️ <b>WARNING (3-4L):</b> " + "  ".join(f"{c}({n}L)" for c, n in _ls_warning))
+                send_telegram(
+                    "🧊 <b>LOSING STREAK ALERT</b>\n" + "\n".join(_ls_parts)
+                    + "\n<i>Critical coins approaching auto-block threshold</i>"
+                )
+            # Write current state (removes coins that recovered to < 3)
+            with open(_ls_sen_path, "w", encoding="utf-8") as _ls_senfw:
+                json.dump(_ls_new_state, _ls_senfw, indent=2)
+    except Exception:
+        pass  # non-critical
+
+    # ── P&L weekly velocity alert (v47.39G) ──────────────────────────────────
+    # Runs every 4h cycle. Compares last-7-days P&L vs prior-7-days P&L.
+    # Fires once per ISO week if declining.
+    try:
+        _pv_pm_path = os.path.join(BASE_DIR, "pattern_memory.json")
+        if os.path.exists(_pv_pm_path):
+            with open(_pv_pm_path, "r", encoding="utf-8") as _pvf:
+                _pv_pm = json.load(_pvf)
+            _pv_now   = datetime.now(BKK)
+            _pv_7d    = (_pv_now - timedelta(days=7)).strftime("%Y-%m-%d")
+            _pv_14d   = (_pv_now - timedelta(days=14)).strftime("%Y-%m-%d")
+            _pv_today = _pv_now.strftime("%Y-%m-%d")
+            _pv_last7_sum = 0.0; _pv_last7_n = 0
+            _pv_prior7_sum = 0.0; _pv_prior7_n = 0
+            for _pvd in _pv_pm.get("debriefs", []):
+                _pvd_ts  = (_pvd.get("resolved_at") or _pvd.get("debrief_at") or "")[:10]
+                _pvd_pnl = _pvd.get("pnl")
+                if _pvd_pnl is None or _pvd_ts == "":
+                    continue
+                try:
+                    _pvd_pnl_f = float(_pvd_pnl)
+                except (TypeError, ValueError):
+                    continue
+                if _pv_7d <= _pvd_ts <= _pv_today:
+                    _pv_last7_sum += _pvd_pnl_f; _pv_last7_n += 1
+                elif _pv_14d <= _pvd_ts < _pv_7d:
+                    _pv_prior7_sum += _pvd_pnl_f; _pv_prior7_n += 1
+            if _pv_last7_n >= 3 and _pv_prior7_n >= 3:
+                _pv_week     = _pv_now.isocalendar()[1]
+                _pv_sen_path = os.path.join(BASE_DIR, "pv_velocity_alert.json")
+                _pv_prev_wk  = {}
+                if os.path.exists(_pv_sen_path):
+                    with open(_pv_sen_path, "r", encoding="utf-8") as _pvs:
+                        _pv_prev_wk = json.load(_pvs)
+                if _pv_last7_sum < _pv_prior7_sum and _pv_prev_wk.get("week") != _pv_week:
+                    _pv_delta = _pv_last7_sum - _pv_prior7_sum
+                    send_telegram(
+                        f"📉 <b>P&L DECLINING — Weekly Velocity</b>\n"
+                        f"Last 7 days: {_pv_last7_sum:+.1f}% ({_pv_last7_n} trades)\n"
+                        f"Prior 7 days: {_pv_prior7_sum:+.1f}% ({_pv_prior7_n} trades)\n"
+                        f"Delta: {_pv_delta:+.1f}% — momentum shifting negative"
+                    )
+                    with open(_pv_sen_path, "w", encoding="utf-8") as _pvs:
+                        json.dump({"week": _pv_week, "alerted_at": now_str}, _pvs)
+    except Exception:
+        pass  # non-critical
+    # ── end P&L velocity ──────────────────────────────────────────────────────
+
     # ── Sunday scorer health digest (v47.32) ─────────────────────────────────
     # Every Sunday :30 cycle → send weekly dim-health + score accuracy Telegram.
     if datetime.now(BKK).weekday() == 6:   # Sunday = 6
@@ -776,6 +867,111 @@ if __name__ == "__main__":
             )
             send_telegram(_sunday_msg)
             print("   📊 Sunday scorer health digest sent.")
+
+            # ── Week-over-week summary (v47.39K) ─────────────────────────────
+            try:
+                _wow_now  = datetime.now(BKK)
+                _wow_7d_s = (_wow_now - timedelta(days=7)).strftime("%Y-%m-%d")
+                _wow_14_s = (_wow_now - timedelta(days=14)).strftime("%Y-%m-%d")
+                _wow_now_s = _wow_now.strftime("%Y-%m-%d")
+
+                def _wow_stats(dbs):
+                    n = len(dbs)
+                    if n == 0: return None
+                    w   = sum(1 for d in dbs if d.get("outcome","").upper() == "WIN")
+                    wr  = w / n * 100
+                    pnl_vals = [float(d["pnl"]) for d in dbs if d.get("pnl") is not None]
+                    avg_pnl  = sum(pnl_vals) / len(pnl_vals) if pnl_vals else 0.0
+                    coin_pnl: dict = {}
+                    for d in dbs:
+                        c = d.get("coin", "?")
+                        p = d.get("pnl")
+                        if p is not None:
+                            coin_pnl.setdefault(c, []).append(float(p))
+                    coin_avg = {c: sum(v)/len(v) for c,v in coin_pnl.items()}
+                    best  = max(coin_avg, key=coin_avg.get) if coin_avg else "?"
+                    worst = min(coin_avg, key=coin_avg.get) if coin_avg else "?"
+                    return {"n": n, "w": w, "wr": wr, "avg_pnl": avg_pnl,
+                            "best": best, "worst": worst,
+                            "best_pnl": coin_avg.get(best, 0), "worst_pnl": coin_avg.get(worst, 0)}
+
+                def _wow_ts(d):
+                    return (d.get("debrief_at") or d.get("resolved_at") or "")[:10]
+                def _wow_filter(dbs, start_s, end_s, excl_end=False):
+                    return [d for d in dbs
+                            if d.get("outcome","").upper() in ("WIN","LOSS")
+                            and start_s <= _wow_ts(d)
+                            and (_wow_ts(d) < end_s if excl_end else _wow_ts(d) <= end_s)]
+
+                _all_dbs = _pm_wd.get("debriefs", [])
+                _tw = _wow_stats(_wow_filter(_all_dbs, _wow_7d_s, _wow_now_s))
+                _lw = _wow_stats(_wow_filter(_all_dbs, _wow_14_s, _wow_7d_s, excl_end=True))
+                if _tw:
+                    _wr_icon  = "✅" if _tw["wr"] >= 55 else ("⚠️" if _tw["wr"] >= 45 else "❌")
+                    _wow_lines = [
+                        "📆 <b>WEEK-OVER-WEEK SUMMARY</b>",
+                        f"  This week:  {_tw['n']} trades | {_tw['w']}W | WR {_tw['wr']:.0f}% {_wr_icon} | Avg P&L {_tw['avg_pnl']:+.1f}%",
+                        f"  Best: {_tw['best']} ({_tw['best_pnl']:+.1f}%)  Worst: {_tw['worst']} ({_tw['worst_pnl']:+.1f}%)",
+                    ]
+                    if _lw:
+                        _wr_diff  = _tw["wr"] - _lw["wr"]
+                        _pnl_diff = _tw["avg_pnl"] - _lw["avg_pnl"]
+                        _trend    = "📈" if _wr_diff >= 0 else "📉"
+                        _wow_lines.append(
+                            f"  Last week:  {_lw['n']} trades | WR {_lw['wr']:.0f}% | Avg P&L {_lw['avg_pnl']:+.1f}%"
+                        )
+                        _wow_lines.append(
+                            f"  {_trend} Trend: WR {_wr_diff:+.0f}pp  P&L/trade {_pnl_diff:+.1f}%"
+                        )
+                    send_telegram("\n".join(_wow_lines))
+                    print("   📆 Week-over-week summary sent.")
+            except Exception as _wow_e:
+                print(f"   ⚠ Week-over-week failed: {_wow_e}")
+
+            # ── Pattern fatigue alert (v47.39L) ──────────────────────────────
+            try:
+                _pf_now   = datetime.now(BKK)
+                _pf_7d_s  = (_pf_now - timedelta(days=7)).strftime("%Y-%m-%d")
+                _pf_now_s = _pf_now.strftime("%Y-%m-%d")
+                _pf_dbs   = [
+                    d for d in _pm_wd.get("debriefs", [])
+                    if _pf_7d_s <= (d.get("debrief_at") or d.get("resolved_at") or "")[:10] <= _pf_now_s
+                    and d.get("outcome", "").upper() in ("WIN", "LOSS")
+                ]
+                _pf_total = len(_pf_dbs)
+                if _pf_total >= 5:
+                    _pf_pat_count: dict = {}
+                    _pf_pat_wins:  dict = {}
+                    for _pfd in _pf_dbs:
+                        _pfp = (_pfd.get("pattern") or "").strip()[:40]
+                        if not _pfp:
+                            continue
+                        _pf_pat_count[_pfp] = _pf_pat_count.get(_pfp, 0) + 1
+                        if _pfd.get("outcome","").upper() == "WIN":
+                            _pf_pat_wins[_pfp] = _pf_pat_wins.get(_pfp, 0) + 1
+                    _pf_total_wins = sum(1 for d in _pf_dbs if d.get("outcome","").upper() == "WIN")
+                    _pf_overall_wr = _pf_total_wins / _pf_total
+                    _pf_alerts = []
+                    for _pfp, _pfn in _pf_pat_count.items():
+                        if _pfn / _pf_total > 0.40:
+                            _pfw  = _pf_pat_wins.get(_pfp, 0)
+                            _pfwr = _pfw / _pfn
+                            if _pfwr < _pf_overall_wr:
+                                _pf_alerts.append(
+                                    f"  ⚠️ <i>{_pfp}</i>: {_pfn}/{_pf_total} signals "
+                                    f"({_pfn/_pf_total*100:.0f}%) — WR {_pfwr*100:.0f}% vs avg {_pf_overall_wr*100:.0f}%"
+                                )
+                    if _pf_alerts:
+                        send_telegram(
+                            "🔁 <b>PATTERN FATIGUE ALERT</b>\n"
+                            "Overused pattern with below-average WR this week:\n"
+                            + "\n".join(_pf_alerts)
+                            + "\n\n→ Bot may be over-relying on this setup; diversity needed"
+                        )
+                        print("   🔁 Pattern fatigue alert sent.")
+            except Exception as _pf_e:
+                print(f"   ⚠ Pattern fatigue check failed: {_pf_e}")
+
         except Exception as _sund_e:
             print(f"   ⚠ Sunday digest failed: {_sund_e}")
 
