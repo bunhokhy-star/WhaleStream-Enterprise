@@ -439,6 +439,186 @@ def _get_coin_indicators(coins_subset, limit=50):
     return results
 # ── end 4H Technical Indicator helpers ────────────────────────────────────
 
+
+def _mtf_prescreen(all_coins, n_long=15, n_short=15):
+    """
+    Priority 1 — MTF Pre-Screener (v47.47).
+    Replaces dumb 24h momentum ranking with real technical confluence scoring.
+
+    Fetches Daily + 4H candles from Bybit for every coin in all_coins.
+    Scores each coin on two dimensions:
+
+    LONG score (max 10):
+      +3  Daily price > EMA50   — macro uptrend confirmed
+      +3  4H price > EMA50      — intermediate uptrend confirmed
+      +2  4H RSI 35–62          — pullback reset zone (not overbought)
+      +2  4H vol ratio > 1.1    — buying interest expanding
+      -2  4H RSI > 72           — overbought penalty
+      -3  4H RSI > 80           — extreme overbought penalty
+
+    SHORT score (max 10):
+      +3  Daily price < EMA50   — macro downtrend confirmed
+      +3  4H price < EMA50      — intermediate downtrend confirmed
+      +2  4H RSI 42–68          — dead-cat bounce zone (not oversold)
+      +2  4H vol ratio > 1.0    — selling pressure present
+      -2  4H RSI < 28           — oversold penalty (squeeze risk)
+      -3  4H RSI < 20           — extreme oversold penalty
+
+    Returns top n_long LONG candidates + top n_short SHORT candidates.
+    Each coin object in the result has _mtf, _long_score, _short_score attached.
+    """
+    import time as _time
+    print(f"   🔍 MTF pre-screening {len(all_coins)} coins (Daily+4H)...")
+
+    long_scored  = []   # [(score, coin_obj)]
+    short_scored = []
+    fetched = 0
+    skipped = 0
+
+    for idx, coin in enumerate(all_coins):
+        symbol_base = (coin.get("symbol") or "").upper()
+        if not symbol_base:
+            skipped += 1
+            continue
+        bybit_sym = f"{symbol_base}USDT"
+
+        try:
+            # ── Fetch 4H candles (52 bars → compute EMA50 + RSI14 + volume) ──
+            url_4h = (f"{BYBIT_MARKET_URL}/v5/market/kline"
+                      f"?category=linear&symbol={bybit_sym}&interval=240&limit=52")
+            resp_4h = requests.get(url_4h, timeout=6)
+            d4h = resp_4h.json()
+            if d4h.get("retCode") != 0:
+                skipped += 1
+                _time.sleep(0.05)
+                continue
+            raw_4h = list(reversed(d4h.get("result", {}).get("list", [])))
+            if len(raw_4h) < 22:
+                skipped += 1
+                _time.sleep(0.05)
+                continue
+
+            # ── Fetch Daily candles (55 bars → compute EMA50) ──
+            url_1d = (f"{BYBIT_MARKET_URL}/v5/market/kline"
+                      f"?category=linear&symbol={bybit_sym}&interval=D&limit=55")
+            resp_1d = requests.get(url_1d, timeout=6)
+            d1d = resp_1d.json()
+            raw_1d = (list(reversed(d1d.get("result", {}).get("list", [])))
+                      if d1d.get("retCode") == 0 else [])
+
+            # ── 4H metrics ──
+            closes_4h  = [float(c[4]) for c in raw_4h]
+            volumes_4h = [float(c[5]) for c in raw_4h]
+            rsi_4h   = _compute_rsi(closes_4h)
+            ema50_4h = _compute_ema(closes_4h, 50)
+            ema20_4h = _compute_ema(closes_4h, 20)
+            price_4h = closes_4h[-1]
+            vol5     = sum(volumes_4h[-5:])  / 5
+            vol20    = sum(volumes_4h[-20:]) / 20
+            vol_ratio = (vol5 / vol20) if vol20 > 0 else 1.0
+            trend_4h_bull = price_4h > ema50_4h
+            trend_4h_bear = price_4h < ema50_4h
+
+            # ── Daily metrics ──
+            trend_daily_bull = False
+            trend_daily_bear = False
+            rsi_1d = 50.0
+            if len(raw_1d) >= 22:
+                closes_1d = [float(c[4]) for c in raw_1d]
+                ema50_1d  = _compute_ema(closes_1d, 50)
+                price_1d  = closes_1d[-1]
+                rsi_1d    = _compute_rsi(closes_1d)
+                trend_daily_bull = price_1d > ema50_1d
+                trend_daily_bear = price_1d < ema50_1d
+
+            # ── LONG score ──
+            long_score = 0
+            if trend_daily_bull: long_score += 3
+            if trend_4h_bull:    long_score += 3
+            if 35 <= rsi_4h <= 62: long_score += 2
+            if vol_ratio > 1.1:  long_score += 2
+            if rsi_4h > 72:      long_score -= 2   # overbought penalty
+            if rsi_4h > 80:      long_score -= 3   # extreme overbought
+            long_score = max(long_score, 0)
+
+            # ── SHORT score ──
+            short_score = 0
+            if trend_daily_bear: short_score += 3
+            if trend_4h_bear:    short_score += 3
+            if 42 <= rsi_4h <= 68: short_score += 2
+            if vol_ratio > 1.0:  short_score += 2
+            if rsi_4h < 28:      short_score -= 2   # oversold (squeeze risk)
+            if rsi_4h < 20:      short_score -= 3   # extreme oversold
+            short_score = max(short_score, 0)
+
+            # ── Attach metadata to coin object ──
+            mtf_info = {
+                "rsi_4h":       round(rsi_4h, 1),
+                "rsi_1d":       round(rsi_1d, 1),
+                "trend_4h":     "BULL" if trend_4h_bull else "BEAR",
+                "trend_daily":  "BULL" if trend_daily_bull else "BEAR",
+                "vol_ratio":    round(vol_ratio, 2),
+                "ema20_4h":     round(ema20_4h, 8),
+                "ema50_4h":     round(ema50_4h, 8),
+                "long_score":   long_score,
+                "short_score":  short_score,
+                # signal field mirrors _get_coin_indicators() format (for market_context.json compat)
+                "signal":       ("LONG-READY"  if trend_4h_bull and 35 <= rsi_4h <= 62 else
+                                 "OVERBOUGHT"   if rsi_4h >= 70 else
+                                 "SHORT-READY"  if trend_4h_bear and rsi_4h > 30 else
+                                 "OVERSOLD"     if rsi_4h <= 30 else "NEUTRAL"),
+                "ema_dir":      "BULL" if trend_4h_bull else "BEAR",
+                "vol_trend":    f"{((vol_ratio - 1) * 100):+.0f}%{'↑' if vol_ratio > 1.1 else '↓' if vol_ratio < 0.9 else '→'}",
+            }
+            coin["_mtf"]         = mtf_info
+            coin["_long_score"]  = long_score
+            coin["_short_score"] = short_score
+
+            if long_score  > 0: long_scored.append((long_score,  coin))
+            if short_score > 0: short_scored.append((short_score, coin))
+            fetched += 1
+
+        except Exception:
+            skipped += 1
+            continue
+        finally:
+            _time.sleep(0.05)   # 50ms throttle per coin (2 calls within this window)
+
+        if (idx + 1) % 50 == 0:
+            print(f"      ... {idx + 1}/{len(all_coins)} screened, {fetched} scored")
+
+    # Sort by score descending, take top N
+    long_sorted  = sorted(long_scored,  key=lambda x: x[0], reverse=True)
+    short_sorted = sorted(short_scored, key=lambda x: x[0], reverse=True)
+
+    # Resolve conflicts: if a coin appears in both lists, keep it only in the stronger direction
+    top_long_raw  = [c for _, c in long_sorted[:n_long + 5]]   # extra buffer for dedup
+    top_short_raw = [c for _, c in short_sorted[:n_short + 5]]
+    long_syms     = {(c.get("symbol") or "").upper() for c in top_long_raw}
+    short_syms    = {(c.get("symbol") or "").upper() for c in top_short_raw}
+    conflict_syms = long_syms & short_syms
+    if conflict_syms:
+        top_long_raw  = [c for c in top_long_raw
+                         if (c.get("symbol") or "").upper() not in conflict_syms
+                         or c["_long_score"] > c["_short_score"]]
+        top_short_raw = [c for c in top_short_raw
+                         if (c.get("symbol") or "").upper() not in conflict_syms
+                         or c["_short_score"] >= c["_long_score"]]
+
+    top_long  = top_long_raw[:n_long]
+    top_short = top_short_raw[:n_short]
+
+    print(f"   ✅ Pre-screen: {fetched}/{len(all_coins)} coins scored, "
+          f"{len(top_long)} LONG + {len(top_short)} SHORT candidates selected")
+    print("   🟢 LONG :", ", ".join(
+        f"{(c.get('symbol') or '').upper()}({c['_long_score']})" for c in top_long[:8]))
+    print("   🔴 SHORT:", ", ".join(
+        f"{(c.get('symbol') or '').upper()}({c['_short_score']})" for c in top_short[:8]))
+
+    return {"longs": top_long, "shorts": top_short}
+# ── end MTF Pre-Screener ───────────────────────────────────────────────────
+
+
 # ─────────────────────────────────────────────────────────────
 # SECTION 2: YOUR WHALE-STREAM PROMPT  ← Do not change this
 # ─────────────────────────────────────────────────────────────
@@ -485,16 +665,17 @@ The trend is not your enemy — fighting it is.
 
 LIVE REGIME: injected in MARKET REGIME section of user message below.
 ════════════════════════════════════════════════════════════
-ANALYSIS ENGINE (v47.8)
-Each call provides ONE self-contained batch of market data (up to 100 coins).
-Analyze ALL coins in the provided batch.
-TOURNAMENT PROCESS (per batch):
-Step 1: Score ALL coins in the batch.
-Step 2: Select Top 3 LONG and Top 3 SHORT from this batch only.
-Step 3: Output FULL ##JSON_START## block immediately — DO NOT wait for additional data.
-FINAL SELECTIONS: TOP 3 LONG + TOP 3 SHORT from this batch.
+ANALYSIS ENGINE (v47.47)
+Each call provides ONE self-contained batch of pre-screened coins (≤30 coins).
+Coins in this batch were already filtered by MTF confluence scoring — Daily+4H trend alignment,
+RSI zone, and volume expansion. Only the HIGHEST-QUALITY setup candidates are shown.
+TOURNAMENT PROCESS:
+Step 1: Score ALL coins in the batch against the SIGNAL SETUP TEMPLATE below.
+Step 2: Select Top 2 LONG and Top 2 SHORT that fully match the template.
+Step 3: Output FULL ##JSON_START## block immediately.
+FINAL SELECTIONS: TOP 2 LONG + TOP 2 SHORT.
+If fewer than 2 coins qualify in a direction, output STAY OUT slots (do NOT force filler signals).
 ALWAYS output complete JSON on first response.
-NEVER reference other batches.
 ════════════════════════════════════════════════════════════
 MARKET REGIME ENGINE
 Before analyzing any coin:
@@ -637,17 +818,16 @@ SECTOR CLASSIFICATIONS (use these categories):
 • RWA / Staking : ONDO, SNT, PENDLE, ETHFI, EIGEN, LIDO
 
 CORRELATION RULES (MANDATORY):
-• MAXIMUM 2 signals from the same sector in your LONG selections
-• MAXIMUM 2 signals from the same sector in your SHORT selections
-• IDEAL: Each of the 3 LONGs should be from DIFFERENT sectors (max diversification)
-• IDEAL: Each of the 3 SHORTs should be from DIFFERENT sectors (max diversification)
-• If forced to choose between 2 correlated coins in the same sector, select the one with HIGHER confidence score
-• NEVER output 3 LONGs all from Layer 1 — this is concentrated macro risk
-• NEVER pick more than 2 LONGs from the same narrative theme (e.g. max 2 AI tokens)
+• MAXIMUM 1 signal from the same sector in your LONG selections (only 2 LONG slots total)
+• MAXIMUM 1 signal from the same sector in your SHORT selections (only 2 SHORT slots total)
+• IDEAL: 2 LONGs from DIFFERENT sectors (max diversification)
+• IDEAL: 2 SHORTs from DIFFERENT sectors (max diversification)
+• If both LONG candidates are in the same sector, REPLACE the weaker one with STAY OUT
+• NEVER output 2 LONGs from the same narrative theme (e.g. 2 AI tokens = correlated risk)
 
-ENFORCEMENT: After building your final 6-signal list, run a sector audit:
-  → If 3+ LONGs share a sector, REPLACE the weakest with the next-best coin from a different sector
-  → If 3+ SHORTs share a sector, REPLACE the weakest with the next-best coin from a different sector
+ENFORCEMENT: After building your final 4-signal list, run a sector audit:
+  → If 2 LONGs share a sector, REPLACE the weaker with STAY OUT
+  → If 2 SHORTs share a sector, REPLACE the weaker with STAY OUT
 ════════════════════════════════════════════════════════════
 CONTINUATION PROBABILITY ENGINE: Score 0–100. Require ≥ 70.
 REVERSAL PROBABILITY ENGINE: Score 0–100. Reject if > 40.
@@ -726,6 +906,34 @@ TECH FILTER (4H): When 4H TECHNICAL INDICATORS block is present, apply these rul
   - If a coin has no indicator data in the block: treat as NEUTRAL
   - NEVER pick a LONG from a coin marked OVERBOUGHT unless conf≥97%
   - NEVER pick a SHORT from a coin marked OVERSOLD unless conf≥97%
+════════════════════════════════════════════════════════════
+⚡ SIGNAL SETUP TEMPLATE — ONE TRADE, ONE EDGE (v47.47 — P2)
+These coins were pre-screened for MTF confluence. Validate each against this template.
+A signal is ONLY valid if it matches ALL conditions. If it does not, output STAY OUT for that slot.
+
+LONG TEMPLATE (ALL required):
+  ① Daily trend:  price ABOVE Daily EMA50   (macro uptrend — pre-screener +3 score)
+  ② 4H trend:     price ABOVE 4H EMA50      (intermediate uptrend — pre-screener +3 score)
+  ③ 4H RSI:       35–62                      (pullback reset zone — NOT chasing above 65)
+  ④ 4H Volume:    5-bar avg > 20-bar avg     (buying interest building)
+  ⑤ Entry:        at/near 4H EMA20 OR key support level  (pullback entry, NOT breakout chase)
+
+  HARD REJECT LONG if: RSI > 65 (extended momentum) OR price < 4H EMA50 (against trend)
+  HARD REJECT LONG if: 24h Gain > 8% AND price within 3% of 24h High (pump chase)
+
+SHORT TEMPLATE (ALL required):
+  ① Daily trend:  price BELOW Daily EMA50   (macro downtrend — pre-screener +3 score)
+  ② 4H trend:     price BELOW 4H EMA50      (intermediate downtrend — pre-screener +3 score)
+  ③ 4H RSI:       42–68                      (dead-cat bounce zone — NOT shorting oversold)
+  ④ 4H Volume:    expanding on breakdown OR weak on bounce  (selling pressure present)
+  ⑤ Entry:        at/near 4H EMA20 resistance OR key resistance  (bounce short, NOT breakdown chase)
+
+  HARD REJECT SHORT if: RSI < 32 (already dumped, squeeze risk) OR price > 4H EMA50 (against trend)
+  HARD REJECT SHORT if: 7d Change < -20% (coin already capitulated — crowded short trap)
+
+TEMPLATE NOTE: You are working with PRE-SCREENED candidates. Do not force a signal to fit.
+If the best LONG candidate only scores 1–2 on the template, output STAY OUT.
+2 perfect signals beat 4 forced signals every time.
 ════════════════════════════════════════════════════════════
 ENTRY RULE (LONGS): Entry MUST be Retest Zone / Liquidity Sweep Reclaim / Support-Resistance Reclaim / Breakout Retest. Never chase current price.
 ENTRY ZONE WIDTH RULE (CRITICAL — REDUCES SIGNAL EXPIRY): Historical data shows 54% of LONG signals expire because price never pulls back to the entry zone within 72 hours.
@@ -808,13 +1016,14 @@ Risk Environment:
 ════════════════════════════════════════════════════════════
 🐳 FINAL EXECUTION MATRIX
 
-TOP 3 LONG SETUPS
+TOP 2 LONG SETUPS (only coins matching ALL LONG TEMPLATE criteria)
 # | Coin | Conf | Score | Entry | SL | TP1 | TP2 | TP3 | TP4 | Pattern
 
-TOP 3 SHORT SETUPS
+TOP 2 SHORT SETUPS (only coins matching ALL SHORT TEMPLATE criteria)
 # | Coin | Conf | Score | Entry | SL | TP1 | TP2 | TP3 | TP4 | Pattern
 
-CEO VERDICT: Output ONLY GO or STAY OUT based on aggregate quality of the final six setups.
+CEO VERDICT: Output ONLY GO or STAY OUT based on aggregate quality of the final four setups.
+DO NOT force signals to reach 2+2. Output fewer signals if fewer qualify. Quality > quantity.
 ════════════════════════════════════════════════════════════
 
 ════════════════════════════════════════════════════════════
@@ -2177,10 +2386,12 @@ def format_market_data(all_coins):
     """
     batches = []
 
-    for batch_num in range(1, 3):   # 2 batches × 100 = 200 coins
+    for batch_num in range(1, 3):   # up to 2 batches × 100 = 200 coins max
         start = (batch_num - 1) * 100
         end   = batch_num * 100
         coins = all_coins[start:end]
+        if not coins:               # skip empty batches (e.g. after MTF pre-screen with ≤30 coins)
+            continue
 
         lines = []
         lines.append(f"\n{'═'*95}")
@@ -3050,7 +3261,7 @@ def main():
 
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🐳  WHALE-STREAM v47.46  — AUTO BOT STARTING    ║")
+    print("║   🐳  WHALE-STREAM v47.47  — AUTO BOT STARTING    ║")
     print("╚══════════════════════════════════════════════════╝")
     # Check conservative flag early so we can show it in the startup banner
     _short_conservative_early = os.path.exists(os.path.join(SCRIPT_DIR, "short_conservative.flag"))
@@ -3125,79 +3336,88 @@ def main():
         _mark_done("sigbot", details={"longs": [], "shorts": [], "error": "fetch_failed"})
         return
 
-    # ── Step 2b: Fetch MTF chart data (v47.17 — real OHLCV candles) ─────────
-    # Top 20 coins by volume; ~10-15s; fails gracefully with empty string
-    print("📉 Fetching MTF chart data (4H+1H candles for top 20 coins)...")
+    # ── Step 2b: MTF Pre-Screen — score ALL coins before Claude sees anything (v47.47 — P1) ──
+    # Replaces dumb 24h momentum ranking. Fetches Daily+4H candles for all 200 coins,
+    # scores by confluence (trend alignment + RSI zone + volume), selects top 30 candidates.
+    # Claude receives ONLY these 30 coins — highest quality, not largest 24h move.
+    print("🔍 MTF pre-screening all coins (Daily+4H confluence scoring — P1)...")
+    _mtf_result       = _mtf_prescreen(all_coins, n_long=15, n_short=15)
+    _long_candidates  = _mtf_result["longs"]    # top 15 LONG-ready coins
+    _short_candidates = _mtf_result["shorts"]   # top 15 SHORT-ready coins
+
+    # Merge into ordered list (LONG candidates first), deduplicate by symbol
+    _seen_syms      = set()
+    _screened_coins = []
+    for _c in (_long_candidates + _short_candidates):
+        _sym = (_c.get("symbol") or "").upper()
+        if _sym and _sym not in _seen_syms:
+            _seen_syms.add(_sym)
+            _screened_coins.append(_c)
+    print(f"   📋 {len(_screened_coins)} pre-screened coins passed to Claude (was 200)")
+
+    # ── Step 2c: Fetch MTF 1H chart data for top-volume coins (entry timing) ────────────
+    # Provides 1H trend labels to supplement P1 Daily+4H scores.
+    print("📉 Fetching MTF chart data (1H trends for top 20 by volume)...")
     mtf_block = fetch_mtf_block(all_coins, n=20)
 
-    # ── Step 3: Format into WHALE-STREAM table format ───────
-    print("🔧 Formatting market data into 2 batches (100 coins each)...")
-    batches = format_market_data(all_coins)   # list of 2 strings
+    # ── Step 3: Format ONLY the screened coins for Claude ───────────────────
+    # With ≤30 coins, format_market_data() produces 1 batch (empty batch 2 is skipped).
+    print(f"🔧 Formatting {len(_screened_coins)} pre-screened coins for Claude prompt...")
+    batches = format_market_data(_screened_coins)
 
-    # ── 4H Technical Indicators for top 30 momentum candidates (v47.46) ──
-    # Pick 15 biggest 24h gainers + 15 biggest 24h losers from the coin list
-    _sorted_by_move = sorted(
-        [c for c in all_coins if c.get("price_change_percentage_24h") is not None],
-        key=lambda c: c["price_change_percentage_24h"]
-    )
-    _indicator_coins = (
-        [c["symbol"].upper().replace("USDT","") for c in _sorted_by_move[-15:]] +  # top gainers
-        [c["symbol"].upper().replace("USDT","") for c in _sorted_by_move[:15]]     # top losers
-    )
-    # Remove duplicates, blocklisted coins
-    _indicator_coins = list(dict.fromkeys(
-        c for c in _indicator_coins
-        if c not in LONG_COIN_BLOCKLIST and c not in SHORT_COIN_BLOCKLIST
-    ))[:30]
-    print(f"   📊 Fetching 4H indicators for {len(_indicator_coins)} coins...")
-    _tech_indicators = _get_coin_indicators(_indicator_coins)
-    print(f"   ✅ Indicators computed for {len(_tech_indicators)} coins")
+    # Build MTF indicator block from pre-screener results (replaces _get_coin_indicators)
+    _indicator_lines = ["── MTF PRE-SCREEN SCORES (Daily+4H confluence — P1) ──"]
+    for _c in _screened_coins:
+        _m   = _c.get("_mtf", {})
+        _sym = (_c.get("symbol") or "").upper()
+        if _m:
+            _ls  = _m.get("long_score",  0)
+            _ss  = _m.get("short_score", 0)
+            _dir = "LONG-BIAS" if _ls >= _ss else "SHORT-BIAS"
+            _indicator_lines.append(
+                f"{_sym}: Daily={_m.get('trend_daily','?')} 4H={_m.get('trend_4h','?')} "
+                f"RSI4H={_m.get('rsi_4h','?')} vol×{_m.get('vol_ratio','?')} "
+                f"EMA20_4H={_m.get('ema20_4h','?')} "
+                f"→ LONG_SCORE={_ls} SHORT_SCORE={_ss} [{_dir}]"
+            )
+    _indicator_text = "\n".join(_indicator_lines) if _screened_coins else ""
 
-    # Format indicator block for prompt injection
-    _indicator_lines = ["── 4H TECHNICAL INDICATORS ──"]
-    for _ic, _iv in _tech_indicators.items():
-        _indicator_lines.append(
-            f"{_ic}: RSI={_iv['rsi']} EMA={_iv['ema_dir']} vol={_iv['vol_trend']} → {_iv['signal']}"
-        )
-    _indicator_text = "\n".join(_indicator_lines) if len(_tech_indicators) > 0 else ""
-    # ── end 4H indicators ──────────────────────────────────────────────────
-
-    # Inject technical indicators into prompt if available
-    if _indicator_text:
+    # Inject MTF scores into the batch
+    if _indicator_text and batches:
         batches[0] = batches[0] + f"\n\n{_indicator_text}\n"
-        if len(batches) > 1:
-            batches[1] = batches[1] + f"\n\n{_indicator_text}\n"
 
-    # ── Write market_context.json for cross-agent data sharing (v47.46) ──────
-    # Other agents (strategist, morning briefing) can load this file to avoid
-    # duplicate API calls and to share F&G + indicator data within the same cycle.
+    # ── Write market_context.json for cross-agent data sharing (v47.47) ──────
     try:
         _mc_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "market_context.json")
         _mc_data = {
             "generated_at":    datetime.now(BKK).isoformat(),
             "fear_greed_text": fear_greed,
-            "indicators":      {_c: _v for _c, _v in _tech_indicators.items()},
+            "screened_coins":  [(_c.get("symbol") or "").upper() for _c in _screened_coins],
+            "indicators":      {
+                (_c.get("symbol") or "").upper(): _c.get("_mtf", {})
+                for _c in _screened_coins
+            },
         }
         with open(_mc_path, "w", encoding="utf-8") as _mcf:
             json.dump(_mc_data, _mcf, indent=2)
-        print(f"   ✅ market_context.json written ({len(_tech_indicators)} coins)")
+        print(f"   ✅ market_context.json written ({len(_screened_coins)} coins)")
     except Exception as _mc_err:
         print(f"   ⚠ market_context.json write skipped: {_mc_err}")
 
-    # ── Step 4: Analyze with Claude — 2 separate calls to exploit prompt caching ──
-    # v45.2: Batch 1 WRITES the system-prompt cache (4,442 tokens at 125% cost).
-    #         Batch 2 READS the cache within the same run  (4,442 tokens at  10% cost).
-    #         Net saving vs single call: ~90% on 4,442 cached tokens per run.
+    # ── Step 4: Analyze with Claude — Single call (P1: ≤30 pre-screened coins) ──
+    # v47.47: MTF pre-screen reduces from 200→30 coins. All fit in one batch.
+    # One Claude call instead of two → 50% lower API cost + higher signal quality.
     _STANDALONE = (
         "\n════════════════════════════════════════════════════════════\n"
         "⚡ INSTRUCTION: This is a complete, self-contained analysis request.\n"
-        "Analyze ALL coins in the DATA above and output your FULL ##JSON_START## JSON block\n"
-        "immediately. Do NOT wait for any additional batches — produce final signals now.\n"
+        "Analyze ALL pre-screened coins in the DATA above (MTF-filtered, ≤30 coins).\n"
+        "Apply the SIGNAL SETUP TEMPLATE. Output your FULL ##JSON_START## JSON block now.\n"
+        "TOP 2 LONG + TOP 2 SHORT only. If fewer qualify, output STAY OUT for that slot.\n"
         "════════════════════════════════════════════════════════════"
     )
 
     try:
-        print("🧠 Batch 1/2 — Claude analysis (coins #1–100, cache WRITE expected)...")
+        print("🧠 Claude analysis — MTF pre-screened coins (P1 — single batch)...")
         analysis1 = analyze_with_claude(
             batches[0],
             graveyard_text=graveyard, dominance_text=dominance,
@@ -3210,19 +3430,8 @@ def main():
         _mark_done("sigbot", details={"longs": [], "shorts": [], "error": "claude_failed"})
         return
 
+    # No batch 2: MTF pre-screen reduces to ≤30 coins — all fit in one Claude call (v47.47 P1)
     analysis2 = ""
-    if len(batches) > 1:
-        try:
-            print("🧠 Batch 2/2 — Claude analysis (coins #101–200, cache READ expected)...")
-            analysis2 = analyze_with_claude(
-                batches[1],
-                graveyard_text=graveyard, dominance_text=dominance,
-                fear_greed_text=fear_greed, btc_move_text=btc_move,
-                btc_24h_text=btc_24h_text, batch_note=_STANDALONE,
-                coin_perf_text=coin_perf, mtf_block_text=mtf_block,
-            )
-        except Exception as e:
-            print(f"⚠ Claude analysis failed (batch 2): {e} — continuing with batch 1 only")
 
     # Bangkok time used across all outputs
     bkk_time = datetime.now(BKK)
@@ -3341,30 +3550,21 @@ def main():
             return "NEUTRAL", 0.0
 
     _btc_regime, _btc_regime_pct = _get_btc_regime_bot()
-    # Signal count rules:
-    #   NEUTRAL (sideways):       2 LONG + 2 SHORT  — fewer bets in choppy market
-    #   BULL (weak, 2-5%):        3 LONG + 2 SHORT  — favour trend direction
-    #   BEAR (weak, -5 to -2%):   1 LONG + 3 SHORT  — v47.46: 2→1 (proven coins only)
-    #   Strong BULL (abs>5%):     4 LONG + 2 SHORT  — strong trend = more LONG opportunity
-    #   Strong BEAR (abs>5%):     1 LONG + 4 SHORT  — v47.46: 2→1 (proven coins only)
-    _abs_pct = abs(_btc_regime_pct)
+    # Signal count rules (P3 — max 2 LONG + 2 SHORT per run):
+    # MTF pre-screen already selects quality. Less is more — stop scraping for filler.
+    #   NEUTRAL:     2 LONG + 2 SHORT
+    #   BULL:        2 LONG + 2 SHORT (was 3+2/4+2 — capped at 2+2)
+    #   BEAR:        1 LONG + 2 SHORT (1 LONG max in downtrend)
+    # BTC 24h override below can further reduce LONG to 0 in hard downtrends.
     if _btc_regime == "NEUTRAL":
         _n_long, _n_short = 2, 2
-        _regime_note = f"SIDEWAYS ({_btc_regime_pct:+.1f}%) — conservative 2+2"
+        _regime_note = f"SIDEWAYS ({_btc_regime_pct:+.1f}%) — 2+2"
     elif _btc_regime == "BULL":
-        if _abs_pct > 5.0:
-            _n_long, _n_short = 4, 2
-            _regime_note = f"STRONG BULL ({_btc_regime_pct:+.1f}%) — aggressive 4+2"
-        else:
-            _n_long, _n_short = 3, 2
-            _regime_note = f"BULL ({_btc_regime_pct:+.1f}%) — standard 3+2"
+        _n_long, _n_short = 2, 2   # P3: was 3+2/4+2
+        _regime_note = f"BULL ({_btc_regime_pct:+.1f}%) — 2+2"
     else:  # BEAR
-        if _abs_pct > 5.0:
-            _n_long, _n_short = 1, 4  # v47.46: was 2+4 — 1 proven LONG only in strong bear
-            _regime_note = f"STRONG BEAR ({_btc_regime_pct:+.1f}%) — aggressive 1+4"
-        else:
-            _n_long, _n_short = 1, 3  # v47.46: was 2+3 — 1 proven LONG only in bear
-            _regime_note = f"BEAR ({_btc_regime_pct:+.1f}%) — standard 1+3"
+        _n_long, _n_short = 1, 2   # P3: was 1+3/1+4
+        _regime_note = f"BEAR ({_btc_regime_pct:+.1f}%) — 1+2"
     # ── BTC 24h LONG count override (v47.41) ─────────────────────────────────
     # Hard cap on LONGs when BTC is dropping hard intraday.
     # Root cause: Jun 22-25 2026 — BTC fell 8%+ over 48h; bot generated 15+ LONGs that
@@ -3380,11 +3580,11 @@ def main():
             _n_long = 1
             _regime_note += f" | BTC24h {btc_24h_pct:+.1f}%→max1L"
             print(f"   📉 BTC 24h override: {btc_24h_pct:+.1f}% → LONGs capped at 1")
-    # ── SHORT slot expansion: compensate suppressed LONGs in bear regime (v47.43) ──
-    if btc_24h_pct <= -3.0 and _n_short < 4:
-        _n_short = 4
-        _regime_note += f" | BTC24h bear→4S"
-        print(f"   📈 BTC 24h bear: SHORT slots expanded 3→4 (compensates for LONG suppression)")
+    # ── SHORT slot expansion: compensate suppressed LONGs in bear (P3: capped at 3 max) ──
+    if btc_24h_pct <= -3.0 and _n_short < 3:
+        _n_short = 3
+        _regime_note += f" | BTC24h bear→3S"
+        print(f"   📈 BTC 24h bear: SHORT slots expanded to 3 (compensates for LONG suppression)")
     # ── end BTC 24h LONG override ─────────────────────────────────────────────
     print(f"   📡 BTC 4H Regime: {_regime_note} → keeping top {_n_long}🟢 + {_n_short}🔴")
     # ── end dynamic count ─────────────────────────────────────────────────────

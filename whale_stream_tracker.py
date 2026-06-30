@@ -322,6 +322,51 @@ def fetch_bybit_closed_pnl(max_pages=4):
     return records
 
 
+def _find_bybit_match(symbol_usdt, signal_ts_str, cpnl_records, window_h=120):
+    """P4 — find best Bybit closed-pnl record for an OPEN sheet row.
+
+    Match criteria:
+      - symbol must match (e.g. "BTCUSDT")
+      - updatedTime (close time) must be AFTER the signal timestamp
+      - updatedTime must be within window_h hours after signal (default 120h)
+
+    Returns best-matching record (smallest elapsed time) or None.
+    """
+    try:
+        sig_dt = datetime.strptime(signal_ts_str[:16], "%Y-%m-%d %H:%M").replace(tzinfo=BKK)
+        sig_ms = sig_dt.timestamp() * 1000
+    except Exception:
+        return None
+    best, best_delta = None, float("inf")
+    for rec in cpnl_records:
+        if rec["symbol"] != symbol_usdt:
+            continue
+        delta_ms = rec["updatedTime"] - sig_ms   # positive = closed after signal
+        if 0 <= delta_ms <= window_h * 3_600_000:
+            if delta_ms < best_delta:
+                best, best_delta = rec, delta_ms
+    return best
+
+
+def _guess_tp_hit(exit_price, tp1, tp2, tp3, tp4, signal, is_loss=False):
+    """P4 — infer TP_HIT label from Bybit avgExitPrice vs TP levels.
+
+    Checks from highest TP down. Returns "SL" on loss or if exit is below TP1.
+    Tolerance: ±0.5% to absorb partial fills.
+    """
+    if is_loss:
+        return "SL"
+    is_long = "LONG" in signal.upper() or "🟢" in signal
+    for tp_price, label in [(tp4, "TP4"), (tp3, "TP3"), (tp2, "TP2"), (tp1, "TP1")]:
+        if tp_price is None or tp_price == 0:
+            continue
+        if is_long  and exit_price >= tp_price * 0.995:
+            return label
+        if not is_long and exit_price <= tp_price * 1.005:
+            return label
+    return "SL"   # exit below TP1 (partial fill or fee slippage)
+
+
 # ─────────────────────────────────────────────────────────────
 # TRADE RESULT LOGIC
 # ─────────────────────────────────────────────────────────────
@@ -1500,6 +1545,17 @@ def main():
 
     print(f"   ✓ {len(data_rows)} trade rows found")
 
+    # ── P4: Fetch Bybit closed P&L once — primary resolution source ─
+    # For rows with a Bybit order ID, Bybit is the single source of truth.
+    # Fetched here (before the row loop) to avoid per-row API calls.
+    print("\n📊 [P4] Fetching Bybit closed P&L (primary resolution source)...")
+    try:
+        _p4_cpnl = fetch_bybit_closed_pnl(max_pages=8)
+        print(f"   ✓ {len(_p4_cpnl)} closed P&L records available for resolution")
+    except Exception as _p4_fetch_e:
+        print(f"   ⚠ [P4] Bybit closed P&L fetch failed: {_p4_fetch_e} — using price-snapshot fallback")
+        _p4_cpnl = []
+
     # ── Process each row ──────────────────────────────────────
     updates          = []   # list of (row_index_1based, col_index_1based, value)
     all_parsed       = []   # for stats
@@ -1532,74 +1588,10 @@ def main():
             "ts":          ts_str,   # signal timestamp — needed for Gate 1 ETA + expiry alerts
         })
 
-        # ── TP2/TP3 pursuit completion check (partial-close WIN rows) ──
-        # When a trade was auto-traded (COL_BYBIT_ID set) and resolved WIN/TP1,
-        # the 50% remainder is still chasing TP2/TP3 on Bybit.
-        # Current price >= TP2 (LONG) or <= TP2 (SHORT) means the Bybit limit
-        # order definitely filled. Upgrade TP_HIT and recompute blended P&L.
-        # Only checks rows resolved in the last 72h (partial-close window).
-        if (status == "WIN"
-                and row[COL_TP_HIT].strip() == "TP1"
-                and (row[COL_BYBIT_ID].strip() if len(row) > COL_BYBIT_ID else "")):
-            _pc_res_str = row[COL_RESOLVED_AT].strip()
-            if _pc_res_str:
-                try:
-                    _pc_res_dt = datetime.strptime(_pc_res_str[:16], "%Y-%m-%d %H:%M").replace(
-                        tzinfo=BKK
-                    )
-                    _pc_age_h = (bkk_time - _pc_res_dt).total_seconds() / 3600
-                    if _pc_age_h <= 72:
-                        _pc_current = get_price(coin)
-                        _pc_entry   = (parse_price(row[COL_ENTRY_PRICE].strip())
-                                       or parse_entry_midpoint(entry_zone))
-                        _pc_tp1     = parse_price(tp1_str)
-                        _pc_tp2     = parse_price(tp2_str)
-                        _pc_tp3     = parse_price(tp3_str) if tp3_str else None
-                        _pc_tp4     = parse_price(tp4_str) if tp4_str else None
-                        _pc_is_long = "LONG" in signal.upper() or "🟢" in signal
-                        if _pc_current and _pc_entry and _pc_tp1 and _pc_tp2:
-                            _pc_upgrade = None
-                            if _pc_is_long:
-                                if _pc_tp4 and _pc_current >= _pc_tp4:
-                                    _pc_upgrade = ("TP1+TP4", _pc_tp4, "TP4")
-                                elif _pc_tp3 and _pc_current >= _pc_tp3:
-                                    _pc_upgrade = ("TP1+TP3", _pc_tp3, "TP3")
-                                elif _pc_current >= _pc_tp2:
-                                    _pc_upgrade = ("TP1+TP2", _pc_tp2, "TP2")
-                            else:
-                                if _pc_tp4 and _pc_current <= _pc_tp4:
-                                    _pc_upgrade = ("TP1+TP4", _pc_tp4, "TP4")
-                                elif _pc_tp3 and _pc_current <= _pc_tp3:
-                                    _pc_upgrade = ("TP1+TP3", _pc_tp3, "TP3")
-                                elif _pc_current <= _pc_tp2:
-                                    _pc_upgrade = ("TP1+TP2", _pc_tp2, "TP2")
-                            if _pc_upgrade:
-                                _pc_label, _pc_exit, _pc_tp_name = _pc_upgrade
-                                if _pc_is_long:
-                                    _pnl1 = (_pc_tp1  - _pc_entry) / _pc_entry * 100 * LEVERAGE
-                                    _pnl2 = (_pc_exit - _pc_entry) / _pc_entry * 100 * LEVERAGE
-                                else:
-                                    _pnl1 = (_pc_entry - _pc_tp1)  / _pc_entry * 100 * LEVERAGE
-                                    _pnl2 = (_pc_entry - _pc_exit) / _pc_entry * 100 * LEVERAGE
-                                _blended   = _pnl1 * 0.50 + _pnl2 * 0.50  # v47.40 fix: trader closes 50% at TP1 (was 25/75 — wrong)
-                                _blend_str = f"{_blended:+.2f}% [T]"
-                                _sr = i + 2
-                                updates.append((_sr, COL_TP_HIT + 1, _pc_label))
-                                updates.append((_sr, COL_PNL + 1,    _blend_str))
-                                all_parsed[-1]["tp_hit"] = _pc_label
-                                all_parsed[-1]["pnl"]    = _blended
-                                _di = "🟢" if _pc_is_long else "🔴"
-                                print(f"   🎯 {coin:8} {_pc_label}  blended P&L {_blend_str}  ({_pc_tp_name} @ {_pc_exit:.6g})")
-                                send_telegram_alert(
-                                    f"🎯 <b>PARTIAL CLOSE COMPLETE — {_pc_label}</b>\n"
-                                    f"  {_di} {coin}\n"
-                                    f"  Remainder (75%) reached {_pc_tp_name} @ {_pc_exit:.6g}\n"
-                                    f"  Blended P&L: <b>{_blended:+.1f}%</b>"
-                                    f" (25%@TP1 + 75%@{_pc_tp_name})\n"
-                                    f"  TP1 resolved {_pc_age_h:.0f}h ago"
-                                )
-                except Exception:
-                    pass
+        # ── P4: TP2/TP3 pursuit handled by Bybit write-back (below) ─
+        # Removed live price-snapshot scan — Bybit avgExitPrice is the
+        # source of truth. The write-back block (end of run) upgrades
+        # TP_HIT from TP1 → TP1+TP2/TP3 using the actual fill price.
 
         # Only process OPEN rows from here on
         if status != "OPEN":
@@ -1677,6 +1669,79 @@ def main():
         if entry is None or sl is None or tp1 is None:
             print(f"   ⚠ {coin}: could not parse entry/SL/TP — skipping")
             continue
+
+        # ── P4: Bybit closed P&L — primary resolution ──────────
+        # Single source of truth: if Bybit shows this trade closed,
+        # resolve directly from actual P&L — skip price-snapshot logic.
+        # Fallback to check_result() only when no Bybit match found.
+        _p4_sr = i + 2
+        if bybit_id and _p4_cpnl:
+            _p4_match = _find_bybit_match(coin + "USDT", ts_str, _p4_cpnl)
+            if _p4_match:
+                _p4_is_win  = _p4_match["closedPnl"] >= 0
+                _p4_status  = "WIN" if _p4_is_win else "LOSS"
+                _p4_pnl_pct = _p4_match["pnl_pct"] or 0.0
+                _p4_exit    = _p4_match["avgExitPrice"]
+                _p4_pnl_str = f"{_p4_pnl_pct:+.2f}% [B]"
+                _p4_tp_hit  = _guess_tp_hit(_p4_exit, tp1, tp2, tp3, tp4, signal, is_loss=not _p4_is_win)
+                updates.append((_p4_sr, COL_STATUS      + 1, _p4_status))
+                updates.append((_p4_sr, COL_EXIT_PRICE  + 1, round(_p4_exit, 8)))
+                updates.append((_p4_sr, COL_TP_HIT      + 1, _p4_tp_hit))
+                updates.append((_p4_sr, COL_PNL         + 1, _p4_pnl_str))
+                updates.append((_p4_sr, COL_RESOLVED_AT + 1, now_str))
+                if not (row[COL_ENTRY_PRICE].strip() if len(row) > COL_ENTRY_PRICE else ""):
+                    updates.append((_p4_sr, COL_ENTRY_PRICE + 1, round(entry, 8)))
+                all_parsed[-1].update({
+                    "status": _p4_status, "pnl": _p4_pnl_pct,
+                    "tp_hit": _p4_tp_hit, "resolved_at": now_str,
+                })
+                _p4_icon = "✅" if _p4_is_win else "❌"
+                print(f"   {_p4_icon} {coin:8} {signal[:8]}  {_p4_status}  {_p4_tp_hit}  "
+                      f"{_p4_pnl_str}  [Bybit P4] (exit {_p4_exit:.6g})")
+                _p4_dir = "LONG" if ("LONG" in signal.upper() or "🟢" in signal) else "SHORT"
+                _p4_resolved_all = [r for r in all_parsed if r.get("status") in ("WIN", "LOSS")]
+                _p4_wins   = sum(1 for r in _p4_resolved_all if r.get("status") == "WIN")
+                _p4_losses = sum(1 for r in _p4_resolved_all if r.get("status") == "LOSS")
+                _p4_total  = len(_p4_resolved_all)
+                _p4_wr     = (_p4_wins / _p4_total * 100) if _p4_total else 0.0
+                _p4_gate1  = ""
+                if _p4_total >= 55 and _p4_total % 5 == 0:
+                    _p4_gate1 = (f"\n📊 Gate 1 progress: {_p4_total}/150 — "
+                                 f"{150 - _p4_total} trades to go")
+                if _p4_is_win:
+                    send_telegram_alert(
+                        f"✅ <b>REAL TRADE WIN — {coin} {_p4_dir}</b>\n"
+                        f"{'🟢 LONG' if _p4_dir == 'LONG' else '🔴 SHORT'} | {_p4_tp_hit} hit\n"
+                        f"P&amp;L: <b>{_p4_pnl_str}</b> (10× leverage)\n"
+                        f"💰 Bybit Order: {bybit_id[:12]}...\n"
+                        f"━━━━━━━━━━━━━━━━\n"
+                        f"Real: {_p4_wins}W/{_p4_losses}L | WR: {_p4_wr:.1f}% | Gate 1: {_p4_total}/150"
+                        f"{_p4_gate1}"
+                    )
+                else:
+                    send_telegram_alert(
+                        f"❌ <b>REAL TRADE LOSS — {coin} {_p4_dir}</b>\n"
+                        f"{'🟢 LONG' if _p4_dir == 'LONG' else '🔴 SHORT'} | SL hit\n"
+                        f"P&amp;L: <b>{_p4_pnl_pct:.1f}%</b> (10× leverage)\n"
+                        f"💰 Bybit Order: {bybit_id[:12]}...\n"
+                        f"━━━━━━━━━━━━━━━━\n"
+                        f"Real: {_p4_wins}W/{_p4_losses}L | WR: {_p4_wr:.1f}% | Gate 1: {_p4_total}/150"
+                        f"{_p4_gate1}"
+                    )
+                _newly_resolved.append({
+                    "coin":        coin,
+                    "direction":   _p4_dir,
+                    "confidence":  row[COL_CONF].strip(),
+                    "pattern":     row[COL_PATTERN].strip(),
+                    "entry":       entry or 0,
+                    "exit_price":  _p4_exit,
+                    "outcome":     _p4_status,
+                    "tp_hit":      _p4_tp_hit or "",
+                    "pnl":         _p4_pnl_pct,
+                    "ts":          ts_str,
+                    "resolved_at": now_str,
+                })
+                continue   # P4 resolved — skip price-snapshot check_result()
 
         # ── Direction sanity check ─────────────────────────────
         # If SL or TP1 are on the wrong side of entry, Claude generated a

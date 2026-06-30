@@ -796,6 +796,70 @@ def save_memory(memory):
     except Exception as _bl_e:
         log(f"   ⚠ Auto-blocklist write failed (non-critical): {_bl_e}")
 
+    # ── P5: AVOID lessons → dynamic_blocklist.json hard-block ────────────────
+    # When a coin accumulates ≥3 [AVOID] lesson tags in coin_lessons[coin][dir],
+    # it gets hard-blocked in dynamic_blocklist.json — the file bot.py reads and
+    # merges into LONG/SHORT_COIN_BLOCKLIST at startup. This is a code-level block,
+    # not a soft prompt warning. No manual action required.
+    try:
+        _p5_avoid_longs:  list = []
+        _p5_avoid_shorts: list = []
+        for _p5c, _p5dirs in coin_lessons.items():
+            _p5_la = [l for l in _p5dirs.get("LONG",  []) if "[AVOID]" in l]
+            _p5_sa = [l for l in _p5dirs.get("SHORT", []) if "[AVOID]" in l]
+            if len(_p5_la) >= 3:
+                _p5_avoid_longs.append(_p5c)
+            if len(_p5_sa) >= 3:
+                _p5_avoid_shorts.append(_p5c)
+
+        if _p5_avoid_longs or _p5_avoid_shorts:
+            _dyn_path = os.path.join(SCRIPT_DIR, "dynamic_blocklist.json")
+            _dyn_existing: dict = {}
+            try:
+                if os.path.exists(_dyn_path):
+                    with open(_dyn_path, "r", encoding="utf-8") as _dynf_r:
+                        _dyn_existing = json.load(_dynf_r)
+            except Exception:
+                pass
+            _dyn_longs  = set(c.upper() for c in _dyn_existing.get("LONG",  []))
+            _dyn_shorts = set(c.upper() for c in _dyn_existing.get("SHORT", []))
+            _p5_new_longs  = [c for c in _p5_avoid_longs  if c.upper() not in _dyn_longs]
+            _p5_new_shorts = [c for c in _p5_avoid_shorts if c.upper() not in _dyn_shorts]
+            if _p5_new_longs or _p5_new_shorts:
+                _dyn_longs  |= set(c.upper() for c in _p5_avoid_longs)
+                _dyn_shorts |= set(c.upper() for c in _p5_avoid_shorts)
+                _dyn_out = {
+                    "LONG":       sorted(_dyn_longs),
+                    "SHORT":      sorted(_dyn_shorts),
+                    "updated_at": bkk_now_str(),
+                    "note":       "P5 — debrief AVOID lessons (≥3/dir) + user weekly YES replies",
+                }
+                with open(_dyn_path, "w", encoding="utf-8") as _dynf_w:
+                    json.dump(_dyn_out, _dynf_w, indent=2)
+                _p5_parts = []
+                if _p5_new_longs:
+                    _p5_parts.append(f"LONG [{', '.join(_p5_new_longs)}]")
+                    log(f"   🚫 [P5] HARD-BLOCKED LONG: {', '.join(_p5_new_longs)} → dynamic_blocklist.json")
+                if _p5_new_shorts:
+                    _p5_parts.append(f"SHORT [{', '.join(_p5_new_shorts)}]")
+                    log(f"   🚫 [P5] HARD-BLOCKED SHORT: {', '.join(_p5_new_shorts)} → dynamic_blocklist.json")
+                try:
+                    send_telegram(
+                        f"🚫 <b>P5 HARD-BLOCK AUTO-TRIGGERED</b>\n"
+                        f"  {' | '.join(_p5_parts)}\n"
+                        f"  ≥3 AVOID lessons logged → added to dynamic_blocklist.json\n"
+                        f"  Bot will NOT generate signals for these coins next run."
+                    )
+                except Exception:
+                    pass
+            else:
+                log(f"   ℹ [P5] AVOID check: {len(_p5_avoid_longs)} LONG / "
+                    f"{len(_p5_avoid_shorts)} SHORT candidates — already in dynamic_blocklist")
+        else:
+            log("   ℹ [P5] No coins with ≥3 AVOID lessons this run")
+    except Exception as _p5_e:
+        log(f"   ⚠ [P5] dynamic_blocklist write failed (non-critical): {_p5_e}")
+
     # ── Probation watchlist (v47.32) ─────────────────────────────────────────
     # Coins that expire from the auto-blocklist enter a 3-trade probation period.
     # Any WIN clears probation. All losses re-block the coin immediately.

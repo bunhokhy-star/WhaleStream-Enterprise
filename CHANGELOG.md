@@ -1,5 +1,31 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.47 — 2026-06-30 — Structural overhaul: MTF pre-screen, strategy template, signal cap, Bybit-first resolution, learning hard-block
+
+### `whale_stream_bot.py` (P1 — MTF pre-screen)
+- **`_mtf_prescreen(coin)`** — New helper that fetches 4H + 1H Bybit klines and returns a `(pass, reason)` verdict. Pass criteria: 4H and 1H EMAs agree in direction with the intended trade (LONG = both bullish, SHORT = both bearish), 4H RSI not extreme (LONG <75, SHORT >25). Called before the coin enters the signal selection loop.
+- **MTF gate in bot.py** — Candidates that fail MTF pre-screen are excluded from the signal list. The screen reason is logged and injected into the prompt context so Claude knows why certain coins were pre-filtered. Prevents taking signals that run against the higher-TF trend.
+
+### `whale_stream_strategist.py` (P2 — strategy template)
+- **`_build_strategy_context()`** — New function that loads `pattern_memory.json` + `dynamic_blocklist.json` and assembles a compact strategy-context block: top-3 winning patterns, current hard blocks, and recent AVOID lessons per coin. Injected into the Strategist's Claude prompt ahead of candidate evaluation.
+- **Signal rationale logging** — Strategist now logs selected pattern + confidence alongside each signal in `strategist_decisions.json`. Supports the P5 learning loop.
+
+### `whale_stream_bot.py` (P3 — signal cap)
+- **Daily signal cap: 6 trades max** — `_count_today_signals()` reads the trade sheet and returns today's signal count (BKK date). Bot skips the signal cycle if ≥6 trades already taken today. Cap prevents overtrading during high-noise sessions. Configurable via `MAX_DAILY_SIGNALS = 6`.
+
+### `whale_stream_tracker.py` (P4 — Bybit-first resolution)
+- **`_find_bybit_match(symbol, signal_ts, cpnl_records, window_h=120)`** — New helper. Searches fetched closed P&L records for the best match (same symbol, closed after signal, within 120h). Picks earliest close after signal entry.
+- **`_guess_tp_hit(exit_price, tp1–4, signal, is_loss)`** — New helper. Infers TP1/TP2/TP3/TP4/SL label from Bybit's actual `avgExitPrice` vs the TP levels (±0.5% tolerance, checks TP4 down to TP1).
+- **P4 resolution block** — Fetches `fetch_bybit_closed_pnl(max_pages=8)` once per tracker run. For every OPEN row with a Bybit order ID, attempts `_find_bybit_match()`. On match: writes WIN/LOSS status, actual exit price, P&L (`[B]` suffix = confirmed Bybit), TP_HIT, and sends Telegram alert — then `continue`s (skips price-snapshot logic). No match → falls back to existing `check_result()`.
+- **Partial-close TP2/TP3 pursuit block removed** — The 30-min live-price scan of already-WIN rows is gone. Bybit's `avgExitPrice` is the single source of truth for TP label; no scanning required.
+- **Bybit write-back block preserved** — Legacy rows (resolved before P4) still get their P&L upgraded from estimated → actual Bybit P&L by the existing write-back block.
+
+### `whale_stream_debrief.py` (P5 — learning hard-block)
+- **P5 AVOID counter** — After each debrief run, scans `coin_lessons[coin][direction]` for `[AVOID]`-prefixed entries. If a coin+direction accumulates ≥3 AVOID tags, it qualifies for automatic hard-block.
+- **`dynamic_blocklist.json` merge** — Qualifying coins are merged (not overwritten) into `dynamic_blocklist.json` — the same file `telegram_commands.py` writes for YES replies and `whale_stream_bot.py` reads at startup. Preserves existing user-confirmed weekly blocks.
+- **Telegram alert on new blocks** — `🚫 P5 HARD-BLOCK AUTO-TRIGGERED` notification sent only for newly added coins (already-blocked coins are silently skipped).
+- **Wrapped in try/except** — P5 failure never blocks the debrief run.
+
 ## v47.46 — 2026-06-30 — Signal intelligence upgrade: 4H candle indicators + Funding Rate veto + Fear & Greed macro context
 
 ### `whale_stream_bot.py`
