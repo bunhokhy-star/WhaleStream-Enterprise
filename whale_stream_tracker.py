@@ -1786,7 +1786,14 @@ def main():
                 _paper_dir = "LONG" if ("LONG" in signal.upper() or "🟢" in signal) else "SHORT"
                 print(f"   📄 {coin} {_paper_dir}: paper signal (no Bybit order ID) — would have {result[0]}, NOT resolving (expires at 72h)")
                 continue
-            res_status, exit_price, tp_hit, pnl = result
+            # ── Has Bybit Order ID but NOT in closed P&L — DO NOT resolve via price ──
+            # This means the entry limit order is still PENDING (unfilled) or the
+            # position is still OPEN on Bybit.  Price tracking would falsely claim a
+            # "REAL TRADE WIN" even though no position was ever opened or closed.
+            # Wait for Bybit closed P&L (P4 path) to confirm the actual outcome.
+            _pending_dir = "LONG" if ("LONG" in signal.upper() or "🟢" in signal) else "SHORT"
+            print(f"   ⏳ {coin} {_pending_dir}: Bybit order pending/open (not in closed P&L) — skip price tracking, wait for Bybit")
+            continue
             pnl_display = f"{pnl:+.2f}% [T]"
             updates.append((sheet_row, COL_STATUS      + 1, res_status))
             updates.append((sheet_row, COL_EXIT_PRICE  + 1, round(exit_price, 8)))

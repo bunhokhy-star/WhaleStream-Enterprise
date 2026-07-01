@@ -434,6 +434,8 @@ function updateHint(itemId, text) {
 
 function applyStatus(data) {
   if (!data || typeof data !== 'object') return;
+  // Reject stale data — only apply if date matches today (BKK) or no date field
+  if (data.date && data.date !== bkkDateStr()) return;
   Object.keys(data).forEach(function(key) {
     if (key === 'date' || !data[key]) return;
     if (key.indexOf('_details') !== -1) return;
