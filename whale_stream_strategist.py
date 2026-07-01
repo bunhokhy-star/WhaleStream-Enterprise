@@ -1056,7 +1056,7 @@ def _get_cycle_id():
 def main():
     print()
     print("╔══════════════════════════════════════════════════════╗")
-    print("║   🧠  WHALE-STREAM STRATEGIST v47.40                 ║")
+    print("║   🧠  WHALE-STREAM STRATEGIST v47.48                 ║")
     print("║   Signal Quality Council — APPROVE / VETO / REDUCE  ║")
     print("╚══════════════════════════════════════════════════════╝")
     print()
@@ -1412,6 +1412,10 @@ def main():
             "market_bias":     market_bias,
         }
         write_decisions(empty)
+        _mark_done("strategist", details={          # ← mark FIRST so checklist ticks even if Telegram fails
+            "approved": [],
+            "vetoed":   [v["coin"] for v in regime_vetoed],
+        })
         send_telegram(
             f"🧠 <b>STRATEGIST</b> — {bkk_str}\n"
             f"{bias_emoji2} <b>REGIME FILTER: {market_bias}</b>\n"
@@ -1419,10 +1423,6 @@ def main():
             f"  {len(regime_vetoed)} signal(s) vetoed — trading only WITH the trend.\n"
             f"  ⛔ Vetoed: {', '.join(v['coin'] + ' ' + v['direction'] for v in regime_vetoed)}"
         )
-        _mark_done("strategist", details={
-            "approved": [],
-            "vetoed":   [v["coin"] for v in regime_vetoed],
-        })
         return
 
     # ── Score drift state (v47.40 fix: was local to build_strategist_user_message, never visible here) ──
@@ -1512,13 +1512,13 @@ def main():
             "market_bias":     market_bias,
         }
         write_decisions(empty)
+        _mark_done("strategist", details={"approved": [], "vetoed": [v["coin"] for v in auto_vetoed]})  # ← mark FIRST
         send_telegram(
             f"🎯 <b>STRATEGIST SCORER</b> — {bkk_str}\n"
             f"  All signals scored <4/10 — none sent to Claude.\n"
             f"  {', '.join(v['coin'] + ' ' + v['direction'] for v in auto_vetoed)} auto-vetoed.\n"
             f"  Next cycle: Bot will generate fresh signals."
         )
-        _mark_done("strategist", details={"approved": [], "vetoed": [v["coin"] for v in auto_vetoed]})
         return
 
     # ── Funding Rate Pre-Veto ────────────────────────────────────
@@ -1592,13 +1592,13 @@ def main():
                 "market_bias":     market_bias,
             }
             write_decisions(_empty_fr)
+            _mark_done("strategist", details={"approved": [], "vetoed": [v["coin"] for v in _all_vetoes]})  # ← mark FIRST
             send_telegram(
                 f"💸 <b>STRATEGIST — FUNDING VETO</b> — {bkk_str}\n"
                 f"  All remaining signals vetoed: extreme funding rates detected.\n"
                 f"  {', '.join(v['coin'] + ' ' + v['direction'] for v in _funding_vetoed)}\n"
                 f"  Next cycle: Bot will generate fresh signals."
             )
-            _mark_done("strategist", details={"approved": [], "vetoed": [v["coin"] for v in _all_vetoes]})
             return
     else:
         print(f"   ✅ All {len(signals)} signal(s) passed funding rate check")
@@ -1636,13 +1636,13 @@ def main():
             "reduced_count":  0,
         }
         write_decisions(fallback)
+        _mark_done("strategist", details={"approved": [], "vetoed": _vetoed_coins, "error": "claude_failed"})  # ← mark FIRST
         send_telegram(
             f"⚠️ <b>STRATEGIST ALERT</b> — Claude API call FAILED\n"
             f"All {len(signals)} signal(s) VETOED for safety.\n"
             f"Error: {str(e)[:100]}\n"
             f"Next cycle will retry. Check Anthropic status if this persists."
         )
-        _mark_done("strategist", details={"approved": [], "vetoed": _vetoed_coins, "error": "claude_failed"})
         return
 
     # ── Parse decisions ──────────────────────────────────────────
@@ -1667,12 +1667,12 @@ def main():
             "reduced_count":   0,
         }
         write_decisions(_parse_fallback)
+        _mark_done("strategist", details={"approved": [], "vetoed": _vetoed_coins, "error": "parse_failed"})  # ← mark FIRST
         send_telegram(
             f"⚠️ <b>STRATEGIST ALERT</b> — Response parse FAILED\n"
             f"All {len(signals)} signal(s) VETOED for safety.\n"
             f"Check strategist_log.txt for raw response."
         )
-        _mark_done("strategist", details={"approved": [], "vetoed": _vetoed_coins, "error": "parse_failed"})
         return
 
     # ── Merge regime + scorer + funding pre-vetoes into decisions ───────
@@ -1725,15 +1725,24 @@ def main():
         f"signals reviewed: {len(signals)}")
 
     # ── Send Telegram ─────────────────────────────────────────────
-    send_telegram_summary(parsed, signals)
-
     _approved_coins = [d.get("coin","?") for d in parsed.get("decisions",[]) if d.get("decision") == "APPROVE"]
     _vetoed_coins   = [d.get("coin","?") for d in parsed.get("decisions",[]) if d.get("decision") == "VETO"]
-    _mark_done("strategist", details={"approved": _approved_coins, "vetoed": _vetoed_coins})
+    _mark_done("strategist", details={"approved": _approved_coins, "vetoed": _vetoed_coins})  # ← mark FIRST
+    send_telegram_summary(parsed, signals)
     print()
     print("✅ Strategist complete.")
     print()
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as _crash_e:
+        import traceback as _tb
+        _tb.print_exc()
+        # Safety net: always mark done so checklist doesn't show empty circle on crash
+        try:
+            _mark_done("strategist", details={"error": str(_crash_e)[:200], "crashed": True})
+        except Exception:
+            pass
+        sys.exit(1)

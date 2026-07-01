@@ -167,7 +167,7 @@ MAX_MARK_SKIPS = 3
 
 # Circuit breaker: after this many consecutive LOSSes, write PAUSED flag and halt
 PAUSED_FILE    = os.path.join(SCRIPT_DIR, "paused.flag")  # must match tracker's PAUSED_FILE
-CIRCUIT_LOSSES = 3
+CIRCUIT_LOSSES = 5   # raised from 3 — 3 was too sensitive in bear markets with open positions
 
 # Gate 4 breach sentinel — written on first entry, deleted on recovery.
 # Prevents the Telegram alert from firing every 4-hour run while breach persists.

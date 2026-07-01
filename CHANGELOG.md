@@ -1,5 +1,15 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.48 — 2026-07-01 — Fix Strategist checklist ghost + CB threshold raise
+
+### `whale_stream_strategist.py`
+- **Root cause fixed: checklist empty circle** — In all 6 exit paths of `main()`, `send_telegram()` / `send_telegram_summary()` was called BEFORE `_mark_done()`. Any Telegram failure (rate limit, network, API down) silently skipped `_mark_done`, leaving `strategist_HH` absent from `daily_status.json` and showing an empty circle in the Daily Checklist. Fixed by swapping order — `_mark_done()` now runs first in all 6 paths (regime-veto, scorer-autoveto, funding-veto, Claude API failed, parse failed, normal completion).
+- **Outer crash safety net** — `__main__` now wraps `main()` in `try/except`. On any uncaught exception, prints traceback, calls `_mark_done("strategist", {"crashed": True})`, and exits with code 1. Prevents checklist ghost even on hard crashes.
+- **Version bumped to v47.48**
+
+### `whale_stream_trader.py`
+- **`CIRCUIT_LOSSES` raised 3 → 5** — The CB threshold of 3 was too sensitive in bear markets where multiple open positions can resolve as LOSS in the same tracker run. Raising to 5 prevents premature auto-pause during normal bear-regime drawdowns. All log/Telegram messages use the `{CIRCUIT_LOSSES}` variable so they auto-update.
+
 ## v47.47 — 2026-06-30 — Structural overhaul: MTF pre-screen, strategy template, signal cap, Bybit-first resolution, learning hard-block
 
 ### `whale_stream_bot.py` (P1 — MTF pre-screen)
