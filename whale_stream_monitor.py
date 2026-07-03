@@ -680,10 +680,12 @@ def run_monitor():
                 state["positions"][symbol] = curr
 
     # ── Add newly opened positions to state + place TP orders ─
+    newly_tracked: set = set()
     for symbol, curr in current_positions.items():
         if symbol not in state["positions"]:
             log(f"   ➕ New position tracked: {symbol} {curr['side']} {curr['size']} @ {curr['avgPrice']:.6g}")
             state["positions"][symbol] = curr
+            newly_tracked.add(symbol)
             # Auto-place 4×25% reduce-only TP limit orders.
             # Trader.py tries this immediately after the entry order but always
             # fails ("current position is zero") because the limit hasn't filled
@@ -692,6 +694,23 @@ def run_monitor():
                 _place_tps_for_new_position(symbol, curr["side"], curr["size"])
             except Exception as _tpe:
                 log(f"   ⚠ TP auto-placement error for {symbol}: {_tpe}")
+
+    # ── Re-verify TPs for positions already in state ───────────────
+    # Runs every monitor cycle. Catches TP orders that were cancelled
+    # after initial placement (by user, by Bybit, or any other reason),
+    # and re-places them. This also handles positions that existed before
+    # the monitor was running (they were never tracked as "new").
+    for symbol, curr in current_positions.items():
+        if symbol in newly_tracked:
+            continue   # just handled above — _place_tps_for_new_position already ran
+        has_tps = _has_reduce_only_orders(symbol)
+        if has_tps is False:   # explicitly False (API succeeded but no reduce-only orders)
+            coin = symbol.replace("USDT", "").replace("PERP", "").upper()
+            log(f"   ⚠ {coin}: no reduce-only TP orders detected — re-placing TPs...")
+            try:
+                _place_tps_for_new_position(symbol, curr["side"], curr["size"])
+            except Exception as _tpe:
+                log(f"   ⚠ TP re-placement error for {symbol}: {_tpe}")
 
     save_state(state)
 
