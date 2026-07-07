@@ -1371,7 +1371,7 @@ def main():
         pass
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🤖  WHALE-STREAM TRADER v47.40 — BYBIT DEMO    ║")
+    print("║   🤖  WHALE-STREAM TRADER v47.49 — BYBIT DEMO    ║")
     print(f"║   💰  ${TRADE_MARGIN_USDT} margin × {LEVERAGE}x = ${TRADE_MARGIN_USDT*LEVERAGE} per trade        ║")
     print("╚══════════════════════════════════════════════════╝")
     print()
@@ -1966,28 +1966,28 @@ def main():
             print()
             continue
         if _strat_key in _strat_reduces:
-            # Half-size trade — use local multiplier so other coins are unaffected
-            _coin_size_mult = round(_size_mult * 0.5, 3)
-        else:
-            _coin_size_mult = _size_mult
-        # Minimum size floor — Gate 4 (0.40×) + REDUCE_SIZE (×0.5) = 0.20×, which can
-        # fall below Bybit's minimum order value. Floor at 0.25× to stay safely above.
-        # Apply clamp BEFORE logging so printed values reflect actual order size.
+            # v47.49: REDUCE → VETO. We trade full size or not at all — partial sizes
+            # create inconsistent position values ($99/$170 instead of $200) which
+            # confuses tracking and reduces Gate 1 P&L clarity. If the Strategist is
+            # not confident enough for full size, the right answer is to skip.
+            _reduce_msg = (f"⛔ STRATEGIST REDUCE→VETO: {coin} {_strat_key[1]} — "
+                           f"not confident enough for full ${TRADE_MARGIN_USDT*LEVERAGE}, skipping")
+            log(_reduce_msg)
+            print(f"   {_reduce_msg}")
+            print()
+            continue
+        _coin_size_mult = _size_mult   # drawdown-based scale only (1.0× when no drawdown)
         _MIN_SIZE_MULT = 0.25
         if _coin_size_mult < _MIN_SIZE_MULT:
             log(f"SIZE FLOOR: {coin} — {_coin_size_mult:.3f}x below minimum {_MIN_SIZE_MULT}x floor → clamped to {_MIN_SIZE_MULT}x")
             print(f"   ⚠️ SIZE FLOOR: {coin} multiplier {_coin_size_mult:.2f}x → clamped to {_MIN_SIZE_MULT}x (Bybit min order protection)")
             _coin_size_mult = _MIN_SIZE_MULT
-        if _strat_key in _strat_reduces:
-            print(f"   ⚠️ STRATEGIST REDUCE: {coin} {_strat_key[1]} — trading at {_coin_size_mult:.2f}x size (was {_size_mult:.2f}x)")
-            log(f"STRATEGIST REDUCE: {coin} {_strat_key[1]} — size {_size_mult:.2f}x → {_coin_size_mult:.2f}x")
         # ── end Strategist check ───────────────────────────────────────────────
 
-        # ── MTF freshness penalty (v47.21) ─────────────────────────────────
-        # If BTC 4H bias has shifted counter to this signal direction since
-        # the bot ran at :00, apply an additional 0.5× size penalty.
-        # Does NOT hard-skip — Strategist already handled that layer.
-        # Fails silently if API was unreachable (_fresh_btc_bias == "NEUTRAL").
+        # ── MTF freshness info (v47.49) ──────────────────────────────────────
+        # Log BTC 4H alignment as info only — no longer reduces position size.
+        # v47.49: size penalty removed; trade at full size or skip (no half-sizes).
+        # Strategist already handles trend-vs-counter-trend at the veto layer.
         if _fresh_btc_bias != "NEUTRAL":
             _sig_dir = "LONG" if side == "Buy" else "SHORT"
             _counter_trend = (
@@ -1995,34 +1995,24 @@ def main():
                 (_sig_dir == "SHORT" and _fresh_btc_bias == "BULL")
             )
             if _counter_trend:
-                _new_mult = round(_coin_size_mult * 0.5, 3)
                 _mtf_msg = (
-                    f"🔭 MTF SHIFT: {coin} {_sig_dir} is counter to fresh BTC 4H "
-                    f"({_fresh_btc_bias} {_fresh_btc_pct:+.1f}%) — "
-                    f"size reduced {_coin_size_mult:.2f}x → {_new_mult:.2f}x"
+                    f"🔭 MTF NOTE: {coin} {_sig_dir} is counter to BTC 4H "
+                    f"({_fresh_btc_bias} {_fresh_btc_pct:+.1f}%) — trading full size anyway"
                 )
                 log(_mtf_msg)
                 print(f"   {_mtf_msg}")
-                _coin_size_mult = max(_new_mult, 0.25)  # v47.40: floor at 0.25 after MTF penalty
             else:
-                print(f"   ✅ MTF aligned: {coin} {'LONG' if side=='Buy' else 'SHORT'} "
-                      f"with BTC 4H {_fresh_btc_bias} — no penalty")
-        # ── end MTF freshness penalty ────────────────────────────────────────
+                print(f"   ✅ MTF aligned: {coin} {_sig_dir} "
+                      f"with BTC 4H {_fresh_btc_bias}")
+        # ── end MTF info ─────────────────────────────────────────────────────
 
-        # ── Apply score-based size multiplier (v47.24) ───────────────────────
-        # Applied last — after Strategist REDUCE and MTF penalty — so all three
-        # size adjustments stack multiplicatively without interfering with each other.
-        if _score_size_mult < 1.0:
-            _pre_score_mult = _coin_size_mult
-            _coin_size_mult = round(_coin_size_mult * _score_size_mult, 3)
-            # Re-check floor after additional reduction
-            if _coin_size_mult < _MIN_SIZE_MULT:
-                log(f"SIZE FLOOR (score): {coin} — {_coin_size_mult:.3f}x → clamped to {_MIN_SIZE_MULT}x")
-                _coin_size_mult = _MIN_SIZE_MULT
-            log(f"SCORE SIZING: {coin} {_dir_key} — {_pre_score_mult:.2f}x × {_score_size_mult:.0%} "
-                f"({_score_tier}) → {_coin_size_mult:.2f}x")
-            print(f"   📐 Final size after score: {_coin_size_mult:.2f}x (score {_score_tier})")
-        # ── end score-based size ─────────────────────────────────────────────
+        # ── Score tier: info only (v47.49) ───────────────────────────────────
+        # Score gate already blocked signals below floor (score < SCORE_MIN_TRADER).
+        # Signals that passed the gate deserve full position size — no partial sizing.
+        # v47.49: score-based size reduction removed for consistency ($200 always).
+        if _score_tier:
+            print(f"   📐 Score tier: {_score_tier} ({_sig_score:.0f}/10) — full size")
+        # ── end score tier ────────────────────────────────────────────────────
 
         # ── Win-streak ELITE size boost (v47.39A) ────────────────────────────
         # When coin has ≥3 consecutive wins AND signal is ELITE (score≥9),
