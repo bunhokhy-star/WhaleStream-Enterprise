@@ -1,5 +1,15 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.50 — 2026-07-14 — Gate 2 honest reporting: balance truth + P&L data quality note
+
+### `analyze_shorts.py`
+- **Gate 2 balance truth section** — Added `── BALANCE TRUTH ──` block that reads `bybit_balance.json` and shows `start_balance → current` with % gain. This is the reliable single source of truth for P&L (Bybit actual balance).
+- **P&L data quality note** — Counts WIN trades with missing P&L in Google Sheets (cause: partial-close system records only the first 25% close at TP1; remaining 75% P&L is not linked back until fully resolved). Shows `X/Y WIN trades have no P&L in Sheets` warning when data is incomplete.
+- **Improved Gate 2 verdict** — If >40% of LONG trades have missing P&L data AND balance is positive, Gate 2 now shows `⚠️ SHEETS METRIC UNRELIABLE` with the balance truth, rather than a false `❌ FAIL` that contradicts the actual Bybit balance. If Sheets P&L data is sufficient and positive, shows `✅ PASS` as before.
+- **Rationale** — Gate 2 was showing `-334% P&L / profit factor 0.00x` while real balance was `$500 → $594 (+18.8%)`. The discrepancy was caused by WIN trades not writing P&L back to Sheets (partial close tracking gap). The gate now reports both Sheets P&L (with caveat) and balance truth, so the system stays honest.
+
+## v47.49 — 2026-07-08 — Trader: always full size ($200); REDUCE→VETO, remove MTF+score size penalties
+
 ## v47.48 — 2026-07-01 — Fix Strategist checklist ghost + CB threshold raise
 
 ### `whale_stream_strategist.py`

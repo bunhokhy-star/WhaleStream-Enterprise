@@ -1,8 +1,8 @@
 @echo off
 cd /d C:\Users\MAX\WhaleStream
 git add -A
-git commit -m "v47.49 — trader: always full size ($200); REDUCE→VETO, remove MTF+score size penalties"
+git commit -m "v47.50 — analyze_shorts: Gate 2 balance truth + data quality note (honest P&L gate)"
 git push
 echo.
-echo Done — v47.49 pushed to GitHub.
+echo Done — v47.50 pushed to GitHub.
 pause

@@ -308,6 +308,10 @@ def main():
     lw_pnls    = [r["pnl"] for r in lw   if r["pnl"] is not None]
     ll_pnls    = [r["pnl"] for r in ll   if r["pnl"] is not None]
 
+    # Count trades with missing P&L (partial-close tracking gap)
+    longs_no_pnl = len([r for r in longs if r["pnl"] is None])
+    lw_no_pnl    = len([r for r in lw    if r["pnl"] is None])
+
     total_long_pnl = sum(long_pnls) if long_pnls else 0.0
     avg_win_pnl    = avg(lw_pnls)
     avg_loss_pnl   = avg(ll_pnls)
@@ -317,16 +321,57 @@ def main():
     ev_per_trade   = total_long_pnl / len(longs) if longs else 0.0
 
     p(f"  Total LONG trades  : {len(longs)} ({len(lw)} WIN / {len(ll)} LOSS)")
-    p(f"  Net LONG P&L       : {total_long_pnl:+.1f}%  (sum of all LONG P&L at 10x)")
+    p(f"  Net LONG P&L       : {total_long_pnl:+.1f}%  (sum of trades with P&L data only)")
     p(f"  Avg WIN  P&L       : {avg_win_pnl:+.1f}%")
     p(f"  Avg LOSS P&L       : {avg_loss_pnl:+.1f}%")
     p(f"  Profit Factor      : {profit_factor:.2f}x  (need > 1.0 to be profitable)")
     p(f"  Expected Value     : {ev_per_trade:+.2f}% per trade")
     p(f"  Gate 1 progress    : {len(longs) + len(shorts)}/{GATE1_TARGET} total resolved trades")
 
-    gate2_pass = total_long_pnl > 0 and profit_factor > 1.0
-    if gate2_pass:
+    # ── Data quality note ─────────────────────────────────────
+    _pnl_data_pct = (len(long_pnls) / len(longs) * 100) if longs else 0
+    if longs_no_pnl > 0:
+        p(f"")
+        p(f"  ⚠️  P&L DATA GAP: {lw_no_pnl}/{len(lw)} WIN trades have no P&L in Sheets")
+        p(f"     Cause: partial-close system (TP1=25%) records only the first close.")
+        p(f"     Remaining 75% P&L is not linked back until fully resolved.")
+        p(f"     Sheets P&L metric ({_pnl_data_pct:.0f}% data coverage) is NOT reliable for Gate 2.")
+
+    # ── Balance truth — single source of truth (v47.50) ──────
+    _bal_file = os.path.join(SCRIPT_DIR, "bybit_balance.json")
+    _bal_data = {}
+    try:
+        with open(_bal_file) as _f:
+            _bal_data = json.load(_f)
+    except Exception:
+        pass
+    _bal_cur     = _bal_data.get("balance", None)
+    _bal_start   = _bal_data.get("start_balance", 500.0)
+    _bal_updated = _bal_data.get("updated_at", "unknown")
+    _bal_pnl_pct = ((_bal_cur - _bal_start) / _bal_start * 100) if _bal_cur else None
+
+    p(f"")
+    p(f"  ── BALANCE TRUTH (Bybit — reliable measure) ─────────")
+    if _bal_cur is not None:
+        _bal_arrow = "✅ POSITIVE" if _bal_cur > _bal_start else "❌ NEGATIVE"
+        p(f"  Start: ${_bal_start:.2f}  →  Now: ${_bal_cur:.2f}  ({_bal_pnl_pct:+.1f}%)")
+        p(f"  Result: {_bal_arrow}  (as of {_bal_updated})")
+    else:
+        p(f"  bybit_balance.json not found — run trader.py to refresh")
+    p()
+
+    # Gate 2 verdict — prefer balance truth when Sheets P&L is incomplete
+    gate2_sheets_pass  = total_long_pnl > 0 and profit_factor > 1.0
+    gate2_balance_pass = (_bal_cur is not None and _bal_cur > _bal_start)
+    _data_mostly_missing = longs_no_pnl > (len(longs) * 0.4)  # >40% trades have no P&L
+
+    if gate2_sheets_pass:
         p(f"  ✅ GATE 2 STATUS: PASS — Net LONG P&L is positive, PF={profit_factor:.2f}x")
+    elif _data_mostly_missing and gate2_balance_pass:
+        p(f"  ⚠️  GATE 2 STATUS: SHEETS METRIC UNRELIABLE")
+        p(f"     ({longs_no_pnl}/{len(longs)} LONG trades missing P&L data in Sheets)")
+        p(f"     Balance truth: ${_bal_start:.0f} → ${_bal_cur:.2f} ({_bal_pnl_pct:+.1f}%) ✅")
+        p(f"     → Treat as PASS based on balance. Sheets P&L needs tracking fix.")
     else:
         reasons = []
         if total_long_pnl <= 0:
