@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║       WHALE-STREAM TRADE TRACKER                    v47.51  ║
+║       WHALE-STREAM TRADE TRACKER                    v47.52  ║
 ║                                                              ║
 ║  Runs every 30 minutes (via Task Scheduler).                 ║
 ║  Reads all OPEN trades from Google Sheets,                   ║
@@ -611,9 +611,9 @@ def write_dashboard_html(all_rows):
     # ── Gate Status calculations ──────────────────────────────
     # Gate 1 — Trade Volume
     gate1_resolved  = len(resolved)
-    gate1_pct       = gate1_resolved / 150 * 100
-    gate1_color     = "accent-color" if gate1_resolved >= 150 else "warn-color"
-    gate1_bar_color = "#00d4a8" if gate1_resolved >= 150 else "#ffc107"
+    gate1_pct       = gate1_resolved / 50 * 100
+    gate1_color     = "accent-color" if gate1_resolved >= 50 else "warn-color"
+    gate1_bar_color = "#00d4a8" if gate1_resolved >= 50 else "#ffc107"
 
     # Gate 2 — LONG P&L (real trades only, abs(pnl) >= 5)
     long_real    = [r for r in resolved

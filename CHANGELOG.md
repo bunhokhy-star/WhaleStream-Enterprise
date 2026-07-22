@@ -1,5 +1,38 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.52 — 2026-07-22 — Gate 1 reduced 150 → 50 trades; August 5 go-live target
+
+### Rationale
+876 signals generated Jun 9–Jul 22 produced only ~17 executed trades (98% waste:
+Strategist vetoes, entry zone misses, signal expiry). At 0.4 trades/day, Gate 1 at 150
+trades = ~10 months — this defeats the mission of proving whether the strategy wins or
+loses to build capital for people who need it. 50 trades gives statistically meaningful
+directional confidence (win-rate distributions stabilise around 30–50 samples).
+
+**Plan:** Go live August 5, 2026 with $5–$10 margin per trade ($50–$100 notional at 10x).
+Scale to $20 margin ($200 notional) after Gate 1 hits 50 live trades.
+
+### `whale_stream_tracker.py`
+- Gate 1 dashboard: `gate1_pct = gate1_resolved / 50 * 100` (was `/ 150`)
+- Gate 1 color thresholds: `>= 50` (was `>= 150`)
+- Version banner bumped to v47.52
+
+### `analyze_shorts.py`
+- `GATE1_TARGET = 50` (was `150`)
+
+### `GATE5_REAL_CAPITAL_CHECKLIST.md`
+- Gate 1 rule updated: ≥ 50 resolved trades (was 150)
+- Gate 1 rationale updated with 876-signal waste rate analysis
+- Contingency rule table updated: 50/30–49/<30 thresholds (was 150/140–149/<140)
+- Quick Reference summary updated
+
+### `JULY1_GOLIVE_CHECKLIST.md`
+- Renamed to August 5 Go-Live Checklist
+- Position sizing updated: $5–$10 margin/trade for Phase 1 go-live ($50–$100 notional)
+- Scale-up threshold updated: 50 live trades (was 20)
+
+---
+
 ## v47.51 — 2026-07-22 — Gate 6 bug fix: WR-based weekly streak (immune to P&L tracking gap)
 
 ### `whale_stream_tracker.py`

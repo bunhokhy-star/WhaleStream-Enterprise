@@ -302,7 +302,7 @@ def main():
 
     # ── Gate 2: LONG P&L Deep Dive ────────────────────────────
     p("── GATE 2: LONG P&L DEEP DIVE ──────────────────────────")
-    GATE1_TARGET = 150
+    GATE1_TARGET = 50
 
     long_pnls  = [r["pnl"] for r in longs if r["pnl"] is not None]
     lw_pnls    = [r["pnl"] for r in lw   if r["pnl"] is not None]

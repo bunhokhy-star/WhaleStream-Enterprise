@@ -1,5 +1,6 @@
-# WHALE-STREAM — July 1 Go-Live Checklist
+# WHALE-STREAM — August 5 Go-Live Checklist
 ### Demo → Live switch ops runbook
+> **Updated 2026-07-22:** Go-live date revised to **August 5, 2026**. Position size for Phase 1: $5–$10 margin per trade ($50–$100 notional at 10x). Scale to $20 margin ($200 notional) after 50 live resolved trades with Gate 1 passed.
 
 ---
 
@@ -76,7 +77,7 @@ to match your actual funded live balance. Search for `BYBIT_START_BALANCE = 500.
 Example: if you deposit $300, set `BYBIT_START_BALANCE = 300.0` in BOTH files.
 This value anchors Gate 4 drawdown protection — wrong value = Gate 4 fires too early or too late.
 
-Recommended for go-live: **$10–$25 per trade** (you can scale up after Gate 1).
+Recommended for go-live: **$5–$10 margin per trade** ($50–$100 notional at 10x). Scale to **$20 margin** ($200 notional) after Gate 1 (50 live trades) is met.
 
 ### Step 6 — Delete paused.flag
 ```
@@ -130,7 +131,7 @@ You should see real orders there.
 2. **Check Telegram morning briefing** every day at 07:00 BKK
 3. **Don't manually interfere** with positions — trust the Tracker/SL system
 4. **Review analyze_shorts.py** after the first Sunday auto-run
-5. **Scale up** only after 20 resolved live trades with WR ≥ 55%
+5. **Scale up** only after 50 resolved live trades (Gate 1) with WR ≥ 55%
 
 ---
 

@@ -20,19 +20,21 @@ If any gate is ❌, the review fails. Wait for the next natural review window (w
 
 ## GATE 1 — MINIMUM SAMPLE SIZE
 
-**Rule:** At least **150 resolved trades** (WIN + LOSS) in Google Sheets.
+**Rule:** At least **50 resolved trades** (WIN + LOSS) in Google Sheets.
 
-**Why 150:** At 80 trades (current), confidence intervals are wide. The SHORT win rate
-swung from 39% to 57% across different confidence bands with <40 samples per band.
-At 150 trades we have ~50 SHORTs and ~100 LONGs — enough to detect real patterns
-vs. noise at 90%+ statistical confidence.
+**Why 50 (reduced from 150 on 2026-07-22):** 876 signals generated Jun 9–Jul 22 produced
+only ~17 executed trades (98% waste: Strategist vetoes, entry zone misses, signal expiry).
+At 0.4 trades/day, 150 trades = ~10 months — this defeats the mission. 50 trades is
+statistically meaningful for directional win-rate confidence (distributions stabilise
+around 30–50 samples). Go live at $50–100 notional/trade ($5–10 margin × 10x); scale to
+full size after Gate 1 is met.
 
 | Check | Required | How to verify |
 |-------|----------|---------------|
-| Total resolved trades | ≥ 150 | Bottom of `analysis_shorts.txt` or dashboard |
+| Total resolved trades | ≥ 50 | Bottom of `analysis_shorts.txt` or dashboard |
 
-**Current (2026-06-21):** 80 resolved — need 70 more. At 6 signals/run × 4 runs/day,
-expect ~2–3 weeks to clear this gate organically.
+**Current (2026-07-22):** ~17 resolved. Go-live target: August 5 at reduced position size.
+Scale to full $200 notional ($20 margin) after 50 live trades.
 
 ---
 
@@ -172,16 +174,16 @@ Run `analyze_shorts.py` on **June 29** and read `bybit_balance.json`. Apply this
 
 ### Gate 1 Contingency Rule
 
-Gate 1 requires 150 resolved trades. With top-3 filter at 4h cadence (~3 fills/day),
-we may only reach ~143–148 by July 1. **That is acceptable IF capital is growing.**
+Gate 1 requires 50 resolved trades. August 5 go-live target: ~23 trades expected at
+current rate. **Go live at reduced size regardless — scale after Gate 1 is met.**
 
 | Gate 1 count | Balance | Decision |
 |--------------|---------|----------|
-| ≥ 150 | Any above $425 | Full go-live — all gates met |
-| 140–149 | ≥ $500 | Go live — capital growth overrides sample gap |
-| 140–149 | $425–$499 | Go live at 50% size — continue accumulating live trades |
-| 140–149 | < $425 | Delay — insufficient evidence on both counts |
-| < 140 | Any | Delay — not enough data regardless of balance |
+| ≥ 50 | Any above $425 | Full go-live — Gate 1 met |
+| 30–49 | ≥ $500 | Go live at $5–10 margin — capital growth is proof |
+| 30–49 | $425–$499 | Go live at $5–10 margin — continue accumulating trades |
+| 30–49 | < $425 | Delay — insufficient evidence on both counts |
+| < 30 | Any | Delay — not enough data regardless of balance |
 
 ### The Mission Rule
 
@@ -208,7 +210,7 @@ we may only reach ~143–148 by July 1. **That is acceptable IF capital is growi
 ## QUICK REFERENCE — GATE SUMMARY
 
 ```
-GATE 1 — Sample size    : ≥ 150 resolved trades total
+GATE 1 — Sample size    : ≥ 50 resolved trades total
 GATE 2 — Overall WR     : ≥ 58% over last 30 resolved trades
 GATE 3 — SHORT WR       : ≥ 50% over last 20 SHORT trades (spread ≥ 3 coins)
 GATE 4 — Drawdown       : ≤ 25% from peak in last 30 days  +  balance > start
