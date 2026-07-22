@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║       WHALE-STREAM TRADE TRACKER                    v47.40  ║
+║       WHALE-STREAM TRADE TRACKER                    v47.51  ║
 ║                                                              ║
 ║  Runs every 30 minutes (via Task Scheduler).                 ║
 ║  Reads all OPEN trades from Google Sheets,                   ║
