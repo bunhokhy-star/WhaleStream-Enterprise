@@ -639,10 +639,12 @@ def write_dashboard_html(all_rows):
     true_short_wr    = (true_short_wins / true_short_total * 100) if true_short_total > 0 else 0.0
     gate3_color      = "win-color" if true_short_wr >= 50 else "loss-color"
 
-    # Gate 6 — 3 consecutive profitable calendar weeks (computed inline)
-    _week_pnl = defaultdict(float)
+    # Gate 6 — 3 consecutive profitable calendar weeks
+    # WR-based: wins > losses per week (immune to partial-close P&L tracking gap)
+    _week_wins   = defaultdict(int)
+    _week_losses = defaultdict(int)
     for r in resolved:
-        if not _is_real_pnl(r.get("pnl")):
+        if r.get("status") not in ("WIN", "LOSS"):
             continue
         _ra = r.get("resolved_at", "")
         if not _ra:
@@ -651,21 +653,23 @@ def write_dashboard_html(all_rows):
             _dt = datetime.strptime(_ra[:10], "%Y-%m-%d").replace(tzinfo=BKK)
             _iso = _dt.isocalendar()
             _wk  = f"{_iso[0]}-W{_iso[1]:02d}"   # ISO week — avoids %W year-boundary bugs
-            _week_pnl[_wk] += r["pnl"]
+            if r["status"] == "WIN":
+                _week_wins[_wk] += 1
+            else:
+                _week_losses[_wk] += 1
         except Exception:
             pass
-    _sorted_weeks = sorted(_week_pnl.keys())
+    _sorted_weeks = sorted(set(_week_wins) | set(_week_losses))
     _last3 = _sorted_weeks[-3:] if len(_sorted_weeks) >= 3 else []
-    g6_ok  = len(_last3) == 3 and all(_week_pnl[w] > 0 for w in _last3)
+    g6_ok  = len(_last3) == 3 and all(_week_wins[w] > _week_losses[w] for w in _last3)
     # Count current trailing streak (most recent consecutive profitable weeks)
     _consec = 0
     for _wk in reversed(_sorted_weeks):
-        if _week_pnl[_wk] > 0:
+        _ww = _week_wins[_wk]; _wl = _week_losses[_wk]
+        if _ww > _wl:
             _consec += 1
-        elif _week_pnl[_wk] == 0:
-            continue  # empty week — don't break streak (bot may have been down)
         else:
-            break
+            break  # empty weeks absent from _sorted_weeks — no need to skip
     g6_str = f"{'✅' if g6_ok else '❌'} {_consec}/3 wks"
 
     # Max drawdown
@@ -1402,6 +1406,22 @@ def weekly_summary(all_rows):
             "date":    res_date,
         })
 
+    # resolved_all: ALL WIN/LOSS trades with a resolved_at date — for WR-based Gate 6
+    # (independent of P&L data quality — immune to partial-close tracking gap)
+    resolved_all = []
+    for r in all_rows:
+        if r.get("status") not in ("WIN", "LOSS"):
+            continue
+        _rat = r.get("resolved_at", "") if isinstance(r, dict) else ""
+        if not _rat:
+            continue
+        try:
+            _rd  = datetime.strptime(_rat[:16], "%Y-%m-%d %H:%M").date()
+            _iso = _rd.isocalendar()
+            resolved_all.append({"status": r["status"], "year": _iso[0], "week": _iso[1]})
+        except ValueError:
+            continue
+
     if not resolved:
         send_telegram_alert("📊 <b>WEEKLY P&L DIGEST</b>\nNo resolved trades with real P&L found.")
         return
@@ -1425,16 +1445,17 @@ def weekly_summary(all_rows):
         weeks_to_show.append((yr, wk, week_start, offset == 0))
 
     # Count consecutive profitable weeks ending on (and including) current week
-    # Walk backwards from the current week
+    # WR-based: wins > losses per week (immune to partial-close P&L tracking gap)
     consecutive_profitable = 0
     check_year, check_week = cur_year, cur_week
     for _ in range(52):  # safety cap
-        week_trades = [t for t in resolved if t["year"] == check_year and t["week"] == check_week]
+        week_all = [t for t in resolved_all if t["year"] == check_year and t["week"] == check_week]
         check_year, check_week = _prev_week(check_year, check_week, 1)  # advance before possible continue
-        if not week_trades:
+        if not week_all:
             continue  # skip empty weeks — don't break streak (drawdown protection weeks)
-        net = sum(t["pnl"] for t in week_trades)
-        if net > 0:
+        wins_n   = sum(1 for t in week_all if t["status"] == "WIN")
+        losses_n = sum(1 for t in week_all if t["status"] == "LOSS")
+        if wins_n > losses_n:
             consecutive_profitable += 1
         else:
             break

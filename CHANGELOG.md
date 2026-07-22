@@ -1,5 +1,13 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.51 — 2026-07-22 — Gate 6 bug fix: WR-based weekly streak (immune to P&L tracking gap)
+
+### `whale_stream_tracker.py`
+- **Root cause fixed — Gate 6 always showed 0/3**: `_is_real_pnl()` requires `abs(pnl) >= 1.5`. WIN trades have no P&L in Google Sheets (partial-close tracking gap — only 25% close at TP1 is recorded). So WIN trades failed `_is_real_pnl()` → were excluded from weekly P&L sums → every week appeared unprofitable → Gate 6 = 0/3 permanently.
+- **Dashboard Gate 6 (line ~642)**: Replaced P&L-sum approach with WR-count approach. Now builds `_week_wins` / `_week_losses` dicts for all WIN/LOSS trades (no `_is_real_pnl` filter). A week is profitable if `wins > losses`. No dependency on P&L data.
+- **Weekly digest Gate 6 (~line 1427)**: Added `resolved_all` list (all WIN/LOSS trades regardless of P&L data). Replaced `net = sum(pnl)` consecutive check with `wins_n > losses_n` per week using `resolved_all`. Existing `resolved` (P&L-filtered) kept intact for the P&L display table.
+- **Rationale**: Balance grew $500 → $594 (+18.8%). Week of Jul 1–7 had +$209 gain. Gate 6 was calling all weeks unprofitable because it only saw LOSS P&L values. The fix makes Gate 6 honestly reflect real trading performance.
+
 ## v47.50 — 2026-07-14 — Gate 2 honest reporting: balance truth + P&L data quality note
 
 ### `analyze_shorts.py`

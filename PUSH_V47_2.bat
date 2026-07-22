@@ -1,8 +1,8 @@
 @echo off
 cd /d C:\Users\MAX\WhaleStream
 git add -A
-git commit -m "v47.50 — analyze_shorts: Gate 2 balance truth + data quality note (honest P&L gate)"
+git commit -m "v47.51 — tracker: Gate 6 WR-based weekly streak (fixes 0/3 bug caused by P&L tracking gap)"
 git push
 echo.
-echo Done — v47.50 pushed to GitHub.
+echo Done — v47.51 pushed to GitHub.
 pause
