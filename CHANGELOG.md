@@ -1,5 +1,42 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.60 — 2026-07-23 — Bybit native coin scan; server crontab; daily profit scaling; debrief fix
+
+### Overview
+4 major upgrades for August 5 go-live readiness:
+1. **Bybit native coin scan** — CoinGecko fully removed; single `/v5/market/tickers?category=linear` call returns all 200 USDT perpetuals with price, 24h%, turnover, high/low, funding rate, OI. Zero third-party dependency, zero rate limits.
+2. **Server crontab** — All scheduling moved off Windows PC onto server 152.42.224.87. System now runs 24/7 regardless of PC state. Run `SERVER_CRON_SETUP.bat` once to install.
+3. **Daily $50 profit target + dynamic sizing** — Trader now tracks daily start balance. Once daily P&L ≥ $50, size scales to 1.5× ($30 margin/$300 pos); ≥ $100 scales to 2.5× ($50 margin/$500 pos). Telegram alert fires once when scaling kicks in.
+4. **Intelligence loop fix** — `debrief.py` stdout=None crash guard added (root cause of pattern_memory.json never being written on Windows with CREATE_NO_WINDOW). Also adds `local_config_server` fallback import for server compatibility.
+
+### `whale_stream_bot.py`
+- `fetch_top_300_coins()` replaced with pure Bybit linear endpoint (1 API call, 0 CoinGecko). Returns 200 coins sorted by 24h turnover.
+- Intelligence layer added: reads `pattern_memory.json` and labels each coin HOT (≥3 consecutive wins), COLD (≥2 consecutive losses), or WR% from history. Labels appear in `_perf_label` field and in Claude's coin table.
+- `format_market_data()` updated: shows "Bybit" instead of "$0" for market cap; `_perf_label` appended to symbol column; Vol/MCap replaced with "—" (market cap not available from Bybit).
+- Claude prompt SHORT RESTRICTION updated: "Market Cap < $150M" → "24h Bybit Turnover < $20M USDT"
+- ANTI-FOMO and EXHAUSTION FILTER: removed Vol/MCap ratio clause (no longer available)
+- LIQUIDITY ENGINE replaced: turnover tiers ($500M+/Tier 1, $100–500M/Tier 2, $20–100M/Tier 3, <$20M/SKIP)
+- Header banner updated: v47.60, "Bybit linear" instead of "CoinGecko"
+- All v47.46/v47.47 version strings bumped to v47.60
+
+### `whale_stream_trader.py`
+- `DAILY_PROFIT_TARGET = 50.0` constant added
+- Daily start balance recorded to `daily_status.json["today_start_balance"]` on first run each day
+- Daily P&L computed each cycle; size multiplier scaled: ≥$50 → 1.5×, ≥$100 → 2.5×
+- Profit scaling stacks on top of drawdown multiplier; hard cap at 2.5× ($500 position max)
+- One-shot Telegram alert fires when daily target is hit (sentinel flag prevents repeat spam)
+
+### `whale_stream_debrief.py`
+- **CRITICAL FIX**: stdout=None guard added at top (before any import) — prevents crash when subprocess launched with CREATE_NO_WINDOW on Windows
+- `local_config_server` fallback import added — debrief can now find API key on server where `local_config.py` doesn't exist (only `local_config_server.py`)
+- Both fixes mean `pattern_memory.json` will now actually be written after every resolved trade
+
+### New files
+- `SERVER_CRON_SETUP.sh` — crontab script for server; installs all 8 agents with correct UTC times
+- `SERVER_CRON_SETUP.bat` — Windows batch: SCP script to server and run it (1-click setup)
+
+---
+
 ## v47.52 — 2026-07-22 — Gate 1 reduced 150 → 50 trades; August 5 go-live target
 
 ### Rationale

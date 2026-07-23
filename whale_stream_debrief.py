@@ -47,7 +47,14 @@ import requests
 import anthropic
 from datetime import datetime, timezone, timedelta
 
-# ── Force UTF-8 ────────────────────────────────────────────────
+# ── Force UTF-8 / guard against None stdout (CREATE_NO_WINDOW) ─
+# On Windows with CREATE_NO_WINDOW, sys.stdout may be None.
+# Any print() call will crash before any data is written unless
+# we redirect to devnull first.
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w", encoding="utf-8")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w", encoding="utf-8")
 if hasattr(sys.stdout, "buffer"):
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
 if hasattr(sys.stderr, "buffer"):
@@ -66,9 +73,13 @@ for mod, pkg in {"anthropic": "anthropic"}.items():
 try:
     from local_config import ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 except ImportError:
-    ANTHROPIC_API_KEY  = os.getenv("ANTHROPIC_API_KEY", "")
-    TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-    TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID", "")
+    try:
+        # Server uses local_config_server.py instead of local_config.py
+        from local_config_server import ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+    except ImportError:
+        ANTHROPIC_API_KEY  = os.getenv("ANTHROPIC_API_KEY", "")
+        TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+        TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID", "")
 
 DEBRIEF_MODEL = "claude-haiku-4-5-20251001"   # fast + cheap for short analysis
 

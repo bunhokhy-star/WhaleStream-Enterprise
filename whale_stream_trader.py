@@ -115,8 +115,9 @@ try:
     from local_config import TRADE_MARGIN_USDT        # noqa — set in local_config.py to override
 except ImportError:
     TRADE_MARGIN_USDT = 20  # default: $20/trade; set TRADE_MARGIN_USDT in local_config.py for live
-LEVERAGE          = 10      # 10x leverage → $200 position per trade
-MAX_OPEN_TRADES   = 6       # max 6 simultaneous positions (3 long + 3 short)
+LEVERAGE            = 10    # 10x leverage → $200 position per trade
+MAX_OPEN_TRADES     = 6     # max 6 simultaneous positions (3 long + 3 short)
+DAILY_PROFIT_TARGET = 50.0  # USD — scale up size once daily P&L hits this
 
 # Google Sheets (same as whale_stream_bot.py)
 GOOGLE_SHEET_ID         = "1R21mkduSpbki2HmlNJMHM95-LkGS0q-AKHE1HVIfMmI"
@@ -1738,6 +1739,60 @@ def main():
                     _g4f.write(f"Gate 4 breach entered at {bkk_g4}\n"
                                f"Balance: ${_bb_balance:.2f}  Drawdown: {_drawdown_pct:.1f}%\n"
                                f"Deleted automatically when balance recovers above $425.\n")
+            except Exception:
+                pass
+
+    # ── Daily profit target scaling (v47.60) ────────────────────────────────
+    # Track today's start balance → scale up position size when daily P&L hits $50.
+    #   Normal:          $20 margin × 10x = $200 position (1.0×)
+    #   Daily P&L ≥ $50: $30 margin × 10x = $300 position (1.5×)
+    #   Daily P&L ≥$100: $50 margin × 10x = $500 position (2.5×)  [hard cap]
+    # The multiplier stacks on top of drawdown scaling (but caps at 2.5×).
+    _daily_pnl      = 0.0
+    _daily_pnl_mult = 1.0
+    try:
+        _ds_path  = os.path.join(SCRIPT_DIR, "daily_status.json")
+        _ds       = {}
+        if os.path.exists(_ds_path):
+            with open(_ds_path, "r", encoding="utf-8") as _dsf:
+                _ds = json.load(_dsf)
+        _today_str = datetime.now(BKK).date().isoformat()
+        if _ds.get("today_start_balance_date") != _today_str:
+            # First trader run of the day — snapshot start balance
+            _ds["today_start_balance"]      = round(total_balance, 4)
+            _ds["today_start_balance_date"] = _today_str
+            with open(_ds_path, "w", encoding="utf-8") as _dsf:
+                json.dump(_ds, _dsf, indent=2)
+            print(f"   📌 Daily start balance recorded: ${total_balance:.2f} ({_today_str})")
+        else:
+            _start_bal = float(_ds.get("today_start_balance", total_balance))
+            _daily_pnl = total_balance - _start_bal
+            _target2x  = DAILY_PROFIT_TARGET * 2
+            if _daily_pnl >= _target2x:
+                _daily_pnl_mult = 2.5
+                print(f"   🚀 PROFIT SCALE ×2.5: daily P&L ${_daily_pnl:+.2f} ≥ ${_target2x:.0f} → $50 margin ($500 pos)")
+            elif _daily_pnl >= DAILY_PROFIT_TARGET:
+                _daily_pnl_mult = 1.5
+                print(f"   📈 PROFIT SCALE ×1.5: daily P&L ${_daily_pnl:+.2f} ≥ ${DAILY_PROFIT_TARGET:.0f} → $30 margin ($300 pos)")
+            else:
+                print(f"   📊 Daily P&L ${_daily_pnl:+.2f} (target ${DAILY_PROFIT_TARGET:.0f}/day) — normal $200 sizing")
+    except Exception as _dp_e:
+        print(f"   ⚠ Daily profit scaling skipped ({_dp_e})")
+    # Combine drawdown mult × daily profit mult; cap total at 2.5× (≤ $500 position)
+    _size_mult = min(_size_mult * _daily_pnl_mult, 2.5)
+    if _daily_pnl_mult > 1.0:
+        log(f"DAILY PROFIT MULT {_daily_pnl_mult:.1f}× applied — daily P&L ${_daily_pnl:+.2f} → combined size mult {_size_mult:.2f}×")
+        # One-shot Telegram alert when scaling kicks in for first time each day
+        _scale_sentinel = os.path.join(SCRIPT_DIR, f"daily_scale_{_today_str}.flag")
+        if not os.path.exists(_scale_sentinel):
+            send_telegram_alert(
+                f"📈 *Daily profit target hit!*\n"
+                f"  P&L today: ${_daily_pnl:+.2f} (target ${DAILY_PROFIT_TARGET:.0f})\n"
+                f"  Position size scaled to {_size_mult:.1f}× (${TRADE_MARGIN_USDT*_size_mult:.0f} margin)"
+            )
+            try:
+                with open(_scale_sentinel, "w") as _sf:
+                    _sf.write(f"Profit scale alert sent at {datetime.now(BKK).isoformat()}\n")
             except Exception:
                 pass
 

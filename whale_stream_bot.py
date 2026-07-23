@@ -1,9 +1,9 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v47.46   —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v47.60   —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
-║  1. Fetches top 200 coins from CoinGecko (free, no key)     ║
+║  1. Fetches top 200 USDT perpetuals from Bybit (1 API call) ║
 ║  2. Sends all data to Claude with your WHALE-STREAM prompt  ║
 ║  3. Posts the analysis result to your Telegram group         ║
 ║  4. Logs top 3 LONG + top 3 SHORT signals to Google Sheets  ║
@@ -180,7 +180,7 @@ LONG_COIN_BLOCKLIST = {
     "WLD",   # 0W/2L — 0% WR, counter-trend coin ← added v47.5 (2026-06-28)
     "XLM",   # 0W/2L — 0% LONG WR (also SHORT-blocked) ← added v47.41
     "ENA",    # 0W/1L — SHORT already blocked; LONG also losing ← added v47.43
-    "PENDLE", # 1W/3L — 25% WR (206-trade analysis Jun 2026) ← added v47.46
+    "PENDLE", # 1W/3L — 25% WR (206-trade analysis Jun 2026) ← added v47.60
 }
 # ── Auto-blocklist from debrief data (v47.28) ──────────────────────────────────
 # coin_blocklist_auto.json written by debrief save_memory() whenever a coin
@@ -353,7 +353,7 @@ GOOGLE_CREDENTIALS_FILE = "google_credentials.json"
 #   claude-opus-4-6             (smartest, most expensive)
 CLAUDE_MODEL = "claude-sonnet-4-6"
 
-# ── 4H Technical Indicator helpers (v47.46) ────────────────────────────────
+# ── 4H Technical Indicator helpers (v47.60) ────────────────────────────────
 BYBIT_MARKET_URL = "https://api.bybit.com"  # always production for market data
 
 def _compute_rsi(closes, period=14):
@@ -442,7 +442,7 @@ def _get_coin_indicators(coins_subset, limit=50):
 
 def _mtf_prescreen(all_coins, n_long=15, n_short=15):
     """
-    Priority 1 — MTF Pre-Screener (v47.47).
+    Priority 1 — MTF Pre-Screener (v47.60).
     Replaces dumb 24h momentum ranking with real technical confluence scoring.
 
     Fetches Daily + 4H candles from Bybit for every coin in all_coins.
@@ -629,7 +629,7 @@ except ImportError:
     MISSION_PROMPT = ""
     def print_mission_banner(): pass
 
-WHALE_STREAM_PROMPT = """WHALE-STREAM v47.46 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
+WHALE_STREAM_PROMPT = """WHALE-STREAM v47.60 — INSTITUTIONAL MARKET REGIME & TOURNAMENT ENGINE
 ROLE:
 You are an Institutional Multi-Agent Trading Committee composed of:
 • Market Regime Analyst • Smart Money Concepts Specialist • Quantitative Momentum Analyst • Liquidity & Stop-Hunt Analyst • Wyckoff Structure Analyst • Relative Strength Analyst • Breakout Probability Engine • Reversal Probability Engine • Continuation Probability Engine • Risk Management Committee
@@ -665,7 +665,7 @@ The trend is not your enemy — fighting it is.
 
 LIVE REGIME: injected in MARKET REGIME section of user message below.
 ════════════════════════════════════════════════════════════
-ANALYSIS ENGINE (v47.47)
+ANALYSIS ENGINE (v47.60)
 Each call provides ONE self-contained batch of pre-screened coins (≤30 coins).
 Coins in this batch were already filtered by MTF confluence scoring — Daily+4H trend alignment,
 RSI zone, and volume expansion. Only the HIGHEST-QUALITY setup candidates are shown.
@@ -710,13 +710,13 @@ MANDATORY ANALYSIS FACTORS
 16. Continuation Probability 17. Reversal Probability     18. Momentum Expansion
 19. Volatility Quality       20. Institutional Participation Estimate
 ════════════════════════════════════════════════════════════
-SHORT RESTRICTION: STRICTLY PROHIBITED if Market Cap < $150,000,000
+SHORT RESTRICTION: STRICTLY PROHIBITED if 24h Bybit Turnover < $20,000,000 USDT (small-cap safety filter — market cap N/A from Bybit; turnover proxy used)
 ════════════════════════════════════════════════════════════
 ANTI-FOMO FILTER
-Reject LONG if: 24h Gain > 15% AND Price within 5% of 24h High AND Volume/Mcap > 0.40
+Reject LONG if: 24h Gain > 15% AND Price within 5% of 24h High (chasing extended move — wait for pullback or skip)
 ════════════════════════════════════════════════════════════
 EXHAUSTION FILTER
-Reject LONG if: 24h Gain > 20% AND 7d Gain > 40% AND Volume/Mcap > 0.50
+Reject LONG if: 24h Gain > 20% AND 7d Gain > 40% (double extension — high reversal risk, skip regardless of setup)
 ════════════════════════════════════════════════════════════
 SHORT OVERSOLD REJECT (v46.2 — Critical for short win rate)
 Coins that already DUMPED are not valid shorts — they are SQUEEZE SETUPS waiting to reverse.
@@ -725,8 +725,11 @@ Reject SHORT if: 24h Change < −12% (coin in free-fall — chasing the move, re
 Exception: May short IF confirmed distribution with declining volume on dead-cat bounce (controlled bleed pattern ONLY)
 This is one of the most common causes of short losses — DO NOT short broken coins, short FRESH breakdowns only.
 ════════════════════════════════════════════════════════════
-LIQUIDITY QUALITY ENGINE
-Volume/Mcap: 0.05–0.30 = Healthy | 0.30–0.60 = Speculative | Above 0.60 = Unstable (−15 points)
+LIQUIDITY QUALITY ENGINE (v47.60 — Bybit 24h Turnover tiers; market cap N/A)
+24h Turnover > $500M = Tier 1 institutional (blue chip — full confidence)
+24h Turnover $100M–$500M = Tier 2 liquid mid-cap (normal confidence)
+24h Turnover $20M–$100M = Tier 3 lower liquidity (−5 points; require tighter SL)
+24h Turnover < $20M = SKIP — insufficient liquidity for safe entry/exit
 ════════════════════════════════════════════════════════════
 FUNDING RATE ENGINE (column: FundRate)
 Funding Rate = 8h perpetual contract rate (from Bybit).
@@ -907,7 +910,7 @@ TECH FILTER (4H): When 4H TECHNICAL INDICATORS block is present, apply these rul
   - NEVER pick a LONG from a coin marked OVERBOUGHT unless conf≥97%
   - NEVER pick a SHORT from a coin marked OVERSOLD unless conf≥97%
 ════════════════════════════════════════════════════════════
-⚡ SIGNAL SETUP TEMPLATE — ONE TRADE, ONE EDGE (v47.47 — P2)
+⚡ SIGNAL SETUP TEMPLATE — ONE TRADE, ONE EDGE (v47.60 — P2)
 These coins were pre-screened for MTF confluence. Validate each against this template.
 A signal is ONLY valid if it matches ALL conditions. If it does not, output STAY OUT for that slot.
 
@@ -2302,79 +2305,97 @@ def fetch_mtf_block(all_coins, n=20):
 
 def fetch_top_300_coins():
     """
-    Hybrid data fetch (v45.1 — top 200 coins, down from 300):
-      • Bybit  → real-time price, 24h%, volume, high/low  (1 fast call, no rate limit)
-      • CoinGecko → market cap ranking + 7d%              (needed for $150M short filter)
-    Bybit data overwrites CoinGecko where available.
-    Top 200 coins cover 99%+ of all tradeable volume — the same signals fire.
-    Saves ~33% of Claude input tokens per run (≈$4-6/month at current cadence).
+    v47.60: Pure Bybit linear universe — ONE API call, zero third-party dependency.
+    GET /v5/market/tickers?category=linear returns all USDT perpetuals with:
+      • Real-time price, 24h%, 24h high/low, 24h turnover (USD volume)
+      • Funding rate + open interest — same call, no separate fetch needed
+    Sorted by 24h turnover (USD) — effective tradeable ranking; top 200 covers 99%+ of volume.
+    Removes CoinGecko dependency entirely: no rate-limit risk, no delisted-coin surprises,
+    and the coin universe exactly matches what Bybit lets us trade.
     """
-    # ── Step A: Bybit real-time snapshot (single call) ──
-    print("⚡ Fetching real-time data from Bybit...")
-    bybit    = fetch_bybit_realtime()
-    funding  = fetch_bybit_funding_rates()
-
-    # ── Step B: CoinGecko for market cap + 7d% + ranking ──
-    print("📊 Fetching market cap rankings from CoinGecko...")
+    print("⚡ Fetching Bybit linear universe (all USDT perpetuals — single call)...")
+    url = "https://api.bybit.com/v5/market/tickers"
     all_coins = []
-    for page in range(1, 3):  # 2 pages × 100 = 200 coins (was 3 pages = 300)
-        url = "https://api.coingecko.com/api/v3/coins/markets"
-        params = {
-            "vs_currency": "usd",
-            "order": "market_cap_desc",
-            "per_page": 100,
-            "page": page,
-            "price_change_percentage": "24h,7d",
-            "sparkline": "false"
-        }
-        try:
-            resp = _SESSION.get(url, params=params, timeout=30)
-            resp.raise_for_status()
-            coins = resp.json()
-            all_coins.extend(coins)
-            print(f"   ✓ CoinGecko page {page}: {len(coins)} coins (total: {len(all_coins)})")
-        except Exception as e:
-            print(f"   ✗ CoinGecko page {page} failed: {e}")
-        if page < 2:          # sleep only between pages, not after the last one
-            time.sleep(2)
+    try:
+        resp = _SESSION.get(url, params={"category": "linear"}, timeout=20)
+        resp.raise_for_status()
+        tickers = resp.json().get("result", {}).get("list", [])
+        for t in tickers:
+            sym = t.get("symbol", "")
+            # Only USDT perpetuals; skip leveraged tokens (3L/3S)
+            if not (sym.endswith("USDT")
+                    and not sym.endswith("USDT3L")
+                    and not sym.endswith("USDT3S")):
+                continue
+            coin = sym[:-4]   # "BTCUSDT" → "BTC"
+            try:
+                price    = float(t.get("lastPrice",          0) or 0)
+                ch_24h   = float(t.get("price24hPcnt",       0) or 0) * 100  # 0.05 → 5%
+                turnover = float(t.get("turnover24h",         0) or 0)        # USD volume
+                high     = float(t.get("highPrice24h",        0) or 0)
+                low      = float(t.get("lowPrice24h",         0) or 0)
+                fr       = float(t.get("fundingRate",         0) or 0)
+                oi       = float(t.get("openInterestValue",   0) or 0)
+            except (ValueError, TypeError):
+                continue
+            if price <= 0:
+                continue
+            all_coins.append({
+                # Field names kept identical to CoinGecko format so all downstream code works
+                "symbol":                                coin,
+                "name":                                  coin,   # Bybit has no coin name; ticker used
+                "current_price":                         price,
+                "price_change_percentage_24h":           ch_24h,
+                "price_change_percentage_7d_in_currency": 0.0,  # not in Bybit tickers
+                "market_cap":                            0,      # not available; SHORT filter uses volume
+                "total_volume":                          turnover,
+                "high_24h":                              high,
+                "low_24h":                               low,
+                "funding_rate":                          fr,
+                "open_interest":                         oi,
+            })
+        # Rank by 24h turnover (USD) — same effective ordering as market-cap rank for major coins
+        all_coins.sort(key=lambda c: c["total_volume"], reverse=True)
+        all_coins = all_coins[:200]   # top 200 by volume = same as before
+        print(f"   ✓ Bybit linear: {len(all_coins)} USDT perpetuals loaded "
+              f"(ranked by 24h turnover — 1 API call, 0 CoinGecko)")
+    except Exception as e:
+        print(f"   ✗ Bybit linear fetch failed ({e})")
+        # If Bybit is down we can't trade anyway — return empty so bot exits cleanly
 
-    # ── Step C: Merge — Bybit overwrites price/volume fields + funding ──
-    enriched = 0
-    for coin in all_coins:
-        symbol = (coin.get("symbol") or "").upper()
-        if symbol in bybit:
-            b = bybit[symbol]
-            if b["price"] > 0:
-                coin["current_price"]                      = b["price"]
-                coin["price_change_percentage_24h"]        = b["ch_24h"]
-                coin["total_volume"]                       = b["volume_usd"]
-                coin["high_24h"]                           = b["high"]
-                coin["low_24h"]                            = b["low"]
-                enriched += 1
-        # Attach funding rate + open interest from perp market
-        if symbol in funding:
-            coin["funding_rate"] = funding[symbol]["funding_rate"]
-            coin["open_interest"] = funding[symbol]["oi_usd"]
-        else:
-            coin["funding_rate"]  = None
-            coin["open_interest"] = None
-
-    print(f"   ✓ {enriched}/{len(all_coins)} coins enriched with Bybit real-time data")
-
-    # ── Step D: Filter to Bybit-listed coins with valid price only (v46.2 fix) ──────
-    # Coins not on Bybit spot (or with price=0) cannot be traded or tracked — remove them.
-    # v46.1 BUG: checked `symbol in bybit` but coins with price=0 passed the filter.
-    # v46.2 FIX: require price > 0 — ensures coin has a real, tradeable market on Bybit.
-    # This eliminates signals for ZEC, XMR, DASH, TAO, DEXE, AKT (when delisted)
-    # that accumulate as EXPIRED and pollute win-rate data.
-    before = len(all_coins)
-    all_coins = [
-        c for c in all_coins
-        if bybit.get((c.get("symbol") or "").upper(), {}).get("price", 0) > 0
-    ]
-    removed = before - len(all_coins)
-    if removed:
-        print(f"   ✓ Bybit filter (price>0): {len(all_coins)} tradeable coins kept ({removed} coins removed)")
+    # ── Enrich with coin_stats from pattern_memory.json (intelligence layer) ──
+    # Labels HOT coins (consecutive_wins ≥ 3) and AVOID coins (consecutive_losses ≥ 2)
+    # so Claude sees performance history alongside price data.
+    try:
+        _pm_path = os.path.join(SCRIPT_DIR, "pattern_memory.json")
+        if os.path.exists(_pm_path):
+            with open(_pm_path, "r", encoding="utf-8") as _pmf:
+                _pm = json.load(_pmf)
+            _coin_stats = _pm.get("coin_stats", {})
+            _hot_count  = 0
+            _cold_count = 0
+            for _c in all_coins:
+                _cs = _coin_stats.get(_c["symbol"], {})
+                if not _cs:
+                    continue
+                _cw = _cs.get("consecutive_wins", 0)
+                _cl = _cs.get("consecutive_losses", 0)
+                _total = _cs.get("wins", 0) + _cs.get("losses", 0)
+                _wr = _cs.get("wins", 0) / _total if _total > 0 else 0.0
+                if _cw >= 3:
+                    _c["_perf_label"] = f"🔥HOT({_cw}W)"
+                    _hot_count += 1
+                elif _cl >= 2:
+                    _c["_perf_label"] = f"❄️COLD({_cl}L)"
+                    _cold_count += 1
+                elif _total >= 5:
+                    _c["_perf_label"] = f"WR{_wr*100:.0f}%({_total})"
+                else:
+                    _c["_perf_label"] = ""
+            if _hot_count or _cold_count:
+                print(f"   ✓ Pattern memory: {_hot_count} HOT coins, {_cold_count} COLD coins labeled")
+    except Exception as _pm_e:
+        pass  # non-critical — pattern_memory may not exist yet
 
     return all_coins
 
@@ -2395,12 +2416,12 @@ def format_market_data(all_coins):
 
         lines = []
         lines.append(f"\n{'═'*95}")
-        lines.append(f"  BATCH {batch_num}  —  Rank #{start+1} to #{end}  (Top {end} by Market Cap)")
+        lines.append(f"  BATCH {batch_num}  —  Rank #{start+1} to #{end}  (Top {end} by 24h Bybit Turnover)")
         lines.append(f"{'═'*95}")
         lines.append(
-            f"{'Rank':<5} {'Symbol':<10} {'Name':<20} "
+            f"{'Rank':<5} {'Symbol+Perf':<18} {'Name':<12} "
             f"{'Price (USD)':>14} {'24h%':>8} {'7d%':>8} "
-            f"{'Market Cap':>18} {'24h Volume':>18} {'Vol/MCap':>10} "
+            f"{'Bybit Univ':>18} {'24h Volume':>18} {'Vol/MCap':>10} "
             f"{'24h High':>14} {'24h Low':>13} {'FundRate':>10} {'OI (USD)':>16}"
         )
         lines.append("─" * 160)
@@ -2416,9 +2437,18 @@ def format_market_data(all_coins):
             volume      = coin.get("total_volume") or 0
             high_24h    = coin.get("high_24h") or price
             low_24h     = coin.get("low_24h") or price
-            vol_mcap    = (volume / mcap) if mcap > 0 else 0
             fr          = coin.get("funding_rate")
             oi          = coin.get("open_interest")
+            perf_label  = coin.get("_perf_label", "")
+
+            # v47.60: market_cap not available from Bybit — show "—" and skip Vol/MCap ratio
+            mcap_str    = f"${mcap:>17,.0f}" if mcap > 0 else f"{'Bybit':>18}"
+            vol_mcap    = (volume / mcap) if mcap > 0 else None
+            volmcap_str = f"{vol_mcap:>9.3f}" if vol_mcap is not None else f"{'—':>9}"
+
+            # Append performance label from pattern_memory (HOT/COLD/WR%)
+            perf_suffix = f" [{perf_label}]" if perf_label else ""
+            display_sym = (symbol + perf_suffix)[:18]
 
             # Format price nicely depending on magnitude
             if price >= 1000:
@@ -2434,9 +2464,9 @@ def format_market_data(all_coins):
             oi_str = f"${oi:>14,.0f}"    if oi is not None else "             N/A"
 
             lines.append(
-                f"{rank:<5} {symbol:<10} {name:<20} "
+                f"{rank:<5} {display_sym:<18} {name:<12} "
                 f"{price_str} {ch_24h:>+7.2f}% {ch_7d:>+7.2f}% "
-                f"${mcap:>17,.0f} ${volume:>17,.0f} {vol_mcap:>9.3f} "
+                f"{mcap_str} ${volume:>17,.0f} {volmcap_str} "
                 f"${high_24h:>13,.4f} ${low_24h:>12,.4f} {fr_str} {oi_str}"
             )
 
@@ -2682,7 +2712,7 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     shorts = data.get("shorts", [])
 
     lines = []
-    lines.append(f"🐳 WHALE-STREAM v47.46")
+    lines.append(f"🐳 WHALE-STREAM v47.60")
     lines.append(f"📅 {ts}")
 
     # ── Market regime summary ─────────────────────────────────
@@ -3261,7 +3291,7 @@ def main():
 
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🐳  WHALE-STREAM v47.47  — AUTO BOT STARTING    ║")
+    print("║   🐳  WHALE-STREAM v47.60  — AUTO BOT STARTING    ║")
     print("╚══════════════════════════════════════════════════╝")
     # Check conservative flag early so we can show it in the startup banner
     _short_conservative_early = os.path.exists(os.path.join(SCRIPT_DIR, "short_conservative.flag"))
@@ -3336,7 +3366,7 @@ def main():
         _mark_done("sigbot", details={"longs": [], "shorts": [], "error": "fetch_failed"})
         return
 
-    # ── Step 2b: MTF Pre-Screen — score ALL coins before Claude sees anything (v47.47 — P1) ──
+    # ── Step 2b: MTF Pre-Screen — score ALL coins before Claude sees anything (v47.60 — P1) ──
     # Replaces dumb 24h momentum ranking. Fetches Daily+4H candles for all 200 coins,
     # scores by confluence (trend alignment + RSI zone + volume), selects top 30 candidates.
     # Claude receives ONLY these 30 coins — highest quality, not largest 24h move.
@@ -3386,7 +3416,7 @@ def main():
     if _indicator_text and batches:
         batches[0] = batches[0] + f"\n\n{_indicator_text}\n"
 
-    # ── Write market_context.json for cross-agent data sharing (v47.47) ──────
+    # ── Write market_context.json for cross-agent data sharing (v47.60) ──────
     try:
         _mc_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "market_context.json")
         _mc_data = {
@@ -3405,7 +3435,7 @@ def main():
         print(f"   ⚠ market_context.json write skipped: {_mc_err}")
 
     # ── Step 4: Analyze with Claude — Single call (P1: ≤30 pre-screened coins) ──
-    # v47.47: MTF pre-screen reduces from 200→30 coins. All fit in one batch.
+    # v47.60: MTF pre-screen reduces from 200→30 coins. All fit in one batch.
     # One Claude call instead of two → 50% lower API cost + higher signal quality.
     _STANDALONE = (
         "\n════════════════════════════════════════════════════════════\n"
@@ -3430,7 +3460,7 @@ def main():
         _mark_done("sigbot", details={"longs": [], "shorts": [], "error": "claude_failed"})
         return
 
-    # No batch 2: MTF pre-screen reduces to ≤30 coins — all fit in one Claude call (v47.47 P1)
+    # No batch 2: MTF pre-screen reduces to ≤30 coins — all fit in one Claude call (v47.60 P1)
     analysis2 = ""
 
     # Bangkok time used across all outputs
