@@ -68,6 +68,14 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # Log rotation: truncate logs over 10MB (keeps last 500 lines)
 0 3 * * * for f in /opt/whalestream/logs/*.log; do [ -f "$f" ] && [ $(wc -c < "$f") -gt 10485760 ] && tail -500 "$f" > "$f.tmp" && mv "$f.tmp" "$f"; done
 
+# ── Status Server (Daily Checklist) ───────────────────────────
+# Watchdog: restart status_server.py if it dies (runs every 5 min)
+# This serves daily_status.json to the Daily Checklist on port 8765
+*/5 * * * * pgrep -f "status_server.py" > /dev/null || (cd /opt/whalestream && nohup /usr/bin/python3 status_server.py >> /opt/whalestream/logs/status_server.log 2>&1 &)
+
+# Auto-start on server reboot
+@reboot cd /opt/whalestream && nohup /usr/bin/python3 status_server.py >> /opt/whalestream/logs/status_server.log 2>&1 &
+
 CRON
 
 echo ""
