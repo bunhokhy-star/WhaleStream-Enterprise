@@ -184,7 +184,8 @@ ORDER_CONTEXT_FILE   = os.path.join(SCRIPT_DIR, "order_context.json")
 # Coins with poor historical LONG win rate — skip LONG signals for these
 LONG_COIN_AVOID_LIST = ["COMP", "HYPE", "ZRO", "QNT", "WIF", "WLD", "XLM", "ENA", "PENDLE"]   # must match LONG_COIN_BLOCKLIST in bot.py
 
-# ── Dynamic blocklist from weekly scorecard YES replies (v47.44) ───────────────
+# ── Dynamic blocklist from weekly scorecard YES replies + P5B auto-blocks (v47.44 / v47.61) ──
+# Read once — populate both LONG and SHORT avoid lists from the same file.
 try:
     _dbl_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dynamic_blocklist.json")
     if os.path.exists(_dbl_path):
@@ -197,6 +198,24 @@ try:
             print(f"   🚫 DYNAMIC BLOCK (LONG): {', '.join(_dbl_longs)} loaded from dynamic_blocklist.json")
 except Exception:
     pass  # fail silently — static list still applies
+
+# ── Dynamic SHORT blocklist — P5B auto-blocks + manual blocks (v47.61) ───────────────────────
+# whale_stream_debrief.py P5B writes SHORT entries when ≥2 consecutive direction losses.
+# telegram_commands.py apply_block() writes them when user replies YES to a recommendation.
+# trader.py must enforce these or blocked SHORT coins will still have orders placed.
+SHORT_COIN_AVOID_LIST: list = []
+try:
+    _dbl_short_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dynamic_blocklist.json")
+    if os.path.exists(_dbl_short_path):
+        with open(_dbl_short_path, "r", encoding="utf-8") as _dbl_sf:
+            _dbl_short_data = json.load(_dbl_sf)
+        _dbl_shorts = [c.upper() for c in _dbl_short_data.get("SHORT", [])
+                       if c.upper() not in SHORT_COIN_AVOID_LIST]
+        SHORT_COIN_AVOID_LIST = SHORT_COIN_AVOID_LIST + _dbl_shorts
+        if _dbl_shorts:
+            print(f"   🚫 DYNAMIC BLOCK (SHORT): {', '.join(_dbl_shorts)} loaded from dynamic_blocklist.json")
+except Exception:
+    pass  # fail silently — no dynamic SHORT blocks applied (static SHORT REPAIR MODE still active)
 
 def log(msg):
     """Write to console and trader_log.txt with timestamp."""
@@ -1971,6 +1990,17 @@ def main():
             print()
             continue
         # ── end LONG_COIN_AVOID_LIST ───────────────────────────────────────────
+
+        # ── SHORT_COIN_AVOID_LIST — skip SHORT signals for dynamic-blocked coins (v47.61) ──
+        # Enforces P5B consecutive-loss auto-blocks and user manual blocks for the SHORT side.
+        # Without this check, blocked SHORT coins in dynamic_blocklist.json are still traded.
+        if side == "Sell" and coin.upper() in SHORT_COIN_AVOID_LIST:
+            _short_avoid_msg = f"⏭ Skipping {coin} SHORT — on dynamic SHORT blocklist (P5B/manual)"
+            log(_short_avoid_msg)
+            print(f"   {_short_avoid_msg}")
+            print()
+            continue
+        # ── end SHORT_COIN_AVOID_LIST ──────────────────────────────────────────
 
         # ── Signal Score Gate (v47.21) — skip if scorer quality below floor ───
         # Strategist writes per-signal score to decisions JSON after scoring.

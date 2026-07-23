@@ -840,10 +840,13 @@ def save_memory(memory):
                 _dyn_longs  |= set(c.upper() for c in _p5_avoid_longs)
                 _dyn_shorts |= set(c.upper() for c in _p5_avoid_shorts)
                 _dyn_out = {
-                    "LONG":       sorted(_dyn_longs),
-                    "SHORT":      sorted(_dyn_shorts),
-                    "updated_at": bkk_now_str(),
-                    "note":       "P5 — debrief AVOID lessons (≥3/dir) + user weekly YES replies",
+                    "LONG":             sorted(_dyn_longs),
+                    "SHORT":            sorted(_dyn_shorts),
+                    "_manual_LONG":     sorted(set(c.upper() for c in _dyn_existing.get("_manual_LONG",  []))),
+                    "_manual_SHORT":    sorted(set(c.upper() for c in _dyn_existing.get("_manual_SHORT", []))),
+                    "_p5b_auto_blocks": _dyn_existing.get("_p5b_auto_blocks", []),
+                    "updated_at":       bkk_now_str(),
+                    "note":             "P5 — debrief AVOID lessons (≥3/dir) + user weekly YES replies",
                 }
                 with open(_dyn_path, "w", encoding="utf-8") as _dynf_w:
                     json.dump(_dyn_out, _dynf_w, indent=2)

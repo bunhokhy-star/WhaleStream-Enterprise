@@ -1,5 +1,30 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.61 — 2026-07-23 — P5B audit fixes
+
+### Bug fixes
+
+**CRITICAL — `whale_stream_debrief.py` — P5 block stripped `_manual_LONG`/`_manual_SHORT`/`_p5b_auto_blocks` on write**
+When the P5 block (AVOID-lessons hard-block) triggered with new coins to add, it wrote
+`dynamic_blocklist.json` with only `LONG`, `SHORT`, `updated_at`, `note` — dropping
+`_manual_LONG`, `_manual_SHORT`, and `_p5b_auto_blocks`. P5B runs immediately after P5
+in the same `save_memory()` call and re-reads the file; with those keys absent it saw
+empty manual-block sets. P5B's guard `if _xc not in _man_longs` then failed to protect
+manually-blocked coins (Telegram YES replies) from expiry when their P5B streak ended.
+**Fix:** P5 `_dyn_out` dict now preserves `_manual_LONG`, `_manual_SHORT`, and
+`_p5b_auto_blocks` from `_dyn_existing` before writing.
+
+**HIGH — `whale_stream_trader.py` — dynamic_blocklist SHORT entries never enforced**
+The trader loaded `dynamic_blocklist.json` LONG entries into `LONG_COIN_AVOID_LIST`
+(skipped at order time) but had no equivalent for the SHORT side. P5B auto-blocked
+SHORT coins (≥2 consecutive losses) and manual SHORT blocks from Telegram YES replies
+were completely ignored — the trader would still place SHORT orders for these coins.
+**Fix:** Added `SHORT_COIN_AVOID_LIST` populated from `dynamic_blocklist.json["SHORT"]`
+at startup. Added a matching guard in the trading loop that skips SHORT orders for any
+coin in this list, with a log line and Telegram-visible skip message.
+
+---
+
 ## v47.60 — 2026-07-23 — Bybit native coin scan; server crontab; daily profit scaling; debrief fix
 
 ### Overview
