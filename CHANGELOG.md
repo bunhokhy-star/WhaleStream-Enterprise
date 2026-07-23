@@ -27,9 +27,13 @@
 - One-shot Telegram alert fires when daily target is hit (sentinel flag prevents repeat spam)
 
 ### `whale_stream_debrief.py`
+- **P5B — Consecutive-loss auto-block**: new block in `save_memory()` reads `coin_stats` for any coin with `consecutive_losses_long ≥ 2` or `consecutive_losses_short ≥ 2` and auto-adds it to `dynamic_blocklist.json` with 7-day TTL. TTL resets while the coin keeps qualifying (still losing). On expiry, coin is removed from LONG/SHORT unless it has a manual block (`_manual_LONG`/`_manual_SHORT`). Telegram alert on new blocks and on expiry. Complements the existing P5 AVOID-lessons block (which requires ≥3 AVOID tags).
 - **CRITICAL FIX**: stdout=None guard added at top (before any import) — prevents crash when subprocess launched with CREATE_NO_WINDOW on Windows
 - `local_config_server` fallback import added — debrief can now find API key on server where `local_config.py` doesn't exist (only `local_config_server.py`)
 - Both fixes mean `pattern_memory.json` will now actually be written after every resolved trade
+
+### `telegram_commands.py`
+- `apply_block()` now also writes `_manual_LONG` / `_manual_SHORT` tracking keys alongside `LONG` / `SHORT`. Lets debrief P5B distinguish user-issued manual blocks from auto-blocks so it never expires a coin the user explicitly blocked via a Telegram YES reply.
 
 ### New files
 - `SERVER_CRON_SETUP.sh` — crontab script for server; installs all 8 agents with correct UTC times

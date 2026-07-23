@@ -94,18 +94,29 @@ def get_updates(offset=None):
 
 
 def apply_block(rec):
-    """Add coin to dynamic_blocklist.json."""
+    """Add coin to dynamic_blocklist.json + track in _manual_LONG/_manual_SHORT.
+    The _manual_* keys let debrief.py (P5B) distinguish manual from auto-blocks,
+    so it never expires a coin the user explicitly blocked via a Telegram YES reply.
+    """
     coin = rec["coin"].upper()
     dirn = rec["direction"].upper()
 
     dynblock = load_json(DYNBLOCK_FILE, {"LONG": [], "SHORT": []})
     dynblock.setdefault("LONG", [])
     dynblock.setdefault("SHORT", [])
+    dynblock.setdefault("_manual_LONG",  [])
+    dynblock.setdefault("_manual_SHORT", [])
 
-    if dirn == "LONG" and coin not in dynblock["LONG"]:
-        dynblock["LONG"].append(coin)
-    elif dirn == "SHORT" and coin not in dynblock["SHORT"]:
-        dynblock["SHORT"].append(coin)
+    if dirn == "LONG":
+        if coin not in dynblock["LONG"]:
+            dynblock["LONG"].append(coin)
+        if coin not in dynblock["_manual_LONG"]:
+            dynblock["_manual_LONG"].append(coin)
+    elif dirn == "SHORT":
+        if coin not in dynblock["SHORT"]:
+            dynblock["SHORT"].append(coin)
+        if coin not in dynblock["_manual_SHORT"]:
+            dynblock["_manual_SHORT"].append(coin)
 
     dynblock["last_updated"] = bkk_now().isoformat()
     save_json(DYNBLOCK_FILE, dynblock)

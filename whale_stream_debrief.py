@@ -1083,6 +1083,151 @@ def save_memory(memory):
     except Exception as _av_e:
         log(f"   ⚠ Pattern+time AVOID write failed (non-critical): {_av_e}")
 
+    # ── P5B: Consecutive direction losses ≥2 → dynamic_blocklist.json ────────
+    # More reactive than P5 (AVOID lessons): fires after just 2 straight losses
+    # in the same direction. 7-day TTL — resets while coin keeps qualifying.
+    # Preserves manual blocks (_manual_LONG/_manual_SHORT) from telegram_commands.py.
+    try:
+        _p5b_longs  = [c for c, s in coin_stats.items()
+                       if s.get("consecutive_losses_long",  0) >= 2]
+        _p5b_shorts = [c for c, s in coin_stats.items()
+                       if s.get("consecutive_losses_short", 0) >= 2]
+
+        _dyn2_path = os.path.join(SCRIPT_DIR, "dynamic_blocklist.json")
+        _dyn2_data: dict = {}
+        try:
+            if os.path.exists(_dyn2_path):
+                with open(_dyn2_path, "r", encoding="utf-8") as _d2r:
+                    _dyn2_data = json.load(_d2r)
+        except Exception:
+            pass
+
+        _p5b_blocks: list = _dyn2_data.get("_p5b_auto_blocks", [])
+        _now_p5b = datetime.now(BKK)
+        _p5b_7d  = timedelta(days=7)
+
+        # Expire or renew each tracked block
+        _p5b_active:    list = []
+        _p5b_exp_long:  list = []
+        _p5b_exp_short: list = []
+        _p5b_longs_up  = [c.upper() for c in _p5b_longs]
+        _p5b_shorts_up = [c.upper() for c in _p5b_shorts]
+        for _b in _p5b_blocks:
+            _bc  = _b.get("coin", "").upper()
+            _bd  = _b.get("direction", "").upper()
+            _bat = _b.get("blocked_at", "")
+            _still_q = (
+                (_bd == "LONG"  and _bc in _p5b_longs_up) or
+                (_bd == "SHORT" and _bc in _p5b_shorts_up)
+            )
+            if _still_q:
+                # Still qualifying → renew TTL
+                _b["blocked_at"] = bkk_now_str()
+                _b["expires_at"] = (_now_p5b + _p5b_7d).strftime("%Y-%m-%d %H:%M BKK")
+                _p5b_active.append(_b)
+            else:
+                # Not qualifying any more — expire if >7d old
+                _timed_out = False
+                try:
+                    _bat_dt = datetime.strptime(_bat[:16], "%Y-%m-%d %H:%M").replace(tzinfo=BKK)
+                    _timed_out = (_now_p5b - _bat_dt) >= _p5b_7d
+                except Exception:
+                    pass
+                if _timed_out:
+                    if _bd == "LONG":  _p5b_exp_long.append(_bc)
+                    else:              _p5b_exp_short.append(_bc)
+                else:
+                    _p5b_active.append(_b)  # still within 7d grace, keep it
+
+        # Add newly qualifying coins not already tracked
+        _active_keys = {(b["coin"].upper(), b["direction"].upper()) for b in _p5b_active}
+        _p5b_new_longs  = [c for c in _p5b_longs  if (c.upper(), "LONG")  not in _active_keys]
+        _p5b_new_shorts = [c for c in _p5b_shorts if (c.upper(), "SHORT") not in _active_keys]
+        for _nc in _p5b_new_longs:
+            _p5b_active.append({
+                "coin":               _nc.upper(),
+                "direction":          "LONG",
+                "consecutive_losses": coin_stats[_nc].get("consecutive_losses_long", 2),
+                "blocked_at":         bkk_now_str(),
+                "expires_at":         (_now_p5b + _p5b_7d).strftime("%Y-%m-%d %H:%M BKK"),
+            })
+        for _nc in _p5b_new_shorts:
+            _p5b_active.append({
+                "coin":               _nc.upper(),
+                "direction":          "SHORT",
+                "consecutive_losses": coin_stats[_nc].get("consecutive_losses_short", 2),
+                "blocked_at":         bkk_now_str(),
+                "expires_at":         (_now_p5b + _p5b_7d).strftime("%Y-%m-%d %H:%M BKK"),
+            })
+
+        # Rebuild LONG / SHORT lists
+        # Start from whatever the prior P5 (AVOID lessons) wrote → preserves those entries
+        _dyn2_longs  = set(c.upper() for c in _dyn2_data.get("LONG",  []))
+        _dyn2_shorts = set(c.upper() for c in _dyn2_data.get("SHORT", []))
+        # Load manual blocks (from telegram_commands.py YES replies)
+        _man_longs   = set(c.upper() for c in _dyn2_data.get("_manual_LONG",  []))
+        _man_shorts  = set(c.upper() for c in _dyn2_data.get("_manual_SHORT", []))
+        # Remove expired P5B coins — but never evict a manual block
+        for _xc in _p5b_exp_long:
+            if _xc not in _man_longs:
+                _dyn2_longs.discard(_xc)
+        for _xc in _p5b_exp_short:
+            if _xc not in _man_shorts:
+                _dyn2_shorts.discard(_xc)
+        # Add every active P5B auto-block
+        for _ab in _p5b_active:
+            if _ab["direction"] == "LONG":
+                _dyn2_longs.add(_ab["coin"].upper())
+            else:
+                _dyn2_shorts.add(_ab["coin"].upper())
+
+        _dyn2_out = {
+            "LONG":              sorted(_dyn2_longs),
+            "SHORT":             sorted(_dyn2_shorts),
+            "_manual_LONG":      sorted(_man_longs),
+            "_manual_SHORT":     sorted(_man_shorts),
+            "_p5b_auto_blocks":  _p5b_active,
+            "updated_at":        bkk_now_str(),
+            "note": "P5 AVOID-lessons (≥3) + P5B consec-losses (≥2, 7d TTL) + manual blocks",
+        }
+        with open(_dyn2_path, "w", encoding="utf-8") as _d2w:
+            json.dump(_dyn2_out, _d2w, indent=2)
+
+        if _p5b_new_longs or _p5b_new_shorts:
+            _p5b_parts = []
+            if _p5b_new_longs:
+                _p5b_parts.append(f"LONG [{', '.join(c.upper() for c in _p5b_new_longs)}]")
+                log(f"   🚫 [P5B] BLOCKED LONG: {', '.join(c.upper() for c in _p5b_new_longs)}")
+            if _p5b_new_shorts:
+                _p5b_parts.append(f"SHORT [{', '.join(c.upper() for c in _p5b_new_shorts)}]")
+                log(f"   🚫 [P5B] BLOCKED SHORT: {', '.join(c.upper() for c in _p5b_new_shorts)}")
+            try:
+                send_telegram(
+                    f"🚫 <b>P5B CONSECUTIVE-LOSS AUTO-BLOCK</b>\n"
+                    f"  {' | '.join(_p5b_parts)}\n"
+                    f"  ≥2 consecutive direction losses → blocked 7 days\n"
+                    f"  Added to dynamic_blocklist.json — active next Bot cycle."
+                )
+            except Exception:
+                pass
+        if _p5b_exp_long or _p5b_exp_short:
+            _xp_parts = []
+            if _p5b_exp_long:  _xp_parts.append(f"LONG [{', '.join(_p5b_exp_long)}]")
+            if _p5b_exp_short: _xp_parts.append(f"SHORT [{', '.join(_p5b_exp_short)}]")
+            log(f"   ⏳ [P5B] EXPIRED from dynamic_blocklist: {' | '.join(_xp_parts)}")
+            try:
+                send_telegram(
+                    f"⏳ <b>P5B AUTO-BLOCK EXPIRED</b>\n"
+                    f"  {' | '.join(_xp_parts)}\n"
+                    f"  7-day P5B block expired — re-allowed. Monitor first trade."
+                )
+            except Exception:
+                pass
+        if not (_p5b_longs or _p5b_shorts) and not (_p5b_exp_long or _p5b_exp_short):
+            log("   ℹ [P5B] No coins with ≥2 consecutive direction losses this run")
+    except Exception as _p5b_e:
+        log(f"   ⚠ [P5B] consecutive-loss block write failed (non-critical): {_p5b_e}")
+
     try:
         _tmp = MEMORY_FILE + ".tmp"
         with open(_tmp, "w", encoding="utf-8") as f:
