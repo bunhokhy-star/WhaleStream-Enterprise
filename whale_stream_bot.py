@@ -702,7 +702,7 @@ VALID SHORTS: Stage 4 (euphoria — exhaustion signals present) OR Stage 5 (dist
 Reject LONG if Stage 5. Reject SHORT if Stage 1, 2, or 3.
 ════════════════════════════════════════════════════════════
 MANDATORY ANALYSIS FACTORS
-1. Market Cap Strength       2. Liquidity Quality         3. Volume Quality
+1. Bybit Turnover Strength   2. Liquidity Quality         3. Volume Quality
 4. Relative Strength vs BTC  5. Relative Strength vs Dataset  6. Trend Structure
 7. HH/HL Analysis            8. LH/LL Analysis            9. Trendline Structure
 10. Compression Structure    11. Breakout Quality         12. Breakdown Quality
@@ -2141,7 +2141,7 @@ def fetch_bybit_realtime():
         print(f"   ✓ Bybit: {len(bybit_map)} USDT pairs loaded (real-time)")
         return bybit_map
     except Exception as e:
-        print(f"   ⚠ Bybit fetch failed ({e}) — will use CoinGecko prices only")
+        print(f"   ⚠ Bybit realtime fetch failed ({e}) — will proceed without real-time price data")
         return {}
 
 
@@ -2421,7 +2421,7 @@ def format_market_data(all_coins):
         lines.append(
             f"{'Rank':<5} {'Symbol+Perf':<18} {'Name':<12} "
             f"{'Price (USD)':>14} {'24h%':>8} {'7d%':>8} "
-            f"{'Bybit Univ':>18} {'24h Volume':>18} {'Vol/MCap':>10} "
+            f"{'Bybit Univ':>18} {'24h Volume':>18} {'MCap N/A':>10} "
             f"{'24h High':>14} {'24h Low':>13} {'FundRate':>10} {'OI (USD)':>16}"
         )
         lines.append("─" * 160)
