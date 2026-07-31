@@ -1,5 +1,20 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.62 — 2026-07-31 — DEXE blocklist + pnl_pct fix
+
+### `whale_stream_bot.py`
+- **FIX:** Added `DEXE` to `SHORT_COIN_BLOCKLIST` — generated every cycle by bot, always vetoed by Strategist (wasted signal slot)
+- Version bump v47.60 → v47.62
+
+### `trade_logger.py`
+- **FIX:** `pnl_pct` and `pnl_usd` were 0.0 for all 206 resolved trades — Google Sheets COL_PNL (col 15) column was blank.  
+  Now computes `pnl_pct` directly from `entry_price` / `exit_price` when Sheets value is missing:  
+  LONG: `(exit - entry) / entry × 100`  
+  SHORT: `(entry - exit) / entry × 100`  
+  `pnl_usd` then follows from `pnl_pct × $20 margin`.
+
+---
+
 ## v47.61 — 2026-07-23 — P5B audit fixes
 
 ### Bug fixes

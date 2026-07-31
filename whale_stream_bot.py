@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v47.60   —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v47.62   —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 USDT perpetuals from Bybit (1 API call) ║
@@ -152,6 +152,7 @@ SHORT_COIN_BLOCKLIST = {
     "WLD",   # 0W/2L — 0% WR, avg -49.7%  ← added v46.5
     "INJ",   # 0W/2L — 0% WR, avg -59.8%  ← added v46.5
     "AVAX",  # 0W/1L — 0% WR, avg -49.1%  ← added v46.5
+    "DEXE",  # generated every cycle, always vetoed by Strategist — wasted slot
 }
 # ── Auto-blocklist SHORT coins from debrief data (v47.29) ──────────────────────
 # coin_blocklist_auto.json now includes blocked_shorts (≥3 SHORT losses + 0 wins).

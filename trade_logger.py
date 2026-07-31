@@ -265,6 +265,21 @@ def sync_from_sheets() -> int:
 
         pnl_pct  = safe_float(pnl_raw, default=0.0)
         conf_pct = safe_float(conf_raw, default=0.0)
+
+        # ── Compute pnl_pct from prices when Sheets column is empty (v47.60+) ──
+        # Sheets COL_PNL (col 15) is often blank — derive from entry/exit prices.
+        if pnl_pct == 0.0 and entry_px and exit_px:
+            try:
+                ep = float(entry_px)
+                xp = float(exit_px)
+                if ep > 0:
+                    if direction == "LONG":
+                        pnl_pct = round((xp - ep) / ep * 100, 4)
+                    else:  # SHORT
+                        pnl_pct = round((ep - xp) / ep * 100, 4)
+            except Exception:
+                pass  # keep 0.0 if parse fails
+
         category = _categorise(status, tp_hit, pnl_pct)
 
         # Estimate USD P&L (margin $20 by default; refined if we know margin)

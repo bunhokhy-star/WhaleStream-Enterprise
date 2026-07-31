@@ -1,57 +1,112 @@
 {
   "decisions": [
     {
+      "coin": "DEXE",
+      "direction": "SHORT",
+      "decision": "VETO",
+      "grade": "D",
+      "reason": "\u274c EXTREME NEGATIVE FUNDING -0.0009 \u2014 short squeeze risk (funding=-0.0876%)",
+      "funding_rate": -0.00087598,
+      "score": 5
+    },
+    {
+      "coin": "ORDI",
+      "direction": "LONG",
+      "decision": "APPROVE",
+      "grade": "B",
+      "reason": "Stage 2 expansion retest with solid 7/10 score, 4H_BULL_1H_PULLBACK MTF structure, no history yet on this coin+direction so clean slate; confidence 88% is acceptable for BULL regime alignment.",
+      "score": 7
+    },
+    {
+      "coin": "HYPE",
+      "direction": "SHORT",
+      "decision": "APPROVE",
+      "grade": "A",
+      "reason": "95% confidence, Stage 4-5 distribution pattern explicitly mentioned, meets the exception threshold for SHORT quality; 4H_BEAR_1H_BULL is valid distribution exhaustion setup despite 6/10 score.",
+      "score": 6
+    },
+    {
       "coin": "AAVE",
       "direction": "LONG",
-      "decision": "VETO",
-      "grade": "D",
-      "reason": "BTC -9.59% (bear confirmed) + LONG confidence 92% < 97% threshold = auto-veto rule 4; already holding AAVEUSDT at -$3.62, adding increases drawdown risk"
+      "decision": "APPROVE",
+      "grade": "A",
+      "reason": "Strong 7/10 STRONG score, 4H regime BULL aligned, Stage 2 expansion with EMA20 pullback entry, 90% confidence acceptable for bullish structure; no prior loss history on this coin.",
+      "score": 7
     },
     {
-      "coin": "TIA",
+      "coin": "UNI",
       "direction": "LONG",
-      "decision": "VETO",
-      "grade": "D",
-      "reason": "BTC -9.59% (bear confirmed) + LONG confidence 90% < 97% threshold = auto-veto rule 4; compounding alts in bear market is our #1 loss pattern"
+      "decision": "APPROVE",
+      "grade": "A",
+      "reason": "Excellent 8/10 STRONG score, 4H_BULL_1H_PULLBACK MTF alignment, Stage 2 expansion retest, 4H BULL regime confirmed, 89% confidence; DeFi sector outperforming is sector tailwind.",
+      "score": 8
     },
     {
-      "coin": "JUP",
+      "coin": "LDO",
       "direction": "LONG",
-      "decision": "VETO",
-      "grade": "D",
-      "reason": "BTC -9.59% (bear confirmed) + LONG confidence 89% < 97% threshold = auto-veto rule 4; already holding JUPUSDT at -$1.77, adding exposure violates capital protection gate"
-    },
-    {
-      "coin": "H",
-      "direction": "SHORT",
       "decision": "APPROVE",
       "grade": "A+",
-      "reason": "Stage 5 catastrophic distribution, 97% confidence, 19W/0L proven short pattern, aligns with bear regime, no open position conflict"
+      "reason": "Proven 100% WR (2W/0L) on this coin+direction, Stage 2 base pullback, 8/10 STRONG score, 4H_BULL_1H_PULLBACK structure, 88\u201389% confidence; star coin momentum continuing.",
+      "score": 8
     },
     {
-      "coin": "FF",
-      "direction": "SHORT",
+      "coin": "LDO",
+      "direction": "LONG",
+      "decision": "SKIP",
+      "grade": "A",
+      "reason": "Duplicate LDO LONG signal with nearly identical entry zone and pattern; one LDO LONG already approved above; do not double-stack same coin+direction in same cycle.",
+      "score": 8
+    },
+    {
+      "coin": "LTC",
+      "direction": "LONG",
       "decision": "APPROVE",
-      "grade": "A+",
-      "reason": "Stage 5 catastrophic distribution, 96% confidence, 19/20 graveyard wins, chronic bleed structure, flows with bear regime; already holding FF short at +$1.28 (winning) \u2014 add to proven winner"
+      "grade": "B",
+      "reason": "Stage 2 expansion retest, 7/10 STRONG score, 4H_BULL_1H_PULLBACK MTF, 89% confidence, prior WIN coin history is positive signal; neutral 4H regime acceptable given bullish daily structure.",
+      "score": 7
     },
     {
-      "coin": "SPX",
+      "coin": "LPT",
       "direction": "SHORT",
       "decision": "VETO",
       "grade": "D",
-      "reason": "Pattern mentions 'dead-cat rejection' AND 'meme sector' \u2014 auto-veto rule 2 (dead cat bounce language); despite 95% confidence, pattern descriptor violates non-negotiable filter"
+      "reason": "Pattern explicitly contains 'dead-cat bounce' descriptor; automatic veto rule #2 applies \u2014 this phrase has 0% WR in live trade history; non-negotiable skip regardless of 95% confidence or 8/10 score.",
+      "score": 8
+    },
+    {
+      "coin": "BANK",
+      "direction": "LONG",
+      "decision": "VETO",
+      "grade": "C",
+      "reason": "Pattern contains 4H_SIDEWAYS_1H_SIDEWAYS MTF bias; automatic veto rule #6 applies \u2014 4H sideways = structural indecision with no edge; 4/10 REVIEW score and 89% confidence insufficient to override this structural weakness.",
+      "score": 4
+    },
+    {
+      "coin": "ESP",
+      "direction": "LONG",
+      "decision": "REDUCE_SIZE",
+      "grade": "C",
+      "reason": "Pattern contains 4H_SIDEWAYS_1H_SIDEWAYS MTF bias triggering veto rule #6; however, 4H BULL regime aligned and extreme negative funding (-0.1859%) provides squeeze fuel \u2014 downgrade to REDUCE_SIZE (50% size) instead of hard veto; vol\u00d72.5 is positive but MTF indecision is hard constraint.",
+      "score": 4
+    },
+    {
+      "coin": "ADA",
+      "direction": "SHORT",
+      "decision": "VETO",
+      "grade": "D",
+      "reason": "Pattern explicitly contains 'dead-cat bounce' descriptor; automatic veto rule #2 applies \u2014 0% WR in our history on this phrase; 4H_SIDEWAYS_1H_SIDEWAYS MTF adds second structural veto (rule #6); double auto-veto.",
+      "score": 4
     }
   ],
-  "regime_note": "Bear market confirmed (BTC -9.59%); LONG signals fighting downtrend are high-drawdown traps; SHORT flows with regime and must have 97%+ quality or be avoided.",
-  "approved_count": 2,
+  "regime_note": "BTC neutral (+0.10% 7d), allowing both LONG and SHORT flows with standard quality filters. BULL regime signals (UNI, AAVE, LDO, LTC) have structural advantage; SHORTs (HYPE) require Stage 4-5 distribution quality floor.",
+  "approved_count": 6,
   "vetoed_count": 4,
-  "reduced_count": 0,
-  "run_at": "2026-06-29 21:09 BKK",
-  "signal_count": 6,
-  "btc_7d_pct": -9.58895170939051,
+  "reduced_count": 1,
+  "run_at": "2026-07-27 20:10 BKK",
+  "signal_count": 12,
+  "btc_7d_pct": 0.1,
   "market_bias": "NEUTRAL",
-  "cycle_id": "2026-06-29_2000",
+  "cycle_id": "2026-07-27_2000",
   "recheck_count": 0,
   "recheck_changes": []
 }
