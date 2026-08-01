@@ -45,6 +45,15 @@ from datetime import datetime, timezone, timedelta
 
 BKK = timezone(timedelta(hours=7))   # Bangkok timezone (UTC+7) — used everywhere
 
+# ── Market Intelligence module (v47.63) — BTC 15m gate + funding context ──
+try:
+    from whale_stream_market_intel import load_market_context
+    _STRAT_INTEL_OK = True
+except ImportError:
+    _STRAT_INTEL_OK = False
+    def load_market_context():
+        return {}
+
 # ── Force UTF-8 output (prevents crash in Task Scheduler) ─────
 # Use reconfigure() — changes encoding in-place without double-wrapping the buffer,
 # which avoids "ValueError: I/O operation on closed file" at Python shutdown.
@@ -1393,6 +1402,38 @@ def main():
         dropped_count = original_signal_count - len(signals)
         print(f"   → Pre-filtered {dropped_count} signal(s) fighting the trend. {len(signals)} remain for Claude review.")
 
+    # ── BTC 15m momentum gate (v47.63) — real-time entry timing from market_context.json ──
+    # The 4H regime is the direction filter. The 15m gate is the ENTRY TIMING filter.
+    # If BTC is actively dumping on 15m now → LONGs face immediate headwind → raise conf bar.
+    # If BTC is actively ripping on 15m now → SHORTs face squeeze risk → raise conf bar.
+    # This is a soft gate (conf threshold raise) not a hard pre-veto.
+    _btc_15m_note = ""
+    try:
+        _mctx        = load_market_context()
+        _btc15m      = _mctx.get("btc_15m", {})
+        _btc15m_sig  = _btc15m.get("signal", "NEUTRAL")
+        _btc15m_str  = _btc15m.get("strength", 0)
+        _btc15m_pct  = _btc15m.get("pct_move", 0.0)
+        _btc15m_note_raw = _btc15m.get("note", "")
+        if _btc15m_sig == "BEAR" and _btc15m_str >= 2:
+            _btc_15m_note = (
+                f"\n⚡ BTC 15m REAL-TIME: BEARISH ({_btc15m_note_raw})\n"
+                f"   LONG signals face immediate 15m headwind — raise confidence bar +3% for any LONG.\n"
+                f"   If LONG confidence < 92%, consider REDUCE_SIZE or VETO."
+            )
+            print(f"   ⚡ BTC 15m BEAR (strength {_btc15m_str}/3, {_btc15m_pct:+.2f}%) — LONG bar raised +3%")
+        elif _btc15m_sig == "BULL" and _btc15m_str >= 2:
+            _btc_15m_note = (
+                f"\n⚡ BTC 15m REAL-TIME: BULLISH ({_btc15m_note_raw})\n"
+                f"   SHORT signals face squeeze risk — raise confidence bar +3% for any SHORT.\n"
+                f"   If SHORT confidence < 95%, consider REDUCE_SIZE or VETO."
+            )
+            print(f"   ⚡ BTC 15m BULL (strength {_btc15m_str}/3, {_btc15m_pct:+.2f}%) — SHORT bar raised +3%")
+        else:
+            print(f"   ⚡ BTC 15m: {_btc15m_sig} — no extra threshold adjustment")
+    except Exception as _btce:
+        print(f"   ⚠ BTC 15m gate read failed: {_btce}")
+
     # If regime filter wiped everything, short-circuit without calling Claude
     if not signals and original_signal_count > 0:
         bias_lbl   = "BEARISH — all LONGs pre-vetoed" if market_bias == "BEARISH" else "BULLISH — all SHORTs pre-vetoed"
@@ -1612,6 +1653,10 @@ def main():
     user_msg = build_strategist_user_message(
         signals, history, positions, balance, drawdown_pct, btc_7d, memory=memory
     )
+
+    # ── Inject BTC 15m real-time gate note (v47.63) ──────────────
+    if _btc_15m_note:
+        user_msg = user_msg + _btc_15m_note
 
     # ── Call Claude ──────────────────────────────────────────────
     try:

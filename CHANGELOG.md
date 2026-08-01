@@ -1,5 +1,48 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.63 — 2026-08-01 — Market intelligence: MTF + funding + delist + BTC 15m gate + OI delta
+
+### Overview
+6-layer strategy upgrade for 10x leveraged futures:
+1. **Multi-timeframe analysis** — Bot pre-screens all candidates on 15m+1h+4h before Claude picks signals
+2. **Funding rate check** — Layer already in market_intel; funding/OI now injected into Claude's coin table
+3. **Delist coin blocker** — Fetches Bybit delisting announcements; auto-removes delisting coins from candidate pool before Claude sees them
+4. **Open Interest direction** — `get_oi_delta()` flags OI RISING (real money) vs FALLING (short-covering/weak) per coin
+5. **BTC 15m momentum gate** — `get_btc_15m_momentum()` checks last 3 BTC candles; BEAR strength≥2 → pause LONGs; BULL strength≥2 → pause SHORTs
+6. **15m coin momentum** — `get_15m_momentum()` computes EMA9 + volume spike per candidate; table injected into Claude's batch
+
+### New file: `whale_stream_market_intel.py`
+Complete new module (7 intelligence layers):
+- `get_fear_greed()` — CoinGecko F&G index (was already in bot.py; centralized here)
+- `get_funding_and_oi()` — Bybit `/v5/market/tickers` funding rate + OI per coin
+- `get_4h_indicators()` — Bybit `/v5/market/kline?interval=240` RSI14 + EMA50/200 + volume ratio
+- `get_delist_blocklist()` — Bybit `/v5/announcements/index?type=delistings`; extracts coin names; returns set
+- `get_15m_momentum()` — Bybit `/v5/market/kline?interval=15&limit=24`; EMA9 + last 3 candle direction + vol spike
+- `get_btc_15m_momentum()` — BTC-specific 15m analysis; bull/bear count + pct_move
+- `get_oi_delta()` — Bybit `/v5/market/open-interest?intervalTime=1h&limit=2`; RISING (>+2%) vs FALLING vs FLAT
+- `run_market_intel(candidate_symbols)` — orchestrates all 7 layers; writes `market_context.json`
+- `load_market_context()` — reads `market_context.json` with 6h staleness check
+- `format_15m_oi_for_prompt()` — formats 15m momentum + OI delta table for Claude prompt injection
+
+### `whale_stream_bot.py`
+- Added `_MARKET_INTEL_OK` import guard for `whale_stream_market_intel`
+- **Delist filter** — after MTF pre-screen, removes any coin in `get_delist_blocklist()` set
+- **7-layer intel call** — replaces old minimal `market_context.json` write; `run_market_intel()` writes full context
+- **15m + OI table** injected into `batches[0]` so Claude sees per-coin 15m momentum and OI delta
+- Version bump v47.62 → v47.63
+
+### `whale_stream_strategist.py`
+- Added `load_market_context` import (with `_STRAT_INTEL_OK` guard)
+- **BTC 15m gate (soft)** — reads `btc_15m` from `market_context.json`; BEAR strength≥2 → injects "+3% confidence bar for LONGs" note into Claude prompt; BULL strength≥2 → "+3% bar for SHORTs"
+- Gate is soft (advisory to Claude) not hard veto — 15m is for timing not direction
+
+### `whale_stream_trader.py`
+- Added `load_market_context` import (with `_TRADER_INTEL_OK` guard)
+- **BTC 15m gate (hard)** — reads `btc_15m` before every `place_order()` call; BEAR strength≥2 + LONG order → SKIP with log + Telegram; BULL strength≥2 + SHORT order → SKIP with log + Telegram
+- Gate is hard at execution time — even if Strategist approved, Trader won't fire into a moving BTC 15m
+
+---
+
 ## v47.62 — 2026-07-31 — DEXE blocklist + pnl_pct fix
 
 ### `whale_stream_bot.py`

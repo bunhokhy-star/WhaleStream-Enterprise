@@ -1175,6 +1175,21 @@ DATA TO ANALYZE:
 import requests
 import time
 from datetime import datetime, timezone, timedelta
+
+# ── Market Intelligence module (v47.63) ──────────────────────────────────────
+# 7 data layers: F&G, Funding/OI, 4H indicators, delist blocklist,
+# 15m momentum per coin, BTC 15m gate, OI delta 1h.
+try:
+    from whale_stream_market_intel import (
+        run_market_intel,
+        get_delist_blocklist,
+        format_fg_for_prompt,
+        format_15m_oi_for_prompt,
+    )
+    _MARKET_INTEL_OK = True
+except ImportError:
+    _MARKET_INTEL_OK = False
+    print("   ⚠ whale_stream_market_intel.py not found — 7-layer intel skipped")
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -3300,7 +3315,7 @@ def main():
 
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🐳  WHALE-STREAM v47.60  — AUTO BOT STARTING    ║")
+    print("║   🐳  WHALE-STREAM v47.63  — AUTO BOT STARTING    ║")
     print("╚══════════════════════════════════════════════════╝")
     # Check conservative flag early so we can show it in the startup banner
     _short_conservative_early = os.path.exists(os.path.join(SCRIPT_DIR, "short_conservative.flag"))
@@ -3394,6 +3409,26 @@ def main():
             _screened_coins.append(_c)
     print(f"   📋 {len(_screened_coins)} pre-screened coins passed to Claude (was 200)")
 
+    # ── Step 2b-ii: Delist filter (v47.63) — remove coins under active delisting notice ──
+    # Calls Bybit /v5/announcements/index?type=delistings — public endpoint, no key needed.
+    # Any coin in the delist blocklist is silently removed from the screened list before
+    # Claude ever sees it. Better to miss a signal than trade a coin being delisted.
+    if _MARKET_INTEL_OK:
+        try:
+            _delist_set   = get_delist_blocklist()
+            _before_dlist = len(_screened_coins)
+            _screened_coins = [
+                _c for _c in _screened_coins
+                if (_c.get("symbol") or "").replace("USDT", "").upper() not in _delist_set
+            ]
+            _removed_dlist = _before_dlist - len(_screened_coins)
+            if _removed_dlist > 0:
+                print(f"   🚫 Delist filter removed {_removed_dlist} coin(s): {sorted(_delist_set)}")
+            elif _delist_set:
+                print(f"   ✅ Delist filter: none of the screened coins are delisted ({len(_delist_set)} in blocklist)")
+        except Exception as _de:
+            print(f"   ⚠ Delist filter failed: {_de} — continuing without filter")
+
     # ── Step 2c: Fetch MTF 1H chart data for top-volume coins (entry timing) ────────────
     # Provides 1H trend labels to supplement P1 Daily+4H scores.
     print("📉 Fetching MTF chart data (1H trends for top 20 by volume)...")
@@ -3425,23 +3460,57 @@ def main():
     if _indicator_text and batches:
         batches[0] = batches[0] + f"\n\n{_indicator_text}\n"
 
-    # ── Write market_context.json for cross-agent data sharing (v47.60) ──────
-    try:
-        _mc_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "market_context.json")
-        _mc_data = {
-            "generated_at":    datetime.now(BKK).isoformat(),
-            "fear_greed_text": fear_greed,
-            "screened_coins":  [(_c.get("symbol") or "").upper() for _c in _screened_coins],
-            "indicators":      {
-                (_c.get("symbol") or "").upper(): _c.get("_mtf", {})
-                for _c in _screened_coins
-            },
-        }
-        with open(_mc_path, "w", encoding="utf-8") as _mcf:
-            json.dump(_mc_data, _mcf, indent=2)
-        print(f"   ✅ market_context.json written ({len(_screened_coins)} coins)")
-    except Exception as _mc_err:
-        print(f"   ⚠ market_context.json write skipped: {_mc_err}")
+    # ── Step 2d: Run 7-layer market intel + write market_context.json (v47.63) ──
+    # Fetches: funding rates, OI delta, 15m momentum, BTC 15m gate, delist blocklist.
+    # Writes market_context.json for strategist.py + morning_briefing.py to consume.
+    # Also injects 15m timing + OI confirmation table into Claude's batch prompt.
+    _screened_syms  = [(_c.get("symbol") or "").upper() for _c in _screened_coins]
+    _intel_15m_text = ""
+    if _MARKET_INTEL_OK:
+        try:
+            print("🧠 Running 7-layer market intelligence (v47.63)...")
+            _intel_ctx = run_market_intel(_screened_syms)
+            # Inject fresh F&G text (replaces the older fetch_fear_greed() output)
+            _fg_fresh = format_fg_for_prompt(_intel_ctx.get("fear_greed", {}))
+            if _fg_fresh:
+                fear_greed = _fg_fresh
+            # Build 15m momentum + OI delta table for Claude
+            _intel_15m_text = format_15m_oi_for_prompt(
+                _intel_ctx.get("momentum_15m", {}),
+                _intel_ctx.get("oi_delta", {}),
+            )
+        except Exception as _ie:
+            print(f"   ⚠ run_market_intel failed: {_ie} — continuing without 7-layer intel")
+            # Fallback: write minimal market_context.json (old behavior)
+            try:
+                _mc_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "market_context.json")
+                with open(_mc_path, "w", encoding="utf-8") as _mcf:
+                    json.dump({
+                        "generated_at":    datetime.now(BKK).isoformat(),
+                        "fear_greed_text": fear_greed,
+                        "screened_coins":  _screened_syms,
+                        "indicators":      {s: _c.get("_mtf", {}) for _c, s in zip(_screened_coins, _screened_syms)},
+                    }, _mcf, indent=2)
+            except Exception:
+                pass
+    else:
+        # market_intel module not available — write minimal context
+        try:
+            _mc_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "market_context.json")
+            with open(_mc_path, "w", encoding="utf-8") as _mcf:
+                json.dump({
+                    "generated_at":    datetime.now(BKK).isoformat(),
+                    "fear_greed_text": fear_greed,
+                    "screened_coins":  _screened_syms,
+                    "indicators":      {(_c.get("symbol") or "").upper(): _c.get("_mtf", {}) for _c in _screened_coins},
+                }, _mcf, indent=2)
+            print(f"   ✅ market_context.json written ({len(_screened_coins)} coins, basic mode)")
+        except Exception as _mc_err:
+            print(f"   ⚠ market_context.json write skipped: {_mc_err}")
+
+    # Inject 15m momentum + OI delta table into Claude's batch (v47.63)
+    if _intel_15m_text and batches:
+        batches[0] = batches[0] + f"\n\n{_intel_15m_text}\n"
 
     # ── Step 4: Analyze with Claude — Single call (P1: ≤30 pre-screened coins) ──
     # v47.60: MTF pre-screen reduces from 200→30 coins. All fit in one batch.

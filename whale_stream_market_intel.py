@@ -2,13 +2,17 @@
 # -*- coding: utf-8 -*-
 """
 ╔══════════════════════════════════════════════════════════════╗
-║    WHALE-STREAM v47.46 — Market Intelligence Module          ║
+║    WHALE-STREAM v47.63 — Market Intelligence Module          ║
 ║                                                              ║
-║  Provides three real-data layers BEFORE signal selection:    ║
+║  Seven real-data layers BEFORE signal selection:             ║
 ║  1. Fear & Greed Index  (alternative.me — free)              ║
 ║  2. Bybit Funding Rate + Open Interest  (public endpoint)    ║
 ║  3. 4H Candle Technical Indicators: RSI14, EMA20/50,         ║
 ║     Volume ratio, ATR14, Trend direction                     ║
+║  4. Bybit Delist Announcements → auto-blocklist              ║
+║  5. 15m Candle Momentum → entry timing per coin              ║
+║  6. BTC 15m Momentum → pre-trade gate in trader.py           ║
+║  7. OI Delta (1h change) → confirms if move is real          ║
 ║                                                              ║
 ║  All endpoints are PUBLIC — no API key required.             ║
 ║  Called by whale_stream_bot.py before Claude signal prompt.  ║
@@ -289,32 +293,321 @@ def get_coin_indicators(symbols: list) -> dict:
 
 
 # ══════════════════════════════════════════════════════════════════
+# FUNCTION 4 — Bybit Delist Announcements → auto-blocklist
+# ══════════════════════════════════════════════════════════════════
+
+def get_delist_blocklist() -> set:
+    """
+    Fetch Bybit delisting announcements and return set of coin base names.
+    These coins are about to be delisted — never trade them.
+    Pump-then-crash behavior makes both LONG and SHORT extremely dangerous.
+    """
+    import re as _re
+    try:
+        r = requests.get(
+            f"{BYBIT_PUBLIC_URL}/v5/announcements/index",
+            params={"locale": "en-US", "type": "delistings", "limit": "20"},
+            timeout=8
+        )
+        r.raise_for_status()
+        items = r.json().get("result", {}).get("list", [])
+        blocked = set()
+        for item in items:
+            title = (item.get("title", "") + " " + item.get("description", "")).upper()
+            # Match patterns like XYZUSDT or "XYZ Perpetual" in announcement text
+            for m in _re.findall(r'\b([A-Z]{2,10})USDT\b', title):
+                blocked.add(m)
+            for m in _re.findall(r'DELISTING OF ([A-Z]{2,10})\b', title):
+                blocked.add(m)
+        if blocked:
+            print(f"   🚫 Delist blocklist: {', '.join(sorted(blocked))} — skipping these coins")
+        else:
+            print(f"   ✅ Delist check: no active delisting announcements")
+        return blocked
+    except Exception as e:
+        print(f"   ⚠ Delist check failed: {e} — blocklist empty")
+        return set()
+
+
+# ══════════════════════════════════════════════════════════════════
+# FUNCTION 5 — 15m Candle Momentum (entry timing per coin)
+# ══════════════════════════════════════════════════════════════════
+
+def get_15m_momentum(symbols: list) -> dict:
+    """
+    Fetch 15m candles for each symbol, compute entry timing signal.
+    With 10x leverage, entering at wrong 15m moment kills otherwise good 4H setups.
+
+    Logic:
+      - EMA9 of last 24 × 15m closes
+      - Price above/below EMA9
+      - Last 3 candle directions (bull/bear count)
+      - Volume spike on latest candle vs 10-candle avg
+
+    Returns dict keyed by base coin:
+        {
+            "BTC": {
+                "signal":    "BULL",   # BULL / BEAR / NEUTRAL
+                "strength":  2,         # 0–3 (confirming candles out of 3)
+                "ema9_above": True,
+                "vol_spike":  False,
+                "note":  "2/3 bullish 15m candles, price above EMA9"
+            }
+        }
+    """
+    result  = {}
+    symbols = symbols[:40]
+
+    for sym in symbols:
+        try:
+            r = requests.get(
+                f"{BYBIT_PUBLIC_URL}/v5/market/kline",
+                params={"category": "linear", "symbol": sym,
+                        "interval": "15", "limit": "24"},
+                timeout=8
+            )
+            r.raise_for_status()
+            raw = r.json().get("result", {}).get("list", [])
+            if len(raw) < 10:
+                time.sleep(0.05)
+                continue
+
+            raw    = list(reversed(raw))          # oldest → newest
+            opens  = [float(c[1]) for c in raw]
+            closes = [float(c[4]) for c in raw]
+            vols   = [float(c[5]) for c in raw]
+
+            ema9       = _ema(closes, 9)
+            last_close = closes[-1]
+            ema9_above = last_close > ema9
+
+            last3_bull = sum(1 for i in range(-3, 0) if closes[i] > opens[i])
+            last3_bear = sum(1 for i in range(-3, 0) if closes[i] < opens[i])
+
+            avg_vol   = sum(vols[-10:]) / 10 if len(vols) >= 10 else (sum(vols) / len(vols))
+            vol_spike = vols[-1] > avg_vol * 1.5
+
+            if ema9_above and last3_bull >= 2:
+                signal   = "BULL"
+                strength = last3_bull
+                note     = f"{last3_bull}/3 bullish 15m candles, above EMA9"
+            elif not ema9_above and last3_bear >= 2:
+                signal   = "BEAR"
+                strength = last3_bear
+                note     = f"{last3_bear}/3 bearish 15m candles, below EMA9"
+            else:
+                signal   = "NEUTRAL"
+                strength = 0
+                note     = f"Mixed 15m ({last3_bull}B/{last3_bear}S)"
+
+            coin = sym.replace("USDT", "")
+            result[coin] = {
+                "signal":    signal,
+                "strength":  strength,
+                "ema9_above": ema9_above,
+                "vol_spike": vol_spike,
+                "note":      note,
+            }
+            time.sleep(0.05)
+
+        except Exception as e:
+            coin = sym.replace("USDT", "")
+            print(f"   ⚠ 15m momentum failed for {sym}: {e}")
+
+    bull_c = sum(1 for v in result.values() if v["signal"] == "BULL")
+    bear_c = sum(1 for v in result.values() if v["signal"] == "BEAR")
+    print(f"   ⏱ 15m momentum: {len(result)} coins — BULL:{bull_c} BEAR:{bear_c} "
+          f"NEUTRAL:{len(result) - bull_c - bear_c}")
+    return result
+
+
+# ══════════════════════════════════════════════════════════════════
+# FUNCTION 6 — BTC 15m Momentum (pre-trade gate for trader.py)
+# ══════════════════════════════════════════════════════════════════
+
+def get_btc_15m_momentum() -> dict:
+    """
+    Fetch BTC 15m last 8 candles and derive real-time market momentum.
+    Used by trader.py as a final gate before placing any order.
+
+    Rule: if BTC is actively dumping on 15m → pause all LONGs this cycle.
+          if BTC is ripping on 15m → pause all SHORTs this cycle.
+
+    Returns:
+        {
+            "signal":   "BEAR",    # BULL / BEAR / NEUTRAL
+            "strength": 3,          # 0–3 consecutive confirming candles
+            "pct_move": -1.2,       # % move across last 3 candles
+            "note":  "BTC 15m: 3/3 bearish candles (-1.2%)"
+        }
+    """
+    try:
+        r = requests.get(
+            f"{BYBIT_PUBLIC_URL}/v5/market/kline",
+            params={"category": "linear", "symbol": "BTCUSDT",
+                    "interval": "15", "limit": "8"},
+            timeout=8
+        )
+        r.raise_for_status()
+        raw = list(reversed(r.json().get("result", {}).get("list", [])))
+        if len(raw) < 4:
+            return {"signal": "NEUTRAL", "strength": 0, "pct_move": 0.0,
+                    "note": "BTC 15m data unavailable — allowing trade"}
+
+        opens  = [float(c[1]) for c in raw]
+        closes = [float(c[4]) for c in raw]
+
+        bull = sum(1 for i in range(-3, 0) if closes[i] > opens[i])
+        bear = sum(1 for i in range(-3, 0) if closes[i] < opens[i])
+        pct_move = round((closes[-1] - closes[-4]) / closes[-4] * 100, 2) if closes[-4] else 0.0
+
+        if bear >= 2 and pct_move < -0.3:
+            signal   = "BEAR"
+            strength = bear
+            note     = f"BTC 15m: {bear}/3 bearish ({pct_move:+.2f}%) — pause LONGs"
+        elif bull >= 2 and pct_move > 0.3:
+            signal   = "BULL"
+            strength = bull
+            note     = f"BTC 15m: {bull}/3 bullish ({pct_move:+.2f}%) — pause SHORTs"
+        else:
+            signal   = "NEUTRAL"
+            strength = 0
+            note     = f"BTC 15m: mixed ({bull}B/{bear}S, {pct_move:+.2f}%)"
+
+        print(f"   ₿ BTC 15m momentum: {signal} (strength={strength}, {pct_move:+.2f}%)")
+        return {"signal": signal, "strength": strength, "pct_move": pct_move, "note": note}
+
+    except Exception as e:
+        print(f"   ⚠ BTC 15m momentum failed: {e} — allowing trade")
+        return {"signal": "NEUTRAL", "strength": 0, "pct_move": 0.0,
+                "note": f"BTC 15m unavailable: {e}"}
+
+
+# ══════════════════════════════════════════════════════════════════
+# FUNCTION 7 — OI Delta (Open Interest direction, 1h change)
+# ══════════════════════════════════════════════════════════════════
+
+def get_oi_delta(symbols: list) -> dict:
+    """
+    Fetch hourly OI history for given symbols to confirm if a price move
+    is backed by new money (OI rising) or is just positioning noise (OI falling).
+
+    Rule:
+      - Price UP + OI RISING   → real breakout (strong LONG signal)
+      - Price UP + OI FALLING  → short-covering rally (weak, don't chase)
+      - Price DOWN + OI RISING → real breakdown (strong SHORT signal)
+      - Price DOWN + OI FALLING→ long liquidation flush (possible bounce)
+
+    Returns dict keyed by base coin:
+        {
+            "BTC": {
+                "oi_current":    5_200_000_000,
+                "oi_1h_ago":     5_000_000_000,
+                "oi_delta_pct":  +4.0,
+                "signal":        "RISING",  # RISING / FALLING / FLAT
+                "note":  "OI +4.0% in 1h — move backed by new money"
+            }
+        }
+    """
+    result  = {}
+    symbols = symbols[:20]   # cap — each needs a separate API call
+
+    for sym in symbols:
+        try:
+            r = requests.get(
+                f"{BYBIT_PUBLIC_URL}/v5/market/open-interest",
+                params={"category": "linear", "symbol": sym,
+                        "intervalTime": "1h", "limit": "2"},
+                timeout=8
+            )
+            r.raise_for_status()
+            items = r.json().get("result", {}).get("list", [])
+            if len(items) < 2:
+                time.sleep(0.05)
+                continue
+
+            # items[0] = most recent, items[1] = 1h ago
+            oi_now = float(items[0].get("openInterest", 0) or 0)
+            oi_1h  = float(items[1].get("openInterest", 0) or 0)
+            delta  = round((oi_now - oi_1h) / oi_1h * 100, 2) if oi_1h > 0 else 0.0
+
+            if delta > 2.0:
+                signal = "RISING"
+                note   = f"OI +{delta:.1f}% in 1h — new money entering"
+            elif delta < -2.0:
+                signal = "FALLING"
+                note   = f"OI {delta:.1f}% in 1h — positions being closed"
+            else:
+                signal = "FLAT"
+                note   = f"OI {delta:+.1f}% — stable"
+
+            coin = sym.replace("USDT", "")
+            result[coin] = {
+                "oi_current":   oi_now,
+                "oi_1h_ago":    oi_1h,
+                "oi_delta_pct": delta,
+                "signal":       signal,
+                "note":         note,
+            }
+            time.sleep(0.05)
+
+        except Exception as e:
+            coin = sym.replace("USDT", "")
+            result[coin] = {"oi_current": 0, "oi_1h_ago": 0, "oi_delta_pct": 0.0,
+                            "signal": "FLAT", "note": "OI data unavailable"}
+
+    rising  = sum(1 for v in result.values() if v["signal"] == "RISING")
+    falling = sum(1 for v in result.values() if v["signal"] == "FALLING")
+    print(f"   📊 OI delta: {len(result)} coins — "
+          f"RISING:{rising} FALLING:{falling} FLAT:{len(result) - rising - falling}")
+    return result
+
+
+# ══════════════════════════════════════════════════════════════════
 # MASTER FUNCTION — run_market_intel()
 # ══════════════════════════════════════════════════════════════════
 
 def run_market_intel(candidate_symbols: list) -> dict:
     """
-    Fetch all three intelligence layers and write market_context.json.
+    Fetch all seven intelligence layers and write market_context.json.
     candidate_symbols: list of USDT-suffixed symbols, e.g. ["BTCUSDT", ...]
     Returns combined dict.
+
+    Layers:
+      1. Fear & Greed Index
+      2. Funding rate + OI per coin
+      3. 4H technical indicators (RSI, EMA, vol, ATR, trend)
+      4. Delist blocklist (Bybit announcements)
+      5. 15m momentum per coin (entry timing)
+      6. BTC 15m momentum (pre-trade gate)
+      7. OI delta 1h (confirms move is real money, not noise)
     """
-    print("   🧠 Market Intelligence: fetching F&G + Funding/OI + 4H Indicators...")
+    print("   🧠 Market Intelligence: fetching 7 data layers...")
 
     fg       = get_fear_greed()
     funding  = get_funding_oi(candidate_symbols)
     indics   = get_coin_indicators(candidate_symbols)
+    delist   = list(get_delist_blocklist())          # layer 4
+    mom_15m  = get_15m_momentum(candidate_symbols)   # layer 5
+    btc_15m  = get_btc_15m_momentum()                # layer 6
+    oi_delta = get_oi_delta(candidate_symbols[:20])  # layer 7 — cap at 20 (rate limit)
 
     ctx = {
-        "fear_greed":   fg,
-        "funding_oi":   funding,
-        "indicators":   indics,
-        "generated_at": datetime.now(BKK).isoformat()
+        "fear_greed":    fg,
+        "funding_oi":    funding,
+        "indicators":    indics,
+        "delist_coins":  delist,        # list of coin base names to avoid
+        "momentum_15m":  mom_15m,       # {COIN: {signal, strength, note}}
+        "btc_15m":       btc_15m,       # {signal, strength, pct_move, note}
+        "oi_delta":      oi_delta,       # {COIN: {signal, oi_delta_pct, note}}
+        "generated_at":  datetime.now(BKK).isoformat()
     }
 
     try:
         with open(MARKET_CTX_FILE, "w", encoding="utf-8") as f:
             json.dump(ctx, f, indent=2)
-        print(f"   ✅ market_context.json written ({len(indics)} coins)")
+        print(f"   ✅ market_context.json written ({len(indics)} coins, "
+              f"{len(delist)} delisted, BTC_15m={btc_15m.get('signal','?')})")
     except Exception as e:
         print(f"   ⚠ Could not write market_context.json: {e}")
 
@@ -351,6 +644,43 @@ def format_fg_for_prompt(fg: dict) -> str:
         f"📊 FEAR & GREED INDEX: {fg['value']} — {fg['label']} ({fg['signal']})\n"
         f"   Rule: {fg['note']}"
     )
+
+
+def format_15m_oi_for_prompt(mom_15m: dict, oi_delta: dict) -> str:
+    """
+    Return compact 15m momentum + OI delta table for Claude prompt.
+    Tells Claude whether entry timing is aligned and if OI confirms the move.
+    """
+    if not mom_15m and not oi_delta:
+        return ""
+
+    lines = ["⏱ 15m ENTRY TIMING + OI CONFIRMATION (use for entry quality, not direction):"]
+    lines.append("COIN     | 15m SIGNAL | STRENGTH | VOL SPIKE | OI DELTA | NOTE")
+    lines.append("-" * 78)
+
+    all_coins = sorted(set(list(mom_15m.keys()) + list(oi_delta.keys())))
+    for coin in all_coins:
+        m  = mom_15m.get(coin, {})
+        oi = oi_delta.get(coin, {})
+        sig      = m.get("signal", "?")
+        strength = m.get("strength", 0)
+        spike    = "YES" if m.get("vol_spike") else "no"
+        oi_sig   = oi.get("signal", "?")
+        oi_pct   = oi.get("oi_delta_pct", 0)
+        note     = m.get("note", "")
+        lines.append(
+            f"{coin:<8} | {sig:<10} | {strength}/3      | {spike:<9} | "
+            f"{oi_sig:<8}({oi_pct:+.1f}%) | {note}"
+        )
+
+    lines.append("")
+    lines.append("RULES:")
+    lines.append("  LONG:  15m=BULL confirms entry timing. OI RISING + price up = real breakout.")
+    lines.append("         OI FALLING + price up = short-covering rally — reduce confidence 3%.")
+    lines.append("  SHORT: 15m=BEAR confirms entry timing. OI RISING + price down = real breakdown.")
+    lines.append("         15m=BULL when trying to SHORT = counter-momentum — require 97%+ conf.")
+    lines.append("  Both:  VOL SPIKE on 15m = extra confirmation. No spike = weaker entry.")
+    return "\n".join(lines)
 
 
 def format_indicators_for_prompt(indics: dict, funding: dict) -> str:
@@ -396,11 +726,11 @@ def format_indicators_for_prompt(indics: dict, funding: dict) -> str:
 
 if __name__ == "__main__":
     test_symbols = [
-        "BTCUSDT", "ETHUSDT", "SOLUSDT", "AAVEUSDT", "AEROUSDT",
-        "JUPUSDT", "TIAUSDT", "XPLAUSDT", "NEARUSDT", "EIGENUSDT"
+        "BTCUSDT", "ETHUSDT", "SOLUSDT", "AAVEUSDT", "LINKUSDT",
+        "LTCUSDT", "ADAUSDT", "NEARUSDT", "SUIUSDT", "DOTUSDT"
     ]
     print("=" * 60)
-    print("  WHALE-STREAM Market Intelligence — Standalone Test")
+    print("  WHALE-STREAM Market Intelligence v47.63 — Standalone Test")
     print("=" * 60)
     ctx = run_market_intel(test_symbols)
     print()
@@ -408,4 +738,9 @@ if __name__ == "__main__":
     print()
     print(format_indicators_for_prompt(ctx["indicators"], ctx["funding_oi"]))
     print()
-    print("✅ market_context.json written. Test complete.")
+    print(format_15m_oi_for_prompt(ctx["momentum_15m"], ctx["oi_delta"]))
+    print()
+    print("BTC 15m gate:", ctx["btc_15m"].get("note"))
+    print("Delist blocklist:", ctx.get("delist_coins", []))
+    print()
+    print("✅ market_context.json written. All 7 layers fetched.")

@@ -217,6 +217,15 @@ try:
 except Exception:
     pass  # fail silently — no dynamic SHORT blocks applied (static SHORT REPAIR MODE still active)
 
+# ── Market Intelligence module (v47.63) — BTC 15m gate ──────────────────────
+try:
+    from whale_stream_market_intel import load_market_context
+    _TRADER_INTEL_OK = True
+except ImportError:
+    _TRADER_INTEL_OK = False
+    def load_market_context():
+        return {}
+
 def log(msg):
     """Write to console and trader_log.txt with timestamp."""
     bkk = datetime.now(BKK).strftime("%Y-%m-%d %H:%M BKK")
@@ -2283,6 +2292,46 @@ def main():
         _n_tps = sum(1 for p in [tp1, tp2, tp3, tp4] if p)
         print(f"   Entry : {entry:.6g}  SL: {sl:.6g}  TP1: {tp1:.6g}{tp2_display}{tp3_display}{tp4_display}  → {_n_tps}×25% quad-TP{tier_display}")
         print(f"   Qty   : {qty} contracts  (≈${position_val:.2f} position)")
+
+        # ── BTC 15m momentum gate (v47.63) — skip LONG during BTC dump, SHORT during BTC pump ──
+        if _TRADER_INTEL_OK:
+            try:
+                _mctx_t      = load_market_context()
+                _btc15m_t    = _mctx_t.get("btc_15m", {})
+                _btc15m_sig_t  = _btc15m_t.get("signal", "NEUTRAL")
+                _btc15m_str_t  = _btc15m_t.get("strength", 0)
+                _btc15m_pct_t  = _btc15m_t.get("pct_move", 0.0)
+                _btc15m_note_t = _btc15m_t.get("note", "")
+                if _btc15m_sig_t == "BEAR" and _btc15m_str_t >= 2 and side == "Buy":
+                    _skip_msg = (
+                        f"⛔ BTC 15m GATE BLOCKED {coin} LONG\n"
+                        f"BTC is dumping on 15m (signal=BEAR strength={_btc15m_str_t}/3, "
+                        f"move={_btc15m_pct_t:+.2f}%)\n"
+                        f"Skipping LONG this cycle to avoid 10x leveraged headwind.\n"
+                        f"Note: {_btc15m_note_t}"
+                    )
+                    print(f"   ⛔ BTC 15m BEAR gate — LONG {coin} SKIPPED ({_btc15m_pct_t:+.2f}% move)")
+                    log(f"   ⛔ BTC 15m BEAR gate — LONG {coin} skipped (strength {_btc15m_str_t}/3, {_btc15m_pct_t:+.2f}%)")
+                    send_telegram_alert(_skip_msg)
+                    print()
+                    continue
+                elif _btc15m_sig_t == "BULL" and _btc15m_str_t >= 2 and side == "Sell":
+                    _skip_msg = (
+                        f"⛔ BTC 15m GATE BLOCKED {coin} SHORT\n"
+                        f"BTC is pumping on 15m (signal=BULL strength={_btc15m_str_t}/3, "
+                        f"move={_btc15m_pct_t:+.2f}%)\n"
+                        f"Skipping SHORT this cycle to avoid squeeze risk.\n"
+                        f"Note: {_btc15m_note_t}"
+                    )
+                    print(f"   ⛔ BTC 15m BULL gate — SHORT {coin} SKIPPED ({_btc15m_pct_t:+.2f}% move)")
+                    log(f"   ⛔ BTC 15m BULL gate — SHORT {coin} skipped (strength {_btc15m_str_t}/3, {_btc15m_pct_t:+.2f}%)")
+                    send_telegram_alert(_skip_msg)
+                    print()
+                    continue
+                else:
+                    print(f"   ⚡ BTC 15m: {_btc15m_sig_t} (strength {_btc15m_str_t}/3) — gate PASSED")
+            except Exception as _btcte:
+                print(f"   ⚠ BTC 15m gate check failed: {_btcte} — proceeding")
 
         # ── Place entry order — always NO built-in TP; quad-TP closes handle exits ──
         ok, result  = place_order(symbol, side, qty, entry, sl, None, info)
