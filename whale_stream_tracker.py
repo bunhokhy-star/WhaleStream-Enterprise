@@ -110,7 +110,7 @@ except ImportError:
 
 # ── Bybit Demo balance file (written by whale_stream_trader.py) ─
 BYBIT_BALANCE_FILE = os.path.join(SCRIPT_DIR, "bybit_balance.json")
-BYBIT_START_BALANCE = 500.00   # initial deposit — MUST match BYBIT_START_BALANCE in whale_stream_trader.py
+BYBIT_START_BALANCE = 5000.00  # $5,000 demo scale-up — MUST match BYBIT_START_BALANCE in whale_stream_trader.py
 PAUSED_FILE        = os.path.join(SCRIPT_DIR, "paused.flag")   # circuit-breaker flag
 
 # ── Bybit Demo API auth (same creds as whale_stream_trader.py) ─

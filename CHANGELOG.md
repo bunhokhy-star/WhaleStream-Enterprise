@@ -1,5 +1,32 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.64 — 2026-08-03 — $5,000 demo scale-up: $150 margin, entry zone 0–1.5%, both directions
+
+### Overview
+Demo account scaled to $5,000 for meaningful growth proof before real capital.
+
+### `whale_stream_trader.py`
+- `TRADE_MARGIN_USDT`: $20 → **$150** (7.5x increase; $1,500 notional per trade at 10x)
+- `MAX_OPEN_TRADES`: 6 → **4** (manageable at higher margin)
+- `BYBIT_START_BALANCE`: 500 → **5000** (must match tracker.py)
+- `LONG_ONLY_MODE = False` — both LONG and SHORT enabled (reverted wrong idea)
+  - A futures trader makes money in both directions based on market trend
+  - Quality is enforced by Strategist veto + BTC regime gate + confidence floors
+  - Banning SHORTs entirely = spot trading mindset applied to futures
+
+### `whale_stream_tracker.py`
+- `BYBIT_START_BALANCE`: 500 → **5000** (synced with trader.py)
+
+### `whale_stream_bot.py`
+- Entry zone TOP: "1–3% below" → **"0–1.5% below"** — prefer entries at or near current price
+  - Old 1–3% setting caused 67% signal expiry rate
+  - A filled trade at 1% worse price beats an expired signal every time
+
+### `bybit_balance.json`
+- Reset to `{"balance": 5010.0, "start_balance": 5000.0, ...}`
+
+---
+
 ## v47.63 — 2026-08-01 — Market intelligence: MTF + funding + delist + BTC 15m gate + OI delta
 
 ### Overview

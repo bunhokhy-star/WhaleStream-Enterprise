@@ -949,7 +949,7 @@ If the best LONG candidate only scores 1–2 on the template, output STAY OUT.
 ════════════════════════════════════════════════════════════
 ENTRY RULE (LONGS): Entry MUST be Retest Zone / Liquidity Sweep Reclaim / Support-Resistance Reclaim / Breakout Retest. Never chase current price.
 ENTRY ZONE WIDTH RULE (CRITICAL — REDUCES SIGNAL EXPIRY): Historical data shows 54% of LONG signals expire because price never pulls back to the entry zone within 72 hours.
-  • Set entry zone TOP at 1–3% below current price OR at current price if BTC momentum is positive (BTC 24h% > +1%) or funding rate is strongly negative (< −0.03%).
+  • Set entry zone TOP at 0–1.5% below current price OR at current price if BTC momentum is positive (BTC 24h% > +1%) or funding rate is strongly negative (< −0.03%). PREFER entries at or very near current price — a filled trade at 1% worse price beats an expired signal every time.
   • Entry zone BOTTOM must be at least 5–8% below the TOP (giving price room to pull back).
   • Minimum zone width: entry_top - entry_bottom ≥ 4% of entry_top. A zone narrower than 4% will likely never fill.
   • For Stage 2 expansion plays already in motion (coin has already broken out and is trending): entry zone may overlap with current price (near-market entry), with SL below the breakout base.

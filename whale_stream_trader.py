@@ -114,9 +114,9 @@ except ImportError:
 try:
     from local_config import TRADE_MARGIN_USDT        # noqa — set in local_config.py to override
 except ImportError:
-    TRADE_MARGIN_USDT = 20  # default: $20/trade; set TRADE_MARGIN_USDT in local_config.py for live
-LEVERAGE            = 10    # 10x leverage → $200 position per trade
-MAX_OPEN_TRADES     = 6     # max 6 simultaneous positions (3 long + 3 short)
+    TRADE_MARGIN_USDT = 150  # $5,000 demo scale-up — $150/trade; set in local_config.py to override
+LEVERAGE            = 10    # 10x leverage → $1,500 position per trade
+MAX_OPEN_TRADES     = 4     # max 4 simultaneous positions (LONG only)
 DAILY_PROFIT_TARGET = 50.0  # USD — scale up size once daily P&L hits this
 
 # Google Sheets (same as whale_stream_bot.py)
@@ -147,6 +147,12 @@ BYBIT_PRICE_CLAMP_PCT = 2.5   # clamp radius: mark ± 2.5%
 # Risk cap: never deploy more than this fraction of total balance
 MAX_DEPLOYED_FRACTION = 0.50   # 50%
 
+# ── DIRECTION MODE ───────────────────────────────────────────────────────────
+# Trade BOTH directions. Quality is controlled by Strategist veto + BTC regime
+# filter + confidence floors. Banning SHORTs entirely is WRONG — a futures
+# trader makes money both ways. Fix bad signals, not the direction.
+LONG_ONLY_MODE = False  # both LONG and SHORT enabled
+
 # Telegram (same group as bot and tracker)
 try:
     from local_config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
@@ -159,7 +165,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Balance file (read by whale_stream_tracker.py for dashboard)
 BYBIT_BALANCE_FILE  = os.path.join(SCRIPT_DIR, "bybit_balance.json")
-BYBIT_START_BALANCE = 500.00   # initial deposit — MUST match BYBIT_START_BALANCE in whale_stream_tracker.py
+BYBIT_START_BALANCE = 5000.00  # $5,000 demo scale-up — MUST match BYBIT_START_BALANCE in whale_stream_tracker.py
 LOG_FILE   = os.path.join(SCRIPT_DIR, "trader_log.txt")
 
 # Skip-counter: after this many consecutive mark-price skips, mark signal UNREACHABLE
@@ -1962,6 +1968,9 @@ def main():
         dir_label = "LONG 🟢" if side == "Buy" else "SHORT 🔴"
 
         print(f"── {coin} {dir_label} ──────────────────────────")
+
+        # ── DIRECTION GATE — disabled (trade both LONG and SHORT per market trend) ──
+        # LONG_ONLY_MODE is False — SHORTs allowed; quality enforced by Strategist
 
         # ── SHORT REPAIR MODE — skip unless approved recovery coin ─────────────
         # SHORT_RECOVERY_COINS (H, FF) defined at module level — bypass REPAIR MODE
