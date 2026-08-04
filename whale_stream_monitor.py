@@ -251,6 +251,50 @@ def fmt_price(price, tick):
     return f"{price:.{decimals}f}"
 
 
+def close_position_at_market(symbol, side, size):
+    """Close a position at market (reduce-only IOC market order)."""
+    close_side = "Sell" if side == "Buy" else "Buy"
+    body = {
+        "category":       BYBIT_CATEGORY,
+        "symbol":         symbol,
+        "side":           close_side,
+        "orderType":      "Market",
+        "qty":            str(size),
+        "timeInForce":    "IOC",
+        "reduceOnly":     True,
+        "closeOnTrigger": False,
+        "positionIdx":    0,
+    }
+    r = bybit_request("POST", "/v5/order/create", body=body)
+    return r.get("retCode") == 0, r.get("retMsg", "unknown")
+
+
+def get_btc_15m_momentum():
+    """
+    Fetch last 4 BTC 15m candles. Return "BEAR" if ≥3 consecutive completed
+    candles closed red (close < open), "BULL" if ≥3 closed green, None if mixed.
+    Used to detect market direction reversal against an open position.
+    """
+    r = bybit_request("GET", "/v5/market/kline",
+                      {"category": BYBIT_CATEGORY, "symbol": "BTCUSDT",
+                       "interval": "15", "limit": "4"})
+    if r.get("retCode") != 0:
+        return None
+    candles = r.get("result", {}).get("list", [])
+    # Bybit returns newest first. Index 0 = current (incomplete). Indices 1-3 = last 3 completed.
+    completed = candles[1:4]
+    if len(completed) < 3:
+        return None
+    # candle format: [ts, open, high, low, close, volume, turnover]
+    bear = sum(1 for c in completed if float(c[4]) < float(c[1]))   # close < open
+    bull = sum(1 for c in completed if float(c[4]) > float(c[1]))   # close > open
+    if bear >= 3:
+        return "BEAR"
+    if bull >= 3:
+        return "BULL"
+    return None
+
+
 def move_sl_to_breakeven(symbol, side, avg_price):
     """Move stop loss to avgPrice (breakeven) using /v5/position/trading-stop."""
     tick = get_instrument_tick(symbol)
@@ -581,6 +625,10 @@ def run_monitor():
         return
     log(f"   Bybit open positions: {len(current_positions)} ({', '.join(current_positions) or 'none'})")
 
+    # Fetch BTC 15m momentum once per run (used for reversal close check)
+    btc_momentum = get_btc_15m_momentum()
+    log(f"   BTC 15m momentum: {btc_momentum or 'MIXED'}")
+
     alerts_fired = 0
 
     # ── Check for changes in previously tracked positions ──────
@@ -616,35 +664,78 @@ def run_monitor():
                 log(f"   🎯 {symbol}: partial close detected  {prev_size} → {curr_size} ({reduction_pct:.0f}% closed)")
                 direction = "LONG" if prev_side == "Buy" else "SHORT"
 
-                # Check if SL-to-BE is needed
-                sl_note = ""
-                curr_sl = curr.get("sl", 0)
-                # Fallback: use live avgPrice if prev_avg is 0 (e.g. state file wiped)
+                # ── PROGRESSIVE TRAILING SL (v47.65) ───────────────────────────
+                # tp_hits: 0=none yet, 1=TP1 hit (SL→BE), 2=TP2 hit (SL→TP1), 3=TP3 hit (SL→TP2)
+                sl_note  = ""
+                curr_sl  = curr.get("sl", 0)
+                tp_hits  = prev.get("tp_hits", 0)
+                tp_prc   = prev.get("tp_prices", {})
                 _effective_avg = prev_avg if prev_avg > 0 else float(curr.get("avgPrice", 0) or 0)
-                be_needed = False
-                if not prev.get("be_set"):   # skip if SL-to-BE already applied this trade
+
+                if tp_hits == 0:
+                    # First partial close = TP1 hit → SL to breakeven
+                    be_needed = False
                     if prev_side == "Buy"  and (curr_sl <= 0 or curr_sl < _effective_avg):
                         be_needed = True
                     elif prev_side == "Sell" and (curr_sl <= 0 or curr_sl > _effective_avg):
                         be_needed = True
-
-                if be_needed:
-                    ok, result = move_sl_to_breakeven(symbol, prev_side, curr["avgPrice"])  # use live avg, not stale prev_avg
-                    if ok:
-                        curr["be_set"] = True   # prevent re-firing on TP2/TP3 partial closes
-                        was_str = f"{curr_sl:.6g}" if curr_sl else "none"   # pre-compute to avoid invalid f-string format spec
-                        sl_note = (
-                            f"\n  🛡 SL moved to breakeven: {result:.6g}"
-                            f" (was: {was_str})"
-                        )
-                        log(f"   🛡 SL moved to BE for {symbol}: {result}")
+                    if be_needed:
+                        ok, result = move_sl_to_breakeven(symbol, prev_side, curr["avgPrice"])
+                        if ok:
+                            curr["be_set"]  = True
+                            curr["tp_hits"] = 1
+                            was_str = f"{curr_sl:.6g}" if curr_sl else "none"
+                            sl_note = (
+                                f"\n  🛡 TP1 ✅  SL → breakeven: {result:.6g}"
+                                f" (was: {was_str})"
+                            )
+                            log(f"   🛡 SL to BE for {symbol}: {result}")
+                        else:
+                            sl_note = f"\n  ⚠ SL-to-BE failed: {result}"
+                            log(f"   ⚠ SL-to-BE failed for {symbol}: {result}")
                     else:
-                        sl_note = f"\n  ⚠ SL-to-BE failed: {result}"
-                        log(f"   ⚠ SL-to-BE failed for {symbol}: {result}")
-                elif prev.get("be_set"):
-                    sl_note = f"\n  ✓ SL-to-BE already applied (skipping)"
+                        sl_note = f"\n  ✓ SL already at/above entry ({curr_sl:.6g})"
+                        curr["tp_hits"] = 1   # still mark TP1 done
+
+                elif tp_hits == 1:
+                    # Second partial close = TP2 hit → SL to TP1 price (lock TP1 profit)
+                    _tp1 = tp_prc.get("tp1", 0)
+                    if _tp1 > 0:
+                        ok, result = move_sl_to_breakeven(symbol, prev_side, _tp1)
+                        if ok:
+                            curr["tp_hits"] = 2
+                            sl_note = (
+                                f"\n  📈 TP2 ✅  Trailing SL → TP1 @ {_tp1:.6g}"
+                                f" (TP1 profit locked in)"
+                            )
+                            log(f"   📈 Trailing SL to TP1 price for {symbol}: {result}")
+                        else:
+                            sl_note = f"\n  ⚠ Trailing SL to TP1 failed: {result}"
+                    else:
+                        sl_note = "\n  ⚠ TP2 hit but TP1 price not in state — SL not moved"
+                        curr["tp_hits"] = 2
+
+                elif tp_hits == 2:
+                    # Third partial close = TP3 hit → SL to TP2 price (lock TP2 profit)
+                    _tp2 = tp_prc.get("tp2", 0)
+                    if _tp2 > 0:
+                        ok, result = move_sl_to_breakeven(symbol, prev_side, _tp2)
+                        if ok:
+                            curr["tp_hits"] = 3
+                            sl_note = (
+                                f"\n  🚀 TP3 ✅  Trailing SL → TP2 @ {_tp2:.6g}"
+                                f" (TP1+TP2 profit locked — riding to TP4)"
+                            )
+                            log(f"   🚀 Trailing SL to TP2 price for {symbol}: {result}")
+                        else:
+                            sl_note = f"\n  ⚠ Trailing SL to TP2 failed: {result}"
+                    else:
+                        sl_note = "\n  ⚠ TP3 hit but TP2 price not in state — SL not moved"
+                        curr["tp_hits"] = 3
+
                 else:
-                    sl_note = f"\n  ✓ SL already at/above breakeven ({curr_sl:.6g})"
+                    # TP4 or beyond — SL already at TP2/TP3, let it ride
+                    sl_note = f"\n  ✓ TP4 zone — SL already trailing (tp_hits={tp_hits})"
 
                 _remaining_pct = round(curr_size / prev_size * 100) if prev_size else 0
                 msg = (
@@ -659,24 +750,25 @@ def run_monitor():
                 send_alert(msg)
                 alerts_fired += 1
 
-                # Update stored size to current
-                # Always carry be_set forward — it is only set on curr when be_needed=True,
-                # so TP2/TP3 partial closes would lose it without this propagation.
-                if prev.get("be_set") and not curr.get("be_set"):
-                    curr["be_set"] = True
+                # Update stored size — carry persistent fields forward from prev
+                for _pf in ("be_set", "tp_hits", "tp_prices", "opened_at", "reversal_closed"):
+                    if _pf in prev and _pf not in curr:
+                        curr[_pf] = prev[_pf]
                 state["positions"][symbol] = curr  # curr already has updated sl/size
 
             elif curr_size > prev_size * 1.20:
                 # Size grew significantly — position was added to; update state silently
                 log(f"   ℹ {symbol}: position size grew {prev_size} → {curr_size} (position added or avg'd down)")
-                if prev.get("be_set") and not curr.get("be_set"):
-                    curr["be_set"] = True
+                for _pf in ("be_set", "tp_hits", "tp_prices", "opened_at", "reversal_closed"):
+                    if _pf in prev and _pf not in curr:
+                        curr[_pf] = prev[_pf]
                 state["positions"][symbol] = curr
 
             else:
                 # Normal — just update sl/unrealised fields
-                if prev.get("be_set") and not curr.get("be_set"):
-                    curr["be_set"] = True
+                for _pf in ("be_set", "tp_hits", "tp_prices", "opened_at", "reversal_closed"):
+                    if _pf in prev and _pf not in curr:
+                        curr[_pf] = prev[_pf]
                 state["positions"][symbol] = curr
 
     # ── Add newly opened positions to state + place TP orders ─
@@ -684,6 +776,20 @@ def run_monitor():
     for symbol, curr in current_positions.items():
         if symbol not in state["positions"]:
             log(f"   ➕ New position tracked: {symbol} {curr['side']} {curr['size']} @ {curr['avgPrice']:.6g}")
+            # Stamp entry fields for progressive trailing SL
+            curr["tp_hits"]  = 0
+            curr["opened_at"] = datetime.now(BKK).strftime("%Y-%m-%d %H:%M")
+            curr["reversal_closed"] = False
+            # Fetch TP prices from Sheets and store in state for trailing SL use
+            try:
+                coin = symbol.replace("USDT", "").replace("PERP", "").upper()
+                direction = "LONG" if curr["side"] == "Buy" else "SHORT"
+                tp_prices = _get_tp_prices_from_sheet(coin, direction)
+                curr["tp_prices"] = tp_prices
+                log(f"   📌 TP prices for {symbol}: {tp_prices}")
+            except Exception as _tp_e:
+                curr["tp_prices"] = {}
+                log(f"   ⚠ Could not fetch TP prices for {symbol}: {_tp_e}")
             state["positions"][symbol] = curr
             newly_tracked.add(symbol)
             # Auto-place 4×25% reduce-only TP limit orders.
@@ -711,6 +817,45 @@ def run_monitor():
                 _place_tps_for_new_position(symbol, curr["side"], curr["size"])
             except Exception as _tpe:
                 log(f"   ⚠ TP re-placement error for {symbol}: {_tpe}")
+
+    # ── BTC reversal close check (v47.65) ──────────────────────────────────
+    # If LONG open and BTC 15m flips BEAR (3 consecutive red candles) → close.
+    # If SHORT open and BTC 15m flips BULL (3 consecutive green candles) → close.
+    # Each position can only be reversal-closed once (reversal_closed sentinel).
+    if btc_momentum in ("BEAR", "BULL"):
+        for symbol, pos in list(state["positions"].items()):
+            if pos.get("reversal_closed"):
+                continue
+            side   = pos.get("side", "")
+            size   = float(pos.get("size", 0) or 0)
+            if size <= 0:
+                continue
+            should_close = (
+                (side == "Buy"  and btc_momentum == "BEAR") or
+                (side == "Sell" and btc_momentum == "BULL")
+            )
+            if not should_close:
+                continue
+            direction = "LONG" if side == "Buy" else "SHORT"
+            log(f"   ⚠ BTC momentum reversal {btc_momentum} vs {direction} {symbol} — closing at market")
+            ok, msg_r = close_position_at_market(symbol, side, size)
+            if ok:
+                pos["reversal_closed"] = True
+                state["positions"][symbol] = pos
+                coin = symbol.replace("USDT", "").replace("PERP", "").upper()
+                send_alert(
+                    f"🔄 <b>REVERSAL CLOSE — {coin}</b>\n"
+                    f"  BTC 15m flipped {btc_momentum} — {direction} position closed at market\n"
+                    f"  Size: {size}  |  🕐 {bkk.strftime('%H:%M BKK')}"
+                )
+                alerts_fired += 1
+                log(f"   ✅ Reversal close OK for {symbol}")
+            else:
+                log(f"   ❌ Reversal close FAILED for {symbol}: {msg_r}")
+                send_alert(
+                    f"⚠ <b>REVERSAL CLOSE FAILED — {symbol}</b>\n"
+                    f"  Tried to close {direction} (BTC {btc_momentum}) — {msg_r}"
+                )
 
     save_state(state)
 

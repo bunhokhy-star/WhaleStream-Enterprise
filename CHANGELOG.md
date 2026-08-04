@@ -1,5 +1,28 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.65 — 2026-08-04 — Active position management: progressive trailing SL + reversal close + emergency close
+
+### Overview
+Watchdog now closes all positions when circuit breaker fires.
+Monitor now trails SL progressively through TP hits, and closes positions if BTC 15m reverses against us.
+
+### `whale_stream_monitor.py`
+- **Progressive trailing SL** (`tp_hits` counter):
+  - TP1 hit (first partial close) → SL to breakeven
+  - TP2 hit → SL to TP1 price (lock TP1 profit)
+  - TP3 hit → SL to TP2 price (lock TP1+TP2 profit, ride to TP4)
+- **New position detection**: stamps `tp_hits=0`, `opened_at`, `reversal_closed=False`, and fetches TP prices from Sheets into state
+- **BTC 15m reversal close**: if LONG open and BTC 15m turns BEAR (3 red candles), close at market; vice versa for SHORT
+- **State carry-forward**: all branches (partial close, size grew, normal) now carry `be_set`, `tp_hits`, `tp_prices`, `opened_at`, `reversal_closed` from prev state
+- New helpers: `close_position_at_market()`, `get_btc_15m_momentum()`
+
+### `whale_stream_watchdog.py`
+- **Emergency close**: when circuit breaker fires (`paused.flag` created + no sentinel), Watchdog closes ALL open positions at market and sends Telegram alert
+- **Sentinel file** (`emergency_close.sentinel`): prevents repeated closes on subsequent CB cycles; deleted when CB is cleared
+- New helpers: `bybit_request_wd()`, `emergency_close_all_positions()`
+- New imports: `hmac`, `hashlib`, `urlencode`
+- Bybit credentials imported from `local_config.py`
+
 ## v47.64 — 2026-08-03 — $5,000 demo scale-up: $150 margin, entry zone 0–1.5%, both directions
 
 ### Overview

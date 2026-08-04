@@ -29,6 +29,9 @@ import re
 import time
 import subprocess
 import requests
+import hmac
+import hashlib
+from urllib.parse import urlencode
 from datetime import datetime, timezone, timedelta
 
 # ── UTF-8 fix (prevents crash in Task Scheduler CP1252) ───────
@@ -39,20 +42,28 @@ if hasattr(sys.stderr, "buffer"):
 
 # ── Credentials ───────────────────────────────────────────────
 try:
-    from local_config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+    from local_config import (
+        TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
+        BYBIT_API_KEY, BYBIT_API_SECRET,
+    )
+    BYBIT_BASE_URL = "https://api-demo.bybit.com"
 except ImportError:
     TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
     TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID", "")
+    BYBIT_API_KEY      = os.getenv("BYBIT_API_KEY", "")
+    BYBIT_API_SECRET   = os.getenv("BYBIT_API_SECRET", "")
+    BYBIT_BASE_URL     = "https://api-demo.bybit.com"
 
 # ── Paths ──────────────────────────────────────────────────────
-BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
-BOT_LOG         = os.path.join(BASE_DIR, "bot_log.txt")
-STRATEGIST_LOG  = os.path.join(BASE_DIR, "strategist_log.txt")
-TRADER_LOG      = os.path.join(BASE_DIR, "trader_log.txt")
-TRACKER_LOG     = os.path.join(BASE_DIR, "tracker_log.txt")
-MONITOR_LOG     = os.path.join(BASE_DIR, "monitor_log.txt")
-BALANCE_FILE    = os.path.join(BASE_DIR, "bybit_balance.json")
-PAUSED_FLAG     = os.path.join(BASE_DIR, "paused.flag")
+BASE_DIR                 = os.path.dirname(os.path.abspath(__file__))
+BOT_LOG                  = os.path.join(BASE_DIR, "bot_log.txt")
+STRATEGIST_LOG           = os.path.join(BASE_DIR, "strategist_log.txt")
+TRADER_LOG               = os.path.join(BASE_DIR, "trader_log.txt")
+TRACKER_LOG              = os.path.join(BASE_DIR, "tracker_log.txt")
+MONITOR_LOG              = os.path.join(BASE_DIR, "monitor_log.txt")
+BALANCE_FILE             = os.path.join(BASE_DIR, "bybit_balance.json")
+PAUSED_FLAG              = os.path.join(BASE_DIR, "paused.flag")
+EMERGENCY_CLOSE_SENTINEL = os.path.join(BASE_DIR, "emergency_close.sentinel")
 
 BKK = timezone(timedelta(hours=7))
 
@@ -397,6 +408,88 @@ def build_critical_alert(now_str, trade_last, trade_ago, bal_str):
 
 
 # ─────────────────────────────────────────────────────────────
+# BYBIT AUTH — Emergency close (v47.65)
+# ─────────────────────────────────────────────────────────────
+BYBIT_CATEGORY = "linear"
+BYBIT_RECV_WINDOW = "5000"
+
+def bybit_request_wd(method, endpoint, params=None, body=None):
+    """Authenticated Bybit V5 request (same pattern as monitor.py)."""
+    ts = str(int(time.time() * 1000))
+    if method == "GET":
+        qs = urlencode(params) if params else ""
+        sign_str = ts + BYBIT_API_KEY + BYBIT_RECV_WINDOW + qs
+    else:
+        import json as _json
+        sign_str = ts + BYBIT_API_KEY + BYBIT_RECV_WINDOW + (_json.dumps(body) if body else "")
+    sig = hmac.new(
+        BYBIT_API_SECRET.encode("utf-8"),
+        sign_str.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    headers = {
+        "X-BAPI-API-KEY":       BYBIT_API_KEY,
+        "X-BAPI-TIMESTAMP":     ts,
+        "X-BAPI-SIGN":          sig,
+        "X-BAPI-RECV-WINDOW":   BYBIT_RECV_WINDOW,
+        "X-BAPI-SIGN-TYPE":     "2",
+        "X-BAPI-DEMO-TRADING":  "1",
+        "Content-Type":         "application/json",
+    }
+    url = BYBIT_BASE_URL + endpoint
+    try:
+        if method == "GET":
+            r = requests.get(url, headers=headers, params=params, timeout=10)
+        else:
+            r = requests.post(url, headers=headers, json=body, timeout=10)
+        return r.json()
+    except Exception as e:
+        return {"retCode": -1, "retMsg": str(e)}
+
+
+def emergency_close_all_positions():
+    """
+    Fetch all open linear positions and close each at market (reduce-only IOC).
+    Returns list of (symbol, ok, msg) tuples.
+    """
+    r = bybit_request_wd("GET", "/v5/position/list",
+                         {"category": BYBIT_CATEGORY, "settleCoin": "USDT"})
+    if r.get("retCode") != 0:
+        return [("ALL", False, f"position list failed: {r.get('retMsg')}")]
+
+    positions = [
+        p for p in r.get("result", {}).get("list", [])
+        if float(p.get("size", 0) or 0) > 0
+    ]
+    if not positions:
+        return []
+
+    results = []
+    for pos in positions:
+        symbol  = pos["symbol"]
+        side    = pos["side"]        # "Buy" or "Sell"
+        size    = pos["size"]
+        close_side = "Sell" if side == "Buy" else "Buy"
+        body = {
+            "category":       BYBIT_CATEGORY,
+            "symbol":         symbol,
+            "side":           close_side,
+            "orderType":      "Market",
+            "qty":            str(size),
+            "timeInForce":    "IOC",
+            "reduceOnly":     True,
+            "closeOnTrigger": False,
+            "positionIdx":    0,
+        }
+        cr = bybit_request_wd("POST", "/v5/order/create", body=body)
+        ok  = cr.get("retCode") == 0
+        msg = cr.get("retMsg", "unknown")
+        results.append((symbol, ok, msg))
+        time.sleep(0.3)  # small delay between orders
+    return results
+
+
+# ─────────────────────────────────────────────────────────────
 # MAIN
 # ─────────────────────────────────────────────────────────────
 
@@ -442,6 +535,35 @@ if __name__ == "__main__":
     tracker_ok, tracker_last, tracker_ago = check_tracker()
     monitor_ok, monitor_last, monitor_ago = check_monitor()
     paused    = os.path.exists(PAUSED_FLAG)
+
+    # ── Emergency close (v47.65) ──────────────────────────────────────────────
+    # When CB activates (paused=True + sentinel missing) → close all positions.
+    # Sentinel prevents repeated closes on subsequent Watchdog cycles while CB
+    # remains active.  When CB is cleared (paused=False + sentinel present) →
+    # delete sentinel so the next CB activation can trigger a fresh close.
+    if paused and not os.path.exists(EMERGENCY_CLOSE_SENTINEL):
+        print("   🚨 CB ACTIVE + no sentinel — emergency closing all positions...")
+        _ec_results = emergency_close_all_positions()
+        # Write sentinel regardless (even if 0 positions — prevents infinite retries)
+        with open(EMERGENCY_CLOSE_SENTINEL, "w") as _ecf:
+            _ecf.write(datetime.now(BKK).strftime("%Y-%m-%d %H:%M BKK"))
+        if _ec_results:
+            _ec_lines = []
+            for _sym, _ok, _msg in _ec_results:
+                _ec_lines.append(f"  {'✅' if _ok else '❌'} {_sym}: {_msg}")
+            send_telegram(
+                "🚨 <b>EMERGENCY CLOSE — Circuit Breaker Fired</b>\n"
+                + "\n".join(_ec_lines)
+                + "\n⛔ All positions closed at market. New orders paused."
+            )
+            print(f"   Emergency close results: {_ec_results}")
+        else:
+            print("   Emergency close: no open positions found.")
+    elif not paused and os.path.exists(EMERGENCY_CLOSE_SENTINEL):
+        os.remove(EMERGENCY_CLOSE_SENTINEL)
+        print("   ✅ CB cleared — emergency_close.sentinel removed (ready for next activation)")
+    # ── end emergency close ───────────────────────────────────────────────────
+
     bal_stale, bal_hours, bal_str, bal_updated = check_balance()
 
     # ── Build status lines ────────────────────────────────────
