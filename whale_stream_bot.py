@@ -404,6 +404,43 @@ def _mtf_prescreen(all_coins, n_long=15, n_short=15):
     import time as _time
     print(f"   🔍 MTF pre-screening {len(all_coins)} coins (Daily+4H)...")
 
+    # ── v47.70 #487: Historical WR per coin — market decides ranking ──────────
+    # Load trade_log.json and compute per-coin WR (last 20 resolved trades).
+    # Coins that consistently win get boosted in the ranking; chronic losers sink.
+    # This is the "intelligence" layer: no hardcoded bans, just score influence.
+    _coin_long_hist  = {}   # coin_upper → [1=WIN, 0=LOSS, ...] chronological
+    _coin_short_hist = {}
+    try:
+        _tl_path = os.path.join(SCRIPT_DIR, "trade_log.json")
+        with open(_tl_path, "r", encoding="utf-8") as _tlf:
+            _tl_data = json.load(_tlf)
+        for _tr in _tl_data:
+            if _tr.get("outcome") not in ("WIN", "LOSS"):
+                continue
+            _tc = (_tr.get("coin") or "").upper()
+            _td = (_tr.get("direction") or "").upper()
+            if not _tc or _td not in ("LONG", "SHORT"):
+                continue
+            _tv = 1 if _tr["outcome"] == "WIN" else 0
+            if _td == "LONG":
+                _coin_long_hist.setdefault(_tc, []).append(_tv)
+            else:
+                _coin_short_hist.setdefault(_tc, []).append(_tv)
+    except Exception:
+        pass  # trade_log missing or corrupt — all coins stay neutral
+
+    def _wr_score_adj(history):
+        """Score adjustment from last-20 WR. Requires ≥3 trades to activate."""
+        if len(history) < 3:
+            return 0
+        recent = history[-20:]
+        wr = sum(recent) / len(recent)
+        if wr >= 0.70: return +2   # strong performer — boost
+        if wr >= 0.55: return +1   # above average
+        if wr >= 0.40: return  0   # neutral
+        if wr >= 0.25: return -1   # below average — demote
+        return -2                   # chronic loser — push to back
+
     long_scored  = []   # [(score, coin_obj)]
     short_scored = []
     fetched = 0
@@ -508,8 +545,14 @@ def _mtf_prescreen(all_coins, n_long=15, n_short=15):
             coin["_long_score"]  = long_score
             coin["_short_score"] = short_score
 
-            if long_score  > 0: long_scored.append((long_score,  coin))
-            if short_score > 0: short_scored.append((short_score, coin))
+            # ── v47.70: Apply historical WR adjustment to ranking score ──────
+            _long_adj  = _wr_score_adj(_coin_long_hist.get(symbol_base, []))
+            _short_adj = _wr_score_adj(_coin_short_hist.get(symbol_base, []))
+            long_score_ranked  = max(0, long_score  + _long_adj)
+            short_score_ranked = max(0, short_score + _short_adj)
+
+            if long_score_ranked  > 0: long_scored.append((long_score_ranked,  coin))
+            if short_score_ranked > 0: short_scored.append((short_score_ranked, coin))
             fetched += 1
 
         except Exception:

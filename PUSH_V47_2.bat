@@ -1,8 +1,8 @@
 @echo off
 cd /d C:\Users\MAX\WhaleStream
 git add -A
-git commit -m "v47.69 — SERVER_CRON_SETUP.sh: fix morning_briefing filename + add recheck/reactive/gap-checker/tg-commands; v47.68 remove auto-blocklist + probation"
+git commit -m "v47.70 — #487 Intelligence: historical WR boosts MTF pre-screen ranking; v47.69 server crontab fixes; v47.68 remove auto-blocklist + probation"
 git push
 echo.
-echo Done — v47.67 + v47.68 + v47.69 pushed to GitHub.
+echo Done — v47.67 + v47.68 + v47.69 + v47.70 pushed to GitHub.
 pause

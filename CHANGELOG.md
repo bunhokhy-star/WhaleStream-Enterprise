@@ -1,5 +1,22 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.70 — 2026-08-05 — Intelligence: historical WR boosts coin ranking in MTF pre-screener (#487)
+
+### `whale_stream_bot.py` — `_mtf_prescreen()`
+- Loads `trade_log.json` at pre-screen time, builds per-coin LONG/SHORT win-rate history
+- Applies score adjustment to ranking (requires ≥3 resolved trades to activate):
+  - WR ≥ 70% → +2 (strong performer, boosted to top of list)
+  - WR 55–69% → +1 (above average)
+  - WR 40–54% →  0 (neutral)
+  - WR 25–39% → -1 (below average, demoted)
+  - WR  < 25% → -2 (chronic loser, sinks to back)
+- Direction-specific: LONG WR adjusts long_score_ranked, SHORT WR adjusts short_score_ranked
+- If trade_log.json is missing or corrupt, all coins stay neutral (no crash)
+- Effect: Claude only sees the top 15 per direction — chronic losers now naturally fall out of
+  the candidate pool without any hardcoded bans. Market decides the ranking.
+
+---
+
 ## v47.69 — 2026-08-05 — Server crontab: fix morning_briefing filename + add recheck/reactive/gap-checker/tg-commands
 
 ### `SERVER_CRON_SETUP.sh`
