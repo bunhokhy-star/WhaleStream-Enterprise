@@ -1,5 +1,14 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.66 — 2026-08-05 — Confirmed: REDUCE_SIZE stays as VETO (strategy quality first)
+
+### Philosophy
+Strategy is the edge — right coin, right time, right setup. A half-conviction trade is a half-conviction trade whether it's $75 or $150. If the Strategist isn't confident enough for full size, the setup isn't clean enough to trade at all. Wait for the perfect setup, then trade it properly.
+
+### `whale_stream_trader.py`
+- **REDUCE→VETO confirmed**: Strategist REDUCE_SIZE continues to skip the trade entirely. No change to logic — this documents the intentional design decision.
+- Entry zones unchanged — pullback strategy preserved (let signals expire if price doesn't pull back).
+
 ## v47.65 — 2026-08-04 — Active position management: progressive trailing SL + reversal close + emergency close
 
 ### Overview

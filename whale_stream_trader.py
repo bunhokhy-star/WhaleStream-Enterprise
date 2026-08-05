@@ -2069,10 +2069,9 @@ def main():
             print()
             continue
         if _strat_key in _strat_reduces:
-            # v47.49: REDUCE → VETO. We trade full size or not at all — partial sizes
-            # create inconsistent position values ($99/$170 instead of $200) which
-            # confuses tracking and reduces Gate 1 P&L clarity. If the Strategist is
-            # not confident enough for full size, the right answer is to skip.
+            # Strategy first: if the Strategist isn't confident enough for full size,
+            # the setup isn't clean. Wait for the right coin, right time, right setup.
+            # Half-conviction trades pollute the learning loop and lower overall WR.
             _reduce_msg = (f"⛔ STRATEGIST REDUCE→VETO: {coin} {_strat_key[1]} — "
                            f"not confident enough for full ${TRADE_MARGIN_USDT*LEVERAGE}, skipping")
             log(_reduce_msg)
