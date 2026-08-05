@@ -1,5 +1,13 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.73 — 2026-08-06 — Bug fix: duplicate-check blocked all signals when Bybit had no open orders
+
+### `whale_stream_bot.py` — dedup logic (~line 3028)
+- **BUG FIX (CRITICAL)**: Bot was skipping signals as "already OPEN in last 4h" based solely on Google Sheets status column. If a trader error or retCode meant no real Bybit order was ever placed, the Sheet row stayed OPEN with empty col R (no Order ID) — and the bot kept treating it as a live duplicate, permanently blocking that coin+direction. This caused LLY LONG, SPCX SHORT, and SIGN SHORT to all be skipped during the 22:00 cycle despite Bybit showing 0 open positions.
+- Fix: added `_bybit_oid` check inside the dedup loop — rows with empty col R (COL_BYBIT_ID = 17) are now skipped when building `already_open`. Only rows with a real Bybit Order ID can block a new signal.
+
+---
+
 ## v47.72 — 2026-08-05 — Bug fix: market intel rate limiting (momentum + OI delta always 0)
 
 ### `whale_stream_market_intel.py` — `run_market_intel()`

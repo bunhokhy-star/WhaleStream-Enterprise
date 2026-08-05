@@ -3028,6 +3028,11 @@ def log_to_google_sheets(data, bkk_time):
         for r in existing_rows:
             if len(r) >= 12 and r[11] == "OPEN" and len(r[10]) >= 16:
                 if r[10][:16] >= _cutoff_str:   # logged within last 4h
+                    # v47.73: only block if a real Bybit order was placed (col R non-empty)
+                    # If col R is empty the trader never executed the order — not a duplicate
+                    _bybit_oid = r[17].strip() if len(r) > 17 else ""
+                    if not _bybit_oid:
+                        continue   # no Order ID → order never placed on Bybit
                     coin_key = r[0].upper()
                     # r[1] is like "🟢 Long" or "🔴 Short"
                     dir_key  = "LONG" if "Long" in r[1] else "SHORT"
