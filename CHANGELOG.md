@@ -1,5 +1,17 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.69 — 2026-08-05 — Server crontab: fix morning_briefing filename + add recheck/reactive/gap-checker/tg-commands
+
+### `SERVER_CRON_SETUP.sh`
+- Fixed: `whale_stream_morning_briefing.py` → `morning_briefing.py` (wrong filename, would silently fail)
+- Added: Strategist re-check cron lines (3 slots: 01:10/02:10/03:10 + 4h equivalents)
+- Added: Trader reactive cron lines (3 slots: 01:15/02:15/03:15 + 4h equivalents)
+- Added: `check_daily_status.py` at :45 every 4h (gap checker, 5 min after Watchdog)
+- Added: `telegram_commands.py` hourly (YES/NO weekly scorecard reply handler)
+- Version bump: v47.60 → v47.68 in script header
+
+---
+
 ## v47.68 — 2026-08-05 — Remove all auto-blocklist + probation infrastructure
 
 ### Philosophy
