@@ -1,8 +1,8 @@
 @echo off
 cd /d C:\Users\MAX\WhaleStream
 git add -A
-git commit -m "v47.71 — BUG FIX: WR ranking used wrong field name (outcome vs status) — ranking was inactive; fix gap checker cron instructions"
+git commit -m "v47.72 — BUG FIX: market intel rate limiting — add sleep between layers so momentum + OI delta return data"
 git push
 echo.
-echo Done — v47.71 pushed to GitHub.
+echo Done — v47.72 pushed to GitHub.
 pause

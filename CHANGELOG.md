@@ -1,5 +1,14 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.72 — 2026-08-05 — Bug fix: market intel rate limiting (momentum + OI delta always 0)
+
+### `whale_stream_market_intel.py` — `run_market_intel()`
+- **BUG FIX**: `get_coin_indicators`, `get_15m_momentum`, and `get_oi_delta` all returned 0 coins during real bot runs (30 screened symbols) despite working correctly in isolation. Root cause: no pause between heavy layers — 30 `funding_oi` calls followed immediately by 30 `indicator` calls exhausted Bybit's rate limit before `momentum_15m` and `oi_delta` layers ran.
+- Added `time.sleep(2.0)` after `get_funding_oi` and after `get_coin_indicators`, and `time.sleep(1.0)` before `get_oi_delta`. Total extra latency: ~5 seconds per bot run (acceptable for a 4h cycle).
+- Per-coin 15m momentum and OI delta scoring are now active for all screened coins.
+
+---
+
 ## v47.71 — 2026-08-05 — Bug fix: WR ranking field name + gap checker cron fix instructions
 
 ### `whale_stream_bot.py` — `_mtf_prescreen()`

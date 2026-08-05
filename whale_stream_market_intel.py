@@ -586,10 +586,13 @@ def run_market_intel(candidate_symbols: list) -> dict:
 
     fg       = get_fear_greed()
     funding  = get_funding_oi(candidate_symbols)
+    time.sleep(2.0)                                  # rate-limit buffer — 30 funding calls precede this
     indics   = get_coin_indicators(candidate_symbols)
     delist   = list(get_delist_blocklist())          # layer 4
+    time.sleep(2.0)                                  # rate-limit buffer — 30 indicator calls precede this
     mom_15m  = get_15m_momentum(candidate_symbols)   # layer 5
     btc_15m  = get_btc_15m_momentum()                # layer 6
+    time.sleep(1.0)                                  # rate-limit buffer before OI delta
     oi_delta = get_oi_delta(candidate_symbols[:20])  # layer 7 — cap at 20 (rate limit)
 
     ctx = {
