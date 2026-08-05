@@ -1,8 +1,8 @@
 @echo off
 cd /d C:\Users\MAX\WhaleStream
 git add -A
-git commit -m "v47.66 — Strategy quality first: REDUCE_SIZE stays as VETO (debate→test→prove)"
+git commit -m "v47.67 — Remove static coin blocklists: market decides, not us"
 git push
 echo.
-echo Done — v47.66 pushed to GitHub.
+echo Done — v47.67 pushed to GitHub.
 pause

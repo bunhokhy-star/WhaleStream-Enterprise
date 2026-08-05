@@ -1,5 +1,21 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.67 — 2026-08-05 — Remove static coin blocklists: market decides, not us
+
+### Philosophy
+Coins go up and down based on trend. A coin that lost last month may be the best setup this month.
+Confidence floors + BTC regime + Strategist veto do the real filtering.
+Data-driven auto-blocks (coin_blocklist_auto.json, dynamic_blocklist.json) stay active.
+
+### `whale_stream_bot.py`
+- `SHORT_COIN_BLOCKLIST` cleared (was: ENA, XLM, BCH, CHZ, VVV, ZRO, WLD, INJ, AVAX, DEXE)
+- `LONG_COIN_BLOCKLIST` cleared (was: ZRO, HYPE, COMP, QNT, WIF, WLD, XLM, ENA, PENDLE)
+
+### `whale_stream_trader.py`
+- `LONG_COIN_AVOID_LIST` cleared (was: COMP, HYPE, ZRO, QNT, WIF, WLD, XLM, ENA, PENDLE)
+
+---
+
 ## v47.66 — 2026-08-05 — Confirmed: REDUCE_SIZE stays as VETO (strategy quality first)
 
 ### Philosophy

@@ -140,20 +140,11 @@ except ImportError:
     TELEGRAM_CHAT_ID         = _os.getenv("TELEGRAM_CHAT_ID", "")
     TELEGRAM_SIGNAL_CHAT_ID  = _os.getenv("TELEGRAM_SIGNAL_CHAT_ID", TELEGRAM_CHAT_ID)
 
-# ── SHORT coin blocklist (code-level enforcement — mirrors prompt blocklist) ──
-# These coins have 0% SHORT WR in historical data and are permanently banned.
-SHORT_COIN_BLOCKLIST = {
-    "ENA",   # 0W/5L — 0% WR, avg -60.6%
-    "XLM",   # 0W/2L — 0% WR, avg -38.0%
-    "BCH",   # 0W/2L — 0% WR, avg -44.0%
-    "CHZ",   # 3 consec. losses (Jun 20-21) — found floor, shorts stopped  ← added v47.41
-    "VVV",   # 0W/3L — 0% WR, avg -57.9%  ← updated count v46.53
-    "ZRO",   # 0W/1L — 0% WR, avg -40.9%
-    "WLD",   # 0W/2L — 0% WR, avg -49.7%  ← added v46.5
-    "INJ",   # 0W/2L — 0% WR, avg -59.8%  ← added v46.5
-    "AVAX",  # 0W/1L — 0% WR, avg -49.1%  ← added v46.5
-    "DEXE",  # generated every cycle, always vetoed by Strategist — wasted slot
-}
+# ── SHORT coin blocklist — v47.67: cleared. Market decides, not us. ──────────
+# Coins go up and down based on trend. Past WR ≠ future WR.
+# Confidence floor (≥93%) + BTC regime + Strategist veto do the filtering.
+# Data-driven blocks (coin_blocklist_auto.json, dynamic_blocklist.json) merged below.
+SHORT_COIN_BLOCKLIST: set = set()
 # ── Auto-blocklist SHORT coins from debrief data (v47.29) ──────────────────────
 # coin_blocklist_auto.json now includes blocked_shorts (≥3 SHORT losses + 0 wins).
 # Merged at startup — no manual edit needed. Runs AFTER SHORT_COIN_BLOCKLIST defined.
@@ -169,20 +160,11 @@ try:
 except Exception:
     pass  # fail silently — hardcoded blocklist still applies
 
-# ── LONG coin blocklist (code-level enforcement) ──────────────────────────────
-# Populated when a coin shows 0% LONG WR over 2+ LONG trades with clearly negative avg P&L.
-# Run analyze_shorts.py → check "LONG WIN RATE BY COIN" → add POOR-rated coins here.
-LONG_COIN_BLOCKLIST = {
-    "ZRO",   # 0W/2L — 0% WR, avg -59.5%  ← added v46.37 (2026-06-23)
-    "HYPE",  # 0W/2L — 0% WR, avg -54.3%  ← added v46.37 (2026-06-23)
-    "COMP",  # 0W/3L — 0% WR, avg -59.8%  ← added v46.62 (2026-06-26)
-    "QNT",   # 0W/3L — 0% WR, avg -65.6%  ← added v46.62 (2026-06-26)
-    "WIF",   # 1W/4L — 25% WR, avg -48.7% ← added v46.62 (2026-06-26)
-    "WLD",   # 0W/2L — 0% WR, counter-trend coin ← added v47.5 (2026-06-28)
-    "XLM",   # 0W/2L — 0% LONG WR (also SHORT-blocked) ← added v47.41
-    "ENA",    # 0W/1L — SHORT already blocked; LONG also losing ← added v47.43
-    "PENDLE", # 1W/3L — 25% WR (206-trade analysis Jun 2026) ← added v47.60
-}
+# ── LONG coin blocklist — v47.67: cleared. Market decides, not us. ────────────
+# Coins trend with the market — past losses don't predict future setups.
+# Confidence floor (≥88%) + BTC regime + Strategist veto do the filtering.
+# Data-driven blocks (coin_blocklist_auto.json, dynamic_blocklist.json) merged below.
+LONG_COIN_BLOCKLIST: set = set()
 # ── Auto-blocklist from debrief data (v47.28) ──────────────────────────────────
 # coin_blocklist_auto.json written by debrief save_memory() whenever a coin
 # reaches ≥3 LONG losses + 0 LONG wins. Merged at startup — no manual edit needed.

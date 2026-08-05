@@ -188,7 +188,7 @@ SHORT_RECOVERY_COINS = {"H", "FF"}  # approved recovery coins (bypass SHORT REPA
 ORDER_CONTEXT_FILE   = os.path.join(SCRIPT_DIR, "order_context.json")
 
 # Coins with poor historical LONG win rate — skip LONG signals for these
-LONG_COIN_AVOID_LIST = ["COMP", "HYPE", "ZRO", "QNT", "WIF", "WLD", "XLM", "ENA", "PENDLE"]   # must match LONG_COIN_BLOCKLIST in bot.py
+LONG_COIN_AVOID_LIST: list = []   # v47.67: cleared — market decides. Dynamic blocks loaded below from dynamic_blocklist.json.
 
 # ── Dynamic blocklist from weekly scorecard YES replies + P5B auto-blocks (v47.44 / v47.61) ──
 # Read once — populate both LONG and SHORT avoid lists from the same file.
