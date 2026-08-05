@@ -688,30 +688,7 @@ def build_strategist_user_message(signals, history, positions, balance, drawdown
     lines = []
     lines.append("=== PROPOSED SIGNALS FROM BOT ===")
 
-    # ── Load auto-blocklist once for the signal loop (v47.30) ────────────────
-    _auto_bl_long_set  = set()
-    _auto_bl_short_set = set()
-    try:
-        _abl_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "coin_blocklist_auto.json")
-        if os.path.exists(_abl_path):
-            with open(_abl_path, "r", encoding="utf-8") as _ablf:
-                _abl_data = json.load(_ablf)
-            _auto_bl_long_set  = set(c.upper() for c in _abl_data.get("blocked_longs",  []))
-            _auto_bl_short_set = set(c.upper() for c in _abl_data.get("blocked_shorts", []))
-    except Exception:
-        pass  # fail silently — non-critical
-
-    # ── Load probation watchlist (v47.32) ────────────────────────────────────
-    _probation_set: set = set()   # entries like "BTCUSDT_LONG"
-    try:
-        _wl_path_st = os.path.join(os.path.dirname(os.path.abspath(__file__)), "blocklist_watchlist.json")
-        if os.path.exists(_wl_path_st):
-            with open(_wl_path_st, "r", encoding="utf-8") as _wlf_st:
-                _wl_data_st = json.load(_wlf_st)
-            for _wkey_st in _wl_data_st.get("watchlist", {}):
-                _probation_set.add(_wkey_st.upper())
-    except Exception:
-        pass  # fail silently — non-critical
+    # v47.68: coin_blocklist_auto.json and probation watchlist removed — dynamic_blocklist.json handles all blocks
 
     # ── Load score drift warning (v47.34) ────────────────────────────────────
     # When scorer accuracy is in the 45-54% warning zone, tighten auto-skip:
@@ -770,20 +747,7 @@ def build_strategist_user_message(signals, history, positions, balance, drawdown
                 else:
                     lines.append(f"  💸 Funding  : {_fr_pct:+.4f}%")
 
-        # ── Auto-blocklist warning (v47.30) ──────────────────────────────────
         _coin_up = s["coin"].upper()
-        _is_bl_long  = (s["direction"] == "LONG"  and _coin_up in _auto_bl_long_set)
-        _is_bl_short = (s["direction"] == "SHORT" and _coin_up in _auto_bl_short_set)
-        if _is_bl_long:
-            lines.append(f"  ⚠️ AUTO-BLOCKED (LONG) — ≥3 losses / 0 wins in debrief history")
-        elif _is_bl_short:
-            lines.append(f"  ⚠️ AUTO-BLOCKED (SHORT) — ≥3 losses / 0 wins in debrief history")
-
-        # ── Probation warning (v47.32) ────────────────────────────────────────
-        _pb_key = f"{_coin_up}_{s['direction'].upper()}"
-        if not _is_bl_long and not _is_bl_short and _pb_key in _probation_set:
-            lines.append(f"  🔶 ON PROBATION — expired from auto-blocklist; monitor closely")
-
         # ── Chronic loser veto flag (v47.35) ─────────────────────────────────
         # If this coin's all-time avg P&L < -1% over ≥10 trades → warn Claude.
         try:

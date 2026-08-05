@@ -140,45 +140,17 @@ except ImportError:
     TELEGRAM_CHAT_ID         = _os.getenv("TELEGRAM_CHAT_ID", "")
     TELEGRAM_SIGNAL_CHAT_ID  = _os.getenv("TELEGRAM_SIGNAL_CHAT_ID", TELEGRAM_CHAT_ID)
 
-# ── SHORT coin blocklist — v47.67: cleared. Market decides, not us. ──────────
-# Coins go up and down based on trend. Past WR ≠ future WR.
+# ── SHORT coin blocklist — v47.68: static + auto-blocklist removed. Market decides. ──────────
 # Confidence floor (≥93%) + BTC regime + Strategist veto do the filtering.
-# Data-driven blocks (coin_blocklist_auto.json, dynamic_blocklist.json) merged below.
+# User-confirmed blocks loaded below from dynamic_blocklist.json.
 SHORT_COIN_BLOCKLIST: set = set()
-# ── Auto-blocklist SHORT coins from debrief data (v47.29) ──────────────────────
-# coin_blocklist_auto.json now includes blocked_shorts (≥3 SHORT losses + 0 wins).
-# Merged at startup — no manual edit needed. Runs AFTER SHORT_COIN_BLOCKLIST defined.
-try:
-    _auto_bl_short_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "coin_blocklist_auto.json")
-    if os.path.exists(_auto_bl_short_path):
-        with open(_auto_bl_short_path, "r", encoding="utf-8") as _abls_f:
-            _auto_bl_short_data = json.load(_abls_f)
-        _auto_bl_short_coins = set(c.upper() for c in _auto_bl_short_data.get("blocked_shorts", []))
-        SHORT_COIN_BLOCKLIST = SHORT_COIN_BLOCKLIST | _auto_bl_short_coins
-        if _auto_bl_short_coins:
-            print(f"   🚫 AUTO-BLOCKLIST SHORT: {', '.join(sorted(_auto_bl_short_coins))} added from coin_blocklist_auto.json")
-except Exception:
-    pass  # fail silently — hardcoded blocklist still applies
 
 # ── LONG coin blocklist — v47.67: cleared. Market decides, not us. ────────────
 # Coins trend with the market — past losses don't predict future setups.
 # Confidence floor (≥88%) + BTC regime + Strategist veto do the filtering.
 # Data-driven blocks (coin_blocklist_auto.json, dynamic_blocklist.json) merged below.
 LONG_COIN_BLOCKLIST: set = set()
-# ── Auto-blocklist from debrief data (v47.28) ──────────────────────────────────
-# coin_blocklist_auto.json written by debrief save_memory() whenever a coin
-# reaches ≥3 LONG losses + 0 LONG wins. Merged at startup — no manual edit needed.
-try:
-    _auto_bl_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "coin_blocklist_auto.json")
-    if os.path.exists(_auto_bl_path):
-        with open(_auto_bl_path, "r", encoding="utf-8") as _abl_f:
-            _auto_bl_data = json.load(_abl_f)
-        _auto_bl_coins = set(c.upper() for c in _auto_bl_data.get("blocked_longs", []))
-        LONG_COIN_BLOCKLIST = LONG_COIN_BLOCKLIST | _auto_bl_coins
-        if _auto_bl_coins:
-            print(f"   🚫 AUTO-BLOCKLIST: {', '.join(sorted(_auto_bl_coins))} added from coin_blocklist_auto.json")
-except Exception:
-    pass  # fail silently — hardcoded blocklist still applies
+# v47.68: coin_blocklist_auto.json removed — dynamic_blocklist.json is the only data-driven block
 
 # ── Dynamic blocklist from weekly scorecard YES replies (v47.44) ───────────────
 # telegram_commands.py writes dynamic_blocklist.json when user replies YES to
@@ -199,28 +171,7 @@ try:
 except Exception:
     pass  # fail silently — hardcoded blocklists still apply
 
-# ── Probation watchlist (v47.33) ──────────────────────────────────────────────
-# Coins that recently expired from the auto-blocklist and are on 3-trade probation.
-# Loaded once at startup — inject into graveyard prompt so Claude knows not to
-# confidently generate signals for these coins without extra caution.
-BOT_PROBATION_LONGS:  set = set()
-BOT_PROBATION_SHORTS: set = set()
-try:
-    _wl_path_bot = os.path.join(os.path.dirname(os.path.abspath(__file__)), "blocklist_watchlist.json")
-    if os.path.exists(_wl_path_bot):
-        with open(_wl_path_bot, "r", encoding="utf-8") as _wlf_bot:
-            _wl_data_bot = json.load(_wlf_bot)
-        for _wk_bot, _we_bot in _wl_data_bot.get("watchlist", {}).items():
-            _wc_bot  = _we_bot.get("coin", "").upper()
-            _wdr_bot = _we_bot.get("direction", "").upper()
-            if _wc_bot and _wdr_bot == "LONG":
-                BOT_PROBATION_LONGS.add(_wc_bot)
-            elif _wc_bot and _wdr_bot == "SHORT":
-                BOT_PROBATION_SHORTS.add(_wc_bot)
-        if BOT_PROBATION_LONGS or BOT_PROBATION_SHORTS:
-            print(f"   🔶 PROBATION: LONG={sorted(BOT_PROBATION_LONGS)} SHORT={sorted(BOT_PROBATION_SHORTS)}")
-except Exception:
-    pass  # fail silently — non-critical
+# v47.68: probation system removed — orphaned after auto-blocklist removed
 
 # ── Soft-avoid from coin P&L (v47.35) ────────────────────────────────────────
 # Coins with avg P&L < -0.5% over ≥10 trades in pattern_memory coin_stats.
@@ -767,19 +718,6 @@ THIS IS YOUR MOST IMPORTANT SHORT-SIDE RULE.
 
 {BTC_24H_GATE}
 ════════════════════════════════════════════════════════════
-SHORT SIGNAL BLOCKLIST — NEVER generate SHORT signals for these coins:
-(Historical WR = 0% across multiple trades — chronic bounce coins, always squeeze shorts)
-• ENA  — 0% SHORT WR across 5 trades  (avg loss: −61%)  PERMANENTLY BANNED from SHORTs
-• XLM  — 0% SHORT WR across 2 trades  BANNED from SHORTs
-• BCH  — 0% SHORT WR across 2 trades  BANNED from SHORTs
-• VVV  — 0% SHORT WR across 2 trades  (avg loss: −58%)  BANNED from SHORTs
-• ZRO  — 0% SHORT WR across 1 trade   BANNED from SHORTs
-• WLD  — 0% SHORT WR across 2 trades  (avg loss: −50%)  BANNED from SHORTs
-• INJ  — 0% SHORT WR across 2 trades  (avg loss: −60%)  BANNED from SHORTs
-• AVAX — 0% SHORT WR across 1 trade   (avg loss: −49%)  BANNED from SHORTs
-• CHZ  — STRUCTURALLY INVALID in BOTH directions (SL always lands at ~$0.02 regardless of price) — DO NOT GENERATE ANY CHZ SIGNALS
-ENFORCEMENT: If any blocklisted coin appears in your short analysis, REPLACE immediately
-with the next-best coin from your analysis. No exceptions.
 ════════════════════════════════════════════════════════════
 ⚠️  SHORT SIGNAL STRATEGY — REPAIR MODE (effective until further notice)
 Real SHORT win rate was deeply unprofitable. The strategy is in repair mode.
@@ -1074,9 +1012,7 @@ RULES:
     - TIA: 100% WR (4/4 trades) — strong preference
     - JUP: 75% WR (3/4 trades) — good track record
     - EIGEN: 67% WR — acceptable
-  LONG POOR COINS (blocked or weak — avoid as LONG signals):
-    - ZRO, HYPE, COMP, QNT, WIF, WLD: 0-25% WR → already code-blocked (v46.62/v47.5) — DO NOT generate LONG signals for these coins
-    - XLM, SOL: 33% WR → use only with very strong pattern confluence
+  Note: coin blocks are data-driven (dynamic_blocklist.json) — market decides, not hardcoded lists.
 
 {SIGNAL_GRAVEYARD}
 ════════════════════════════════════════════════════════════
@@ -1443,19 +1379,6 @@ def fetch_signal_graveyard():
         short_wr = (short_wins / len(recent_shorts) * 100) if recent_shorts else 50  # 50=neutral when no recent shorts (prevents false 95% floor)
         long_wr  = (long_wins  / len(recent_longs)  * 100) if recent_longs  else 0
 
-        # Auto-blacklist: coins with 3+ SHORT losses and 0 SHORT wins (ALL resolved, not just recent 20)
-        all_shorts     = [r for r in resolved if r["direction"] == "SHORT"]
-        short_loss_map = {}
-        short_win_map  = {}
-        for r in all_shorts:
-            c = r["coin"]
-            if r["status"] == "LOSS":
-                short_loss_map[c] = short_loss_map.get(c, 0) + 1
-            else:
-                short_win_map[c]  = short_win_map.get(c, 0) + 1
-        blacklisted = [c for c, cnt in short_loss_map.items()
-                       if cnt >= 3 and short_win_map.get(c, 0) == 0]
-
         # ── Compact graveyard (saves ~40% tokens vs wide-table format) ──────────
         # Permanent ban lists are already in the cached system prompt — skip here.
         _in_repair_mode = os.path.exists(os.path.join(SCRIPT_DIR, "short_repair.flag"))
@@ -1472,9 +1395,6 @@ def fetch_signal_graveyard():
                 lines.append(f"⚠️ S_WR CRITICAL ({short_wr:.0f}%<40%) — REQUIRE SHORT CONF≥95% OR SKIP")
             elif short_wr < 45:
                 lines.append(f"⚠️ S_WR LOW ({short_wr:.0f}%<45%) — REQUIRE SHORT CONF≥93%")
-        if blacklisted:
-            lines.append(f"🚫 S_AUTO_BAN(3+L,0W): {', '.join(blacklisted)}")
-
         # Compact table — 67 chars/row vs 100 (saves ~33% per row × 20 rows)
         lines.append(f"{'COIN':<8} {'D':<2} {'PATTERN':<28} {'ENTRY':<12} {'TP':<4} {'PNL%':<7} RES")
         lines.append("─" * 67)
@@ -1753,28 +1673,6 @@ def fetch_signal_graveyard():
             pass   # non-critical
         # ── end Pattern WR injection ──────────────────────────────────────────
 
-        # ── Task 4 (v47.33): Probation coin caution ───────────────────────────
-        try:
-            _prob_lines: list = []
-            if BOT_PROBATION_LONGS:
-                _prob_lines.append(
-                    "  🔶 LONG PROBATION: " + ", ".join(sorted(BOT_PROBATION_LONGS))
-                    + " — recently expelled from auto-blocklist; require ≥95% confidence before generating a signal"
-                )
-            if BOT_PROBATION_SHORTS:
-                _prob_lines.append(
-                    "  🔶 SHORT PROBATION: " + ", ".join(sorted(BOT_PROBATION_SHORTS))
-                    + " — recently expelled from auto-blocklist; require ≥95% confidence before generating a signal"
-                )
-            if _prob_lines:
-                graveyard_text += (
-                    "\n\nPROBATION COINS (recently expelled from auto-blocklist — treat like borderline candidates):\n"
-                    + "\n".join(_prob_lines)
-                )
-        except Exception:
-            pass   # non-critical
-        # ── end Probation coin caution ────────────────────────────────────────
-
         # ── Task 5 (v47.35): Soft-avoid from coin P&L ────────────────────────
         try:
             if BOT_SOFT_AVOID:
@@ -1800,8 +1698,6 @@ def fetch_signal_graveyard():
         # ── end Win-streak injection ──────────────────────────────────────────
 
         print(f"   ✓ Signal Graveyard: {len(recent)} trades (overall {win_rate:.0f}% WR | long {long_wr:.0f}% | short {short_wr:.0f}%)")
-        if blacklisted:
-            print(f"   🚫 Short blacklist: {', '.join(blacklisted)}")
         if _long_avoid:
             print(f"   🚫 Long avoid list : {', '.join(_long_avoid)}")
         print(f"   📈 Coin perf summary: {len(_coin_lines)} coins ranked (from last 30 resolved LONGs)")

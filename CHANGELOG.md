@@ -1,11 +1,37 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.68 — 2026-08-05 — Remove all auto-blocklist + probation infrastructure
+
+### Philosophy
+Market decides, not us. Static loss-count blocklists + probation contradict this. The Strategist + confidence floor + BTC regime are the filters. Dynamic_blocklist.json (user-confirmed weekly + P5 AVOID lessons) is the only data-driven block.
+
+### `whale_stream_bot.py`
+- Removed coin_blocklist_auto.json SHORT merge block (startup load)
+- Removed coin_blocklist_auto.json LONG merge block (startup load)
+- Removed BOT_PROBATION_LONGS/SHORTS loading (blocklist_watchlist.json startup)
+- Removed SHORT SIGNAL BLOCKLIST from prompt (ENA/XLM/BCH/VVV/ZRO/WLD/INJ/AVAX/CHZ PERMANENTLY BANNED text)
+- Replaced LONG POOR COINS prompt text with market-decides note
+- Removed `blacklisted` computation from graveyard builder (auto-ban logic)
+- Removed `🚫 S_AUTO_BAN` injection from graveyard Telegram
+- Removed probation coin caution block from graveyard prompt injection
+
+### `whale_stream_debrief.py`
+- Removed auto-blocklist write block (coin_blocklist_auto.json — ≥3 losses + 0 wins logic + aging + expiry)
+- Removed probation system (blocklist_watchlist.json — 3-trade probation, re-block on failure)
+
+### `whale_stream_strategist.py`
+- Removed auto-blocklist load (_auto_bl_long_set, _auto_bl_short_set)
+- Removed probation watchlist load (_probation_set)
+- Removed AUTO-BLOCKED + ON PROBATION warning injections from signal evaluation output
+
+---
+
 ## v47.67 — 2026-08-05 — Remove static coin blocklists: market decides, not us
 
 ### Philosophy
 Coins go up and down based on trend. A coin that lost last month may be the best setup this month.
 Confidence floors + BTC regime + Strategist veto do the real filtering.
-Data-driven auto-blocks (coin_blocklist_auto.json, dynamic_blocklist.json) stay active.
+Dynamic_blocklist.json (user-confirmed) is the only remaining data-driven block.
 
 ### `whale_stream_bot.py`
 - `SHORT_COIN_BLOCKLIST` cleared (was: ENA, XLM, BCH, CHZ, VVV, ZRO, WLD, INJ, AVAX, DEXE)
