@@ -1,5 +1,22 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.71 — 2026-08-05 — Bug fix: WR ranking field name + gap checker cron fix instructions
+
+### `whale_stream_bot.py` — `_mtf_prescreen()`
+- **BUG FIX (CRITICAL)**: WR loader read `t.get("outcome")` but `trade_log.json` stores the field as `"status"` — all coins had 0 history and got +0 adjustment, making v47.70 ranking completely inactive. Now reads `t.get("status")`.
+- **BUG FIX**: WR loader iterated `_tl_data` directly but trade_log.json is a dict `{"version": ..., "trades": [...]}` — now extracts the `trades` list correctly via `_tl_data.get("trades", _tl_data)`.
+
+### `check_daily_status.py`
+- Fixed gap-alert fix instructions: was "Task Scheduler: WhaleStream-Bot → Run" (Windows), now shows correct server command `ssh server: cd /opt/whalestream && python3 whale_stream_bot.py`.
+- Updated `AGENT_TASK` dict to use actual script filenames instead of Windows Task Scheduler names.
+
+### Gate status (as of 2026-08-05, 206 trades)
+- Gate 1 (≥50 resolved): ✅ 206 trades
+- Gate 2 (LONG WR ≥60%): ❌ 46.1% (47W/102L — intelligence layer now active to improve this)
+- Gate 3 (SHORT WR ≥60%): ✅ 74.0% (77W/104S)
+
+---
+
 ## v47.70 — 2026-08-05 — Intelligence: historical WR boosts coin ranking in MTF pre-screener (#487)
 
 ### `whale_stream_bot.py` — `_mtf_prescreen()`

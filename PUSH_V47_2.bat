@@ -1,8 +1,8 @@
 @echo off
 cd /d C:\Users\MAX\WhaleStream
 git add -A
-git commit -m "v47.70 — #487 Intelligence: historical WR boosts MTF pre-screen ranking; v47.69 server crontab fixes; v47.68 remove auto-blocklist + probation"
+git commit -m "v47.71 — BUG FIX: WR ranking used wrong field name (outcome vs status) — ranking was inactive; fix gap checker cron instructions"
 git push
 echo.
-echo Done — v47.67 + v47.68 + v47.69 + v47.70 pushed to GitHub.
+echo Done — v47.71 pushed to GitHub.
 pause

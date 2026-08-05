@@ -414,14 +414,15 @@ def _mtf_prescreen(all_coins, n_long=15, n_short=15):
         _tl_path = os.path.join(SCRIPT_DIR, "trade_log.json")
         with open(_tl_path, "r", encoding="utf-8") as _tlf:
             _tl_data = json.load(_tlf)
-        for _tr in _tl_data:
-            if _tr.get("outcome") not in ("WIN", "LOSS"):
+        _tl_list = _tl_data.get("trades", _tl_data) if isinstance(_tl_data, dict) else _tl_data
+        for _tr in _tl_list:
+            if _tr.get("status") not in ("WIN", "LOSS"):
                 continue
             _tc = (_tr.get("coin") or "").upper()
             _td = (_tr.get("direction") or "").upper()
             if not _tc or _td not in ("LONG", "SHORT"):
                 continue
-            _tv = 1 if _tr["outcome"] == "WIN" else 0
+            _tv = 1 if _tr["status"] == "WIN" else 0
             if _td == "LONG":
                 _coin_long_hist.setdefault(_tc, []).append(_tv)
             else:

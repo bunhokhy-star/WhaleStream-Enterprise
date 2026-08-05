@@ -71,15 +71,15 @@ AGENT_LABEL = {
     "briefing":    "Briefing   (07:00 daily)",
 }
 
-# Task Scheduler task names (for fix instructions)
+# Cron script names (for fix instructions — server runs cron, not Task Scheduler)
 AGENT_TASK = {
-    "sigbot":      "WhaleStream-Bot",
-    "strategist":  "WhaleStreamStrategist",
-    "trader":      "WhaleStream-Trader",
-    "watchdog":    "WhaleStreamWatchdog",
-    "tracker":     "WhaleStream-Tracker",
-    "monitor":     "WhaleStream-Monitor",
-    "briefing":    "WhaleStream-Briefing",
+    "sigbot":      "whale_stream_bot.py",
+    "strategist":  "whale_stream_strategist.py",
+    "trader":      "whale_stream_trader.py",
+    "watchdog":    "whale_stream_watchdog.py",
+    "tracker":     "whale_stream_tracker.py",
+    "monitor":     "whale_stream_monitor.py",
+    "briefing":    "morning_briefing.py",
 }
 
 
@@ -205,13 +205,13 @@ def run_check():
             lines.append(f"\n  <b>{hh}:xx cycle</b> — missing:")
             for a in missing:
                 lines.append(f"    ❌ {AGENT_LABEL[a]}")
-                lines.append(f"       → Task Scheduler: <code>{AGENT_TASK[a]}</code> → Run")
+                lines.append(f"       → ssh server: <code>cd /opt/whalestream && python3 {AGENT_TASK[a]}</code>")
 
         if static_gaps:
             lines.append("\n  <b>Always-running</b> — missing:")
             for a in static_gaps:
                 lines.append(f"    ❌ {AGENT_LABEL[a]}")
-                lines.append(f"       → Task Scheduler: <code>{AGENT_TASK[a]}</code> → Run")
+                lines.append(f"       → ssh server: <code>cd /opt/whalestream && python3 {AGENT_TASK[a]}</code>")
 
         msg = (
             f"⚠️ <b>WHALE-STREAM — AGENT GAPS DETECTED</b>\n"
