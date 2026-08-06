@@ -1,5 +1,16 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.74 — 2026-08-06 — CRITICAL: Fix SHORT/F&G bias — bot was staying out in ideal SHORT conditions
+
+### `whale_stream_bot.py` — prompt logic
+- **BUG FIX (CRITICAL)**: Bot issued STAY OUT in Bear Consolidation + F&G Fear because the prompt had a rule explicitly rejecting SHORTs in exactly these market conditions. SHORTs are perpetuals — bear market = prime SHORT opportunity.
+- Removed: `"In Bear Consolidation or BTC.D HIGH + Extreme Fear: Reject SHORTs entirely"` — this rule was the main cause of missed trades
+- Fixed F&G guidance: FEAR/EXTREME FEAR zones now correctly described as SHORT-FAVORED environments, not stay-out zones
+- Fixed SHORT REPAIR MODE: SHORT WR is 67% (above 50% recovery threshold) — removed extreme conservative rules (min conf 95%→93%, removed "when in doubt → STAY OUT", removed BTC 1h bullish = STAY OUT for SHORTs)
+- Bear Consolidation + BTC.D HIGH + Fear now explicitly flagged as IDEAL SHORT environment
+
+---
+
 ## v47.73 — 2026-08-06 — Bug fix: duplicate-check blocked all signals when Bybit had no open orders
 
 ### `whale_stream_bot.py` — dedup logic (~line 3028)

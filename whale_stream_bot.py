@@ -763,19 +763,17 @@ THIS IS YOUR MOST IMPORTANT SHORT-SIDE RULE.
 {BTC_24H_GATE}
 ════════════════════════════════════════════════════════════
 ════════════════════════════════════════════════════════════
-⚠️  SHORT SIGNAL STRATEGY — REPAIR MODE (effective until further notice)
-Real SHORT win rate was deeply unprofitable. The strategy is in repair mode.
-Apply these tighter rules until SHORT WR recovers to ≥50%:
-  1. PREFERRED SHORT COINS (proven recovery coins — live win rates in SIGNAL GRAVEYARD below):
-     H, FF — default to these coins over unknown coins for SHORT signals during recovery.
-     (CHZ removed from preferred list — structurally invalid SL, never use CHZ in any direction)
-     See "SHORT RECOVERY MODE ACTIVE" section in the graveyard for current W/L data.
-  2. Minimum SHORT confidence: 95% (raised from 91%). If no coin clears 95%, output STAY OUT.
-  3. Maximum 2 SHORT signals per run. If in doubt, output fewer SHORTs.
+SHORT SIGNAL STRATEGY (SHORT WR recovered to 67% — standard rules apply):
+We trade perpetuals. SHORTs are a primary income source, not a last resort.
+Bear market / Fear conditions = MORE SHORT opportunities, not fewer.
+  1. PREFERRED SHORT COINS (proven track record): H, FF — prefer these over unknown coins.
+     (CHZ banned — structurally invalid SL. Never use CHZ in any direction.)
+  2. Minimum SHORT confidence: 93%. Output ONLY 93–100%.
+  3. Maximum 2 SHORT signals per run.
   4. SHORT entry MUST show clear structural breakdown with volume confirmation. No speculative entries.
-  5. If BTC is showing any bullish momentum on 1h or 4h → output STAY OUT for all SHORTs that run.
-  6. When in doubt between a SHORT and STAY OUT → always choose STAY OUT.
-It is better to miss a SHORT trade than to take a bad one. Protecting capital is the priority.
+  5. If BTC is showing STRONG bullish expansion on 4H (not just a bounce) → reduce SHORT confidence by 5%.
+  6. Bear Consolidation, BTC.D HIGH, or F&G Fear/Extreme Fear = IDEAL SHORT environment. Lean into it.
+Quality SHORTs in a bear market are high-probability trades. Do not miss them by defaulting to STAY OUT.
 ════════════════════════════════════════════════════════════
 CORRELATION FILTER — MANDATORY PORTFOLIO DIVERSIFICATION (v44.0)
 Before finalising your TOP 3 LONG and TOP 3 SHORT selections, enforce sector limits.
@@ -824,8 +822,9 @@ TOTAL = 100
 ════════════════════════════════════════════════════════════
 CONFIDENCE FILTER:
 • LONGS:  Reject < 88%. Output ONLY 88–100.
-• SHORTS: Reject < 95%. Output ONLY 95–100. (Raised from 91% — SHORT WR was 24% on real trades, strategy in repair mode)
-• In Bear Consolidation or BTC.D HIGH + Extreme Fear: Reject SHORTs entirely (output STAY OUT).
+• SHORTS: Reject < 93%. Output ONLY 93–100.
+• In Bear Consolidation or BTC.D HIGH + Fear/Extreme Fear: SHORTs are the PRIMARY opportunity — DO NOT reject them.
+  These are ideal SHORT conditions. Evaluate SHORT candidates with full rigor and output the strongest ones.
 
 CONFIDENCE CALIBRATION — LONG BANDS (MANDATORY — do not artificially cap at 90%):
 • 88–91%  TIER 2 — Minimum qualifying setup. Two or more factors confirmed, one uncertainty remains.
@@ -1856,37 +1855,40 @@ def fetch_fear_greed():
         trend      = f"{'▲ Rising' if delta > 0 else '▼ Falling' if delta < 0 else '→ Flat'} ({delta:+d} from yesterday)"
 
         # Classify and generate trading guidance
+        # NOTE: We trade perpetuals — BOTH Long and Short are always valid.
+        # F&G is a DIRECTIONAL bias indicator, NOT a stay-out gate.
         if score_now <= 24:
             zone     = "EXTREME FEAR"
             guidance = (
-                "Market in panic. Historically the best LONG entry zone. "
-                "Smart money accumulates here. Strongly favor LONG setups. "
-                "SHORTs are contrarian and risky — avoid unless technical breakdown is clear."
+                "Bears in full control. HIGH PRIORITY for SHORT setups on technically weak coins. "
+                "LONG entries only on clear capitulation reversals with very strong confluence (95%+ conf). "
+                "This is a SHORT-FAVORED environment — do NOT stay out, bias toward SHORTs."
             )
         elif score_now <= 44:
             zone     = "FEAR"
             guidance = (
-                "Market cautious. Good conditions for LONGs on strong setups. "
-                "Avoid forcing trades. Quality over quantity."
+                "Market bearish/cautious. SHORT setups on breaking coins are the primary opportunity. "
+                "LONG setups are valid with strong technical confluence. "
+                "Evaluate both directions on technicals — DO NOT stay out just because sentiment is negative."
             )
         elif score_now <= 55:
             zone     = "NEUTRAL"
             guidance = (
                 "Balanced sentiment. No emotional edge either direction. "
-                "Apply standard analysis. Let technicals decide."
+                "Apply standard analysis. Let technicals decide. Both Long and Short valid."
             )
         elif score_now <= 74:
             zone     = "GREED"
             guidance = (
-                "Market getting greedy. LONG setups need extra confirmation — "
-                "late buyers get trapped. SHORT setups on exhausted coins are attractive. "
+                "Market getting greedy. HIGH PRIORITY for SHORT setups on overextended coins. "
+                "LONG setups need extra confirmation — late buyers get trapped. "
                 "Tighten confidence threshold for LONGs to 90%+."
             )
         else:
             zone     = "EXTREME GREED"
             guidance = (
-                "Market in euphoria — historically the highest-risk zone for LONGs. "
-                "REJECT alt LONG signals below 93% confidence. "
+                "Market in euphoria — highest-risk zone for LONGs. "
+                "REJECT LONG signals below 93% confidence. "
                 "HIGH-PRIORITY SHORT setups on overextended coins. "
                 "Apply ANTI-FOMO filter aggressively."
             )
