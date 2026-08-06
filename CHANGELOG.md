@@ -1,5 +1,18 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.77 — 2026-08-06 — Fix indicators=0 (pass pre-screen data to market_intel) + Bear Consolidation SHORT multiplier killer
+
+### `whale_stream_bot.py` + `whale_stream_market_intel.py` — indicators fix
+- **BUG FIX (CRITICAL)**: `get_coin_indicators()` in market_intel was fetching 4H candles via `/v5/market/kline` for all screened coins — the same endpoint already exhausted by the MTF pre-screen's ~420 API calls. Result: every indicator returned 0 / blank, Claude had no 4H RSI/EMA/trend data.
+- Fix: `run_market_intel()` now accepts optional `prescreen_indicators` dict. When supplied, layer 3 (4H indicators) is skipped entirely — no redundant kline calls. bot.py builds this dict from `_screened_coins._mtf` (already computed by the pre-screener) and passes it directly. Indicators now always have data.
+- Removed the 8s `time.sleep()` added in v47.76 — no longer needed since the kline endpoint is no longer called.
+
+### `whale_stream_bot.py` — MARKET REGIME OVERRIDE (THE HIDDEN KILLER)
+- **BUG FIX (CRITICAL)**: Bear Consolidation had `SHORT Score × 0.75` in the MARKET REGIME OVERRIDE prompt table. This reduced ALL SHORT confidence by 25% before the 93% floor check: a 95% SHORT → 71.25% → below 93% floor → STAY OUT. This single line was causing every cycle in Bear Consolidation to output STAY OUT regardless of pre-screen scores.
+- Fixed: Bear Consolidation now `SHORT Score × 1.10` (SHORTs are PRIMARY). Bear Expansion `SHORT Score × 1.20`. Added "CRITICAL: Bear Consolidation = IDEAL SHORT setup zone — do NOT penalise SHORTs here."
+
+---
+
 ## v47.76 — 2026-08-06 — Fix market_intel F&G notes contradicting v47.74 + rate-limit gap before market_intel
 
 ### `whale_stream_market_intel.py` — `get_fear_greed()`

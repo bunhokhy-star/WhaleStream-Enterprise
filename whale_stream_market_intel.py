@@ -567,16 +567,19 @@ def get_oi_delta(symbols: list) -> dict:
 # MASTER FUNCTION — run_market_intel()
 # ══════════════════════════════════════════════════════════════════
 
-def run_market_intel(candidate_symbols: list) -> dict:
+def run_market_intel(candidate_symbols: list, prescreen_indicators: dict = None) -> dict:
     """
     Fetch all seven intelligence layers and write market_context.json.
     candidate_symbols: list of USDT-suffixed symbols, e.g. ["BTCUSDT", ...]
+    prescreen_indicators: optional dict {COIN: {rsi_4h, ema_signal, vol_ratio, trend, summary}}
+        — if supplied, layer 3 (4H indicators) is skipped (data already fetched by MTF pre-screener,
+          no redundant kline calls, no rate-limit exhaustion).
     Returns combined dict.
 
     Layers:
       1. Fear & Greed Index
       2. Funding rate + OI per coin
-      3. 4H technical indicators (RSI, EMA, vol, ATR, trend)
+      3. 4H technical indicators (from pre-screen if available, else fresh fetch)
       4. Delist blocklist (Bybit announcements)
       5. 15m momentum per coin (entry timing)
       6. BTC 15m momentum (pre-trade gate)
@@ -584,12 +587,21 @@ def run_market_intel(candidate_symbols: list) -> dict:
     """
     print("   🧠 Market Intelligence: fetching 7 data layers...")
 
-    fg       = get_fear_greed()
-    funding  = get_funding_oi(candidate_symbols)
-    time.sleep(2.0)                                  # rate-limit buffer — 30 funding calls precede this
-    indics   = get_coin_indicators(candidate_symbols)
+    fg      = get_fear_greed()
+    funding = get_funding_oi(candidate_symbols)
+
+    # Layer 3 — use pre-screen data if available (avoids ~30 redundant kline calls)
+    if prescreen_indicators:
+        indics = prescreen_indicators
+        _up    = sum(1 for v in indics.values() if v.get("trend") == "UP")
+        _dn    = sum(1 for v in indics.values() if v.get("trend") == "DOWN")
+        print(f"   📈 Indicators: {len(indics)} coins (pre-screen) — UP:{_up} DOWN:{_dn} SIDEWAYS:{len(indics)-_up-_dn}")
+    else:
+        time.sleep(2.0)                              # rate-limit buffer — only needed if fetching fresh
+        indics = get_coin_indicators(candidate_symbols)
+
     delist   = list(get_delist_blocklist())          # layer 4
-    time.sleep(2.0)                                  # rate-limit buffer — 30 indicator calls precede this
+    time.sleep(2.0)                                  # rate-limit buffer before 15m momentum
     mom_15m  = get_15m_momentum(candidate_symbols)   # layer 5
     btc_15m  = get_btc_15m_momentum()                # layer 6
     time.sleep(1.0)                                  # rate-limit buffer before OI delta

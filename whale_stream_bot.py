@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v47.76   —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v47.77   —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 USDT perpetuals from Bybit (1 API call) ║
@@ -668,9 +668,11 @@ Classify market as:
 MARKET REGIME OVERRIDE
 Bull Expansion:      LONG Score × 1.15 | SHORT Score × 0.85
 Bull Consolidation:  LONG Score × 1.05 | SHORT Score × 0.90
-Bear Consolidation:  LONG Score × 0.95 | SHORT Score × 0.75 | Require SHORT conf ≥ 92%
-Bear Expansion:      LONG Score × 0.80 | SHORT Score × 1.15
+Bear Consolidation:  LONG Score × 0.85 | SHORT Score × 1.10 | SHORT is the PRIMARY direction — lean into it
+Bear Expansion:      LONG Score × 0.80 | SHORT Score × 1.20
 Range: Favor mean-reversion structures.
+CRITICAL: Bear Consolidation = SHORTs forming at the top of a bearish range. This is NOT a STAY OUT
+environment — it is the IDEAL SHORT setup zone. Do NOT penalise SHORTs here. Output the 2 strongest.
 ════════════════════════════════════════════════════════════
 TREND STAGE ENGINE
 Stage 1 = Accumulation | Stage 2 = Breakout | Stage 3 = Expansion | Stage 4 = Euphoria | Stage 5 = Distribution
@@ -3397,12 +3399,31 @@ def main():
     _intel_15m_text = ""
     if _MARKET_INTEL_OK:
         try:
-            # v47.76: wait 8s before market_intel to let Bybit rate-limit bucket replenish
-            # after the ~420 API calls made by MTF pre-screen + MTF block fetch above.
-            print("🧠 Running 7-layer market intelligence (v47.63)... (rate-limit pause)")
-            import time as _rate_time
-            _rate_time.sleep(8.0)
-            _intel_ctx = run_market_intel(_screened_syms)
+            # v47.77: pass pre-screen indicators to skip redundant /v5/market/kline calls in layer 3.
+            # MTF pre-screen already fetched 4H candles for all coins — re-using that data here.
+            # Build pre-screen indicators dict — skips redundant /v5/market/kline calls in layer 3
+            _prescreen_indicators = {}
+            for _c in _screened_coins:
+                _sym = (_c.get("symbol") or "").upper().replace("USDT", "")
+                _m   = _c.get("_mtf", {})
+                if _sym and _m:
+                    _t4      = _m.get("trend_4h", "SIDEWAYS")
+                    _trend   = {"BULL": "UP", "BEAR": "DOWN", "SIDEWAYS": "SIDEWAYS"}.get(_t4, "SIDEWAYS")
+                    _rsi     = float(_m.get("rsi_4h", 50))
+                    _vr      = float(_m.get("vol_ratio", 1.0))
+                    _vlabel  = "HIGH" if _vr > 1.5 else ("LOW" if _vr < 0.7 else "NORMAL")
+                    _prescreen_indicators[_sym] = {
+                        "rsi_4h":     _rsi,
+                        "ema_signal": _t4,
+                        "vol_ratio":  _vr,
+                        "vol_label":  _vlabel,
+                        "atr_pct":    0.0,
+                        "trend":      _trend,
+                        "summary":    f"RSI={_rsi:.0f} EMA={_t4} VOL={_vlabel}({_vr:.1f}x) TREND={_trend} [pre-screen]",
+                    }
+
+            print(f"🧠 Running 7-layer market intelligence (v47.77)... ({len(_prescreen_indicators)} coins, indicators from pre-screen)")
+            _intel_ctx = run_market_intel(_screened_syms, prescreen_indicators=_prescreen_indicators)
             # Inject fresh F&G text (replaces the older fetch_fear_greed() output)
             _fg_fresh = format_fg_for_prompt(_intel_ctx.get("fear_greed", {}))
             if _fg_fresh:
