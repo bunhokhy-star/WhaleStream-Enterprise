@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v47.62   —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v47.76   —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 USDT perpetuals from Bybit (1 API call) ║
@@ -3397,7 +3397,11 @@ def main():
     _intel_15m_text = ""
     if _MARKET_INTEL_OK:
         try:
-            print("🧠 Running 7-layer market intelligence (v47.63)...")
+            # v47.76: wait 8s before market_intel to let Bybit rate-limit bucket replenish
+            # after the ~420 API calls made by MTF pre-screen + MTF block fetch above.
+            print("🧠 Running 7-layer market intelligence (v47.63)... (rate-limit pause)")
+            import time as _rate_time
+            _rate_time.sleep(8.0)
             _intel_ctx = run_market_intel(_screened_syms)
             # Inject fresh F&G text (replaces the older fetch_fear_greed() output)
             _fg_fresh = format_fg_for_prompt(_intel_ctx.get("fear_greed", {}))

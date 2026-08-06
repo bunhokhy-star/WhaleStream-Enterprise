@@ -62,12 +62,12 @@ def get_fear_greed() -> dict:
 
         if value <= 25:
             signal    = "EXTREME_FEAR"
-            long_bias = "BLOCK"
-            note      = f"F&G {value} ({label}) — BLOCK all LONGs, SHORT-only mode"
+            long_bias = "SHORT_FAVORED"
+            note      = f"F&G {value} ({label}) — EXTREME FEAR: ideal SHORT environment. Lean into SHORTs. LONGs need ≥97% confidence only."
         elif value <= 40:
             signal    = "FEAR"
-            long_bias = "REDUCE"
-            note      = f"F&G {value} ({label}) — max 1 LONG, require conf ≥95%"
+            long_bias = "SHORT_FAVORED"
+            note      = f"F&G {value} ({label}) — FEAR: SHORTs are primary opportunity. Max 1 LONG at ≥95% confidence."
         elif value <= 60:
             signal    = "NEUTRAL"
             long_bias = "NORMAL"

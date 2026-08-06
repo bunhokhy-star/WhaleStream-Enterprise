@@ -1,5 +1,25 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.76 — 2026-08-06 — Fix market_intel F&G notes contradicting v47.74 + rate-limit gap before market_intel
+
+### `whale_stream_market_intel.py` — `get_fear_greed()`
+- **BUG FIX**: F&G notes injected into Claude's prompt via `format_fg_for_prompt()` still said "BLOCK all LONGs, SHORT-only mode" (EXTREME_FEAR) and "max 1 LONG, require conf ≥95%" (FEAR). This directly contradicted the v47.74 fix in bot.py's `fetch_fear_greed()` — when market_intel ran successfully, its F&G text REPLACED the fixed version and put the old restrictive language back in the prompt.
+- Fixed: EXTREME_FEAR note now says "ideal SHORT environment, lean into SHORTs, LONGs need ≥97%". FEAR note says "SHORTs are primary opportunity, max 1 LONG at ≥95%". Both `long_bias` fields changed from "BLOCK"/"REDUCE" to "SHORT_FAVORED".
+
+### `whale_stream_bot.py` — `run_market_intel()` call
+- **BUG FIX**: No pause existed between MTF pre-screen (~420 Bybit API calls) and `run_market_intel()`. Bybit rate-limit bucket depleted immediately when market_intel started, causing momentum_15m and oi_delta to return 0 coins (v47.72 only added sleeps INSIDE market_intel, not before it).
+- Added `time.sleep(8.0)` immediately before `run_market_intel()` call. Gives Bybit rate-limit bucket time to replenish between the pre-screen and intel phases.
+
+---
+
+## v47.75 — 2026-08-06 — Fix strategist SHORT veto contradiction (93-94% SHORTs were being killed)
+
+### `whale_stream_strategist.py` — AUTO VETO Rule 3
+- **BUG FIX**: Strategist was vetoing all SHORTs with confidence 90–94% unless pattern matched exact "Stage 4-5 distribution" text. Bot floor is 93%, so any SHORT the bot generated at 93-94% was immediately killed by strategist — effectively enforcing a 95% floor through the back door.
+- Fixed: Rule 3 now simply vetoes SHORTs below 93% (consistent with bot floor). 93%+ SHORTs approved on merit. Bear/Fear conditions explicitly noted as SHORT-FAVORED.
+
+---
+
 ## v47.74 — 2026-08-06 — CRITICAL: Fix SHORT/F&G bias — bot was staying out in ideal SHORT conditions
 
 ### `whale_stream_bot.py` — prompt logic
