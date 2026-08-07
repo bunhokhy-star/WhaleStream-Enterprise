@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ╔══════════════════════════════════════════════════════════════╗
-║    WHALE-STREAM v47.63 — Market Intelligence Module          ║
+║    WHALE-STREAM v47.80 — Market Intelligence Module          ║
 ║                                                              ║
 ║  Seven real-data layers BEFORE signal selection:             ║
 ║  1. Fear & Greed Index  (alternative.me — free)              ║
@@ -367,7 +367,11 @@ def get_15m_momentum(symbols: list) -> dict:
                 timeout=8
             )
             r.raise_for_status()
-            raw = r.json().get("result", {}).get("list", [])
+            data = r.json()
+            if data.get("retCode") not in (0, None):   # Fix C: catch rate-limit HTTP-200 traps
+                time.sleep(0.3)
+                continue
+            raw = data.get("result", {}).get("list", [])
             if len(raw) < 10:
                 time.sleep(0.05)
                 continue
@@ -521,7 +525,11 @@ def get_oi_delta(symbols: list) -> dict:
                 timeout=8
             )
             r.raise_for_status()
-            items = r.json().get("result", {}).get("list", [])
+            data = r.json()
+            if data.get("retCode") not in (0, None):   # Fix C: catch rate-limit HTTP-200 traps
+                time.sleep(0.3)
+                continue
+            items = data.get("result", {}).get("list", [])
             if len(items) < 2:
                 time.sleep(0.05)
                 continue

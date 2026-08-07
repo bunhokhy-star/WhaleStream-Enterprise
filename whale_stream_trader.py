@@ -1406,7 +1406,7 @@ def main():
         pass
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🤖  WHALE-STREAM TRADER v47.49 — BYBIT DEMO    ║")
+    print("║   🤖  WHALE-STREAM TRADER v47.80 — BYBIT DEMO    ║")
     print(f"║   💰  ${TRADE_MARGIN_USDT} margin × {LEVERAGE}x = ${TRADE_MARGIN_USDT*LEVERAGE} per trade        ║")
     print("╚══════════════════════════════════════════════════╝")
     print()
@@ -2069,15 +2069,13 @@ def main():
             print()
             continue
         if _strat_key in _strat_reduces:
-            # Strategy first: if the Strategist isn't confident enough for full size,
-            # the setup isn't clean. Wait for the right coin, right time, right setup.
-            # Half-conviction trades pollute the learning loop and lower overall WR.
-            _reduce_msg = (f"⛔ STRATEGIST REDUCE→VETO: {coin} {_strat_key[1]} — "
-                           f"not confident enough for full ${TRADE_MARGIN_USDT*LEVERAGE}, skipping")
+            # REDUCE_SIZE → trade at 50% margin (not skip). Borderline setups still deserve a shot.
+            _reduce_mult = 0.50
+            _reduce_msg = (f"⚠️ STRATEGIST REDUCE_SIZE: {coin} {_strat_key[1]} — "
+                           f"trading at 50% margin (${TRADE_MARGIN_USDT*_reduce_mult:.0f} × {LEVERAGE}x)")
             log(_reduce_msg)
             print(f"   {_reduce_msg}")
-            print()
-            continue
+            _size_mult = min(_size_mult, _reduce_mult)   # cap at 50%, drawdown may lower further
         _coin_size_mult = _size_mult   # drawdown-based scale only (1.0× when no drawdown)
         _MIN_SIZE_MULT = 0.25
         if _coin_size_mult < _MIN_SIZE_MULT:

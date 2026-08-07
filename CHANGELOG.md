@@ -1,5 +1,21 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.80 — 2026-08-07 — Fix A/B/C: REDUCE_SIZE→trade, signal dedup, retCode rate-limit trap
+
+### `whale_stream_trader.py` — Fix A: REDUCE_SIZE now trades at 50% margin
+- **BUG FIX**: Strategist REDUCE_SIZE decisions caused trader to skip the order entirely (`continue`). Borderline setups worth $75 × 10x were being thrown away.
+- Fix: REDUCE_SIZE now places at 50% margin (`$75 × 10x = $750 position`) instead of skipping. Drawdown multiplier still applies on top, so actual size may be lower.
+
+### `whale_stream_strategist.py` — Fix B: Dedup signals per (coin, direction)
+- **BUG FIX**: `load_latest_signals()` reads ALL OPEN signals from the last 26h window. Same coin generated in multiple 4H cycles appeared multiple times (ADA LONG ×4, VIRTUAL SHORT ×2), consuming Claude's evaluation budget and cluttering reasoning.
+- Fix: After building the full signal list, keep only the most recent entry per (coin, direction) pair. Claude now evaluates each coin+direction exactly once.
+
+### `whale_stream_market_intel.py` — Fix C: retCode check in 15m momentum + OI delta
+- **BUG FIX**: Bybit rate-limits return HTTP 200 with `retCode=10006` and an empty `list`. `r.raise_for_status()` passes (200 is not an error), `len(raw) < 10` triggers `continue` — result: 0 coins from both `get_15m_momentum()` and `get_oi_delta()`, silently.
+- Fix: Check `data.get("retCode") not in (0, None)` after `r.json()` in both functions. Non-zero retCode now sleeps 0.3s and retries next coin instead of silently dropping.
+
+---
+
 ## v47.79 — 2026-08-07 — Block forbidden phrases in bot signal output (dead-cat bounce / RS failure auto-veto killer)
 
 ### `whale_stream_bot.py` — forbidden phrases guard

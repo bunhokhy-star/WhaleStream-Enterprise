@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM STRATEGIST v47.78 — SIGNAL QUALITY COUNCIL    ║
+║   WHALE-STREAM STRATEGIST v47.80 — SIGNAL QUALITY COUNCIL    ║
 ║                                                              ║
 ║  Team role: runs at :10 (Bot fires :00, Trader fires :20)   ║
 ║                                                              ║
@@ -284,6 +284,14 @@ def load_latest_signals(all_rows):
             "entry":     entry,
             "timestamp": ts_str,
         })
+
+    # Fix B: Dedup — keep only most recent signal per (coin, direction).
+    # Prevents ADA LONG ×4, VIRTUAL ×2 when same coin generated across multiple 4H cycles.
+    seen: dict = {}
+    for sig in signals:
+        key = (sig["coin"], sig["direction"])
+        seen[key] = sig   # later row = more recent; always overwrite
+    signals = list(seen.values())
 
     return signals
 
@@ -1028,7 +1036,7 @@ def _get_cycle_id():
 def main():
     print()
     print("╔══════════════════════════════════════════════════════╗")
-    print("║   🧠  WHALE-STREAM STRATEGIST v47.78                 ║")
+    print("║   🧠  WHALE-STREAM STRATEGIST v47.80                 ║")
     print("║   Signal Quality Council — APPROVE / VETO / REDUCE  ║")
     print("╚══════════════════════════════════════════════════════╝")
     print()
