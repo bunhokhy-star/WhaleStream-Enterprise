@@ -962,7 +962,7 @@ OUTPUT FORMAT:
 ⚡ STEP 1 — OUTPUT THE JSON BLOCK FIRST (MANDATORY, BEFORE ANYTHING ELSE):
 
 ##JSON_START##
-{"verdict":"GO","regime":"Bull Consolidation","btc_bias":"BULLISH","eth_bias":"BULLISH","risk_env":"RISK-ON","longs":[{"rank":1,"coin":"ZEC","conf":"94%","score":"94.3","entry":"$375-$390","sl":"$362","tp1":"$425","tp2":"$455","tp3":"$490","tp4":"$540","pattern":"Stage 2 breakout retest + negative funding","mtf_bias":"4H_BULL_1H_PULLBACK"},{"rank":2,"coin":"ADA","conf":"92%","score":"92.0","entry":"$0.152-$0.158","sl":"$0.147","tp1":"$0.172","tp2":"$0.185","tp3":"$0.200","tp4":"$0.220","pattern":"Bull flag + RS vs BTC","mtf_bias":"4H_BULL_1H_SIDEWAYS"},{"rank":3,"coin":"IOTA","conf":"90%","score":"90.1","entry":"$0.0420-$0.0440","sl":"$0.0402","tp1":"$0.0500","tp2":"$0.0560","tp3":"$0.0620","tp4":"$0.0700","pattern":"Support reclaim","mtf_bias":"4H_SIDEWAYS_1H_BULL"}],"shorts":[{"rank":1,"coin":"FF","conf":"96%","score":"96.0","entry":"$0.100-$0.104","sl":"$0.109","tp1":"$0.089","tp2":"$0.079","tp3":"$0.068","tp4":"$0.055","pattern":"Stage 5 distribution + RS failure","mtf_bias":"4H_BEAR_1H_BOUNCE"},{"rank":2,"coin":"H","conf":"95%","score":"95.2","entry":"$0.0021-$0.0022","sl":"$0.0024","tp1":"$0.0018","tp2":"$0.0016","tp3":"$0.0014","tp4":"$0.0012","pattern":"Stage 5 distribution failure + declining volume","mtf_bias":"4H_BEAR_1H_BEAR"}]}
+{"verdict":"GO","regime":"Bull Consolidation","btc_bias":"BULLISH","eth_bias":"BULLISH","risk_env":"RISK-ON","longs":[{"rank":1,"coin":"ZEC","conf":"94%","score":"94.3","entry":"$375-$390","sl":"$362","tp1":"$425","tp2":"$455","tp3":"$490","tp4":"$540","pattern":"Stage 2 breakout retest + negative funding","mtf_bias":"4H_BULL_1H_PULLBACK"},{"rank":2,"coin":"ADA","conf":"92%","score":"92.0","entry":"$0.152-$0.158","sl":"$0.147","tp1":"$0.172","tp2":"$0.185","tp3":"$0.200","tp4":"$0.220","pattern":"Bull flag + RS vs BTC","mtf_bias":"4H_BULL_1H_SIDEWAYS"},{"rank":3,"coin":"IOTA","conf":"90%","score":"90.1","entry":"$0.0420-$0.0440","sl":"$0.0402","tp1":"$0.0500","tp2":"$0.0560","tp3":"$0.0620","tp4":"$0.0700","pattern":"Support reclaim","mtf_bias":"4H_SIDEWAYS_1H_BULL"}],"shorts":[{"rank":1,"coin":"FF","conf":"96%","score":"96.0","entry":"$0.100-$0.104","sl":"$0.109","tp1":"$0.089","tp2":"$0.079","tp3":"$0.068","tp4":"$0.055","pattern":"Stage 5 distribution + lower-high rejection at EMA20","mtf_bias":"4H_BEAR_1H_BOUNCE"},{"rank":2,"coin":"H","conf":"95%","score":"95.2","entry":"$0.0021-$0.0022","sl":"$0.0024","tp1":"$0.0018","tp2":"$0.0016","tp3":"$0.0014","tp4":"$0.0012","pattern":"Stage 5 distribution failure + declining volume","mtf_bias":"4H_BEAR_1H_BEAR"}]}
 ##JSON_END##
 
 For STAY OUT verdict use:
@@ -976,6 +976,13 @@ RULES FOR THE JSON BLOCK:
 - Include FULL btc_bias and eth_bias text (e.g. "BEARISH — Bear Expansion")
 - Include FULL risk_env text (e.g. "RISK-OFF — Broad liquidation")
 - Output this block AS THE VERY FIRST THING in your response
+
+FORBIDDEN PHRASES IN THE "pattern" FIELD — NEVER USE THESE WORDS:
+  ❌ "dead cat bounce" / "dead cat" → use "failed rally" or "lower-high rejection" instead
+  ❌ "RS failure" / "relative strength failure" → use "weak RS vs BTC" or "underperforming BTC" instead
+  ❌ "meme" → use "low-liquidity altcoin" or describe the structure directly
+  These phrases trigger an automatic VETO by the downstream Strategist agent. Any signal using them
+  will be killed regardless of confidence. Use descriptive structure language instead.
 
 ════════════════════════════════════════════════════════════
 ⚡ STEP 2 — THEN output the full analysis below:

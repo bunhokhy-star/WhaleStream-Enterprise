@@ -1,5 +1,14 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.79 — 2026-08-07 — Block forbidden phrases in bot signal output (dead-cat bounce / RS failure auto-veto killer)
+
+### `whale_stream_bot.py` — forbidden phrases guard
+- **BUG FIX**: Bot was using "dead cat bounce" and "RS failure" language in signal `pattern` field descriptions. Strategist Rule 2 auto-vetoes ANY signal containing these exact phrases — no exceptions. Result: valid high-confidence SHORTs (e.g. VIRTUAL 95%) were being killed by their own pattern description.
+- Fix: Added FORBIDDEN PHRASES block in OUTPUT FORMAT rules. Claude is now explicitly told never to use "dead cat bounce/dead cat", "RS failure/relative strength failure", or "meme" in the pattern field — with safe alternatives provided ("failed rally", "lower-high rejection", "weak RS vs BTC").
+- Fix: Removed "RS failure" from the example SHORT JSON block (was training Claude to use the forbidden phrase).
+
+---
+
 ## v47.78 — 2026-08-07 — Deploy strategist 93% SHORT floor fix (was never pushed)
 
 ### `whale_stream_strategist.py` — deployment gap closed
