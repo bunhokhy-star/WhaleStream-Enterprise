@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM STRATEGIST v47.40 — SIGNAL QUALITY COUNCIL    ║
+║   WHALE-STREAM STRATEGIST v47.78 — SIGNAL QUALITY COUNCIL    ║
 ║                                                              ║
 ║  Team role: runs at :10 (Bot fires :00, Trader fires :20)   ║
 ║                                                              ║
@@ -537,10 +537,9 @@ AUTOMATIC VETO — no exceptions:
    "dead cat", or "meme" → VETO
    These have 0% win rate in our live trade history. Non-negotiable skip.
 
-3. SHORT signal confidence is in 90–94% range AND pattern does NOT explicitly mention
-   "Stage 4-5 distribution", "Stage 5 distribution", or "Stage 5 collapse" → VETO
-   The 90-94% SHORT zone has poor WR in our data. Code enforces ≥95% floor in REPAIR MODE.
-   The paradox: if it's genuinely 95%+ quality, bump to APPROVE. If it only "feels" 90-94%, veto.
+3. SHORT signal confidence is below 93% → VETO
+   Bot floor is 93%. Anything below that is noise. 93%+ SHORTs are valid — approve on merit.
+   Bear market / Fear conditions = SHORT-FAVORED. Do not add extra friction to SHORTs in these conditions.
 
 4. BTC 7-day % < -8% (bear market confirmed) AND signal is LONG AND confidence < 97% → VETO
    Alt longs in bear markets compound drawdowns. Our #1 loss pattern.
@@ -1029,7 +1028,7 @@ def _get_cycle_id():
 def main():
     print()
     print("╔══════════════════════════════════════════════════════╗")
-    print("║   🧠  WHALE-STREAM STRATEGIST v47.48                 ║")
+    print("║   🧠  WHALE-STREAM STRATEGIST v47.78                 ║")
     print("║   Signal Quality Council — APPROVE / VETO / REDUCE  ║")
     print("╚══════════════════════════════════════════════════════╝")
     print()

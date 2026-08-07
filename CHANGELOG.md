@@ -1,5 +1,14 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.78 — 2026-08-07 — Deploy strategist 93% SHORT floor fix (was never pushed)
+
+### `whale_stream_strategist.py` — deployment gap closed
+- **DEPLOYMENT FIX**: Rule 3 (SHORT confidence < 93% → VETO) was fixed in v47.75 locally but `whale_stream_strategist.py` was never included in any git push — server kept the old 97% threshold, vetoing valid 95% SHORTs (e.g. JUP SHORT).
+- Fix: include strategist.py in push. Server will now correctly allow 93%+ SHORTs through.
+- Version banners updated: v47.40/v47.48 → v47.78.
+
+---
+
 ## v47.77 — 2026-08-06 — Fix indicators=0 (pass pre-screen data to market_intel) + Bear Consolidation SHORT multiplier killer
 
 ### `whale_stream_bot.py` + `whale_stream_market_intel.py` — indicators fix
