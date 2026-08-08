@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ╔══════════════════════════════════════════════════════════════╗
-║    WHALE-STREAM v47.80 — Market Intelligence Module          ║
+║    WHALE-STREAM v47.83 — Market Intelligence Module          ║
 ║                                                              ║
 ║  Seven real-data layers BEFORE signal selection:             ║
 ║  1. Fear & Greed Index  (alternative.me — free)              ║
@@ -360,16 +360,20 @@ def get_15m_momentum(symbols: list) -> dict:
 
     for sym in symbols:
         try:
-            r = requests.get(
-                f"{BYBIT_PUBLIC_URL}/v5/market/kline",
-                params={"category": "linear", "symbol": sym,
-                        "interval": "15", "limit": "24"},
-                timeout=8
-            )
-            r.raise_for_status()
-            data = r.json()
-            if data.get("retCode") not in (0, None):   # Fix C: catch rate-limit HTTP-200 traps
-                time.sleep(0.3)
+            data = None
+            for _attempt in range(3):                  # Fix D: per-coin retry on rate-limit
+                r = requests.get(
+                    f"{BYBIT_PUBLIC_URL}/v5/market/kline",
+                    params={"category": "linear", "symbol": sym,
+                            "interval": "15", "limit": "24"},
+                    timeout=8
+                )
+                r.raise_for_status()
+                data = r.json()
+                if data.get("retCode") in (0, None):
+                    break
+                time.sleep(0.5 * (_attempt + 1))       # 0.5s → 1.0s → 1.5s backoff
+            if data is None or data.get("retCode") not in (0, None):
                 continue
             raw = data.get("result", {}).get("list", [])
             if len(raw) < 10:
@@ -518,16 +522,20 @@ def get_oi_delta(symbols: list) -> dict:
 
     for sym in symbols:
         try:
-            r = requests.get(
-                f"{BYBIT_PUBLIC_URL}/v5/market/open-interest",
-                params={"category": "linear", "symbol": sym,
-                        "intervalTime": "1h", "limit": "2"},
-                timeout=8
-            )
-            r.raise_for_status()
-            data = r.json()
-            if data.get("retCode") not in (0, None):   # Fix C: catch rate-limit HTTP-200 traps
-                time.sleep(0.3)
+            data = None
+            for _attempt in range(3):                  # Fix D: per-coin retry on rate-limit
+                r = requests.get(
+                    f"{BYBIT_PUBLIC_URL}/v5/market/open-interest",
+                    params={"category": "linear", "symbol": sym,
+                            "intervalTime": "1h", "limit": "2"},
+                    timeout=8
+                )
+                r.raise_for_status()
+                data = r.json()
+                if data.get("retCode") in (0, None):
+                    break
+                time.sleep(0.5 * (_attempt + 1))       # 0.5s → 1.0s → 1.5s backoff
+            if data is None or data.get("retCode") not in (0, None):
                 continue
             items = data.get("result", {}).get("list", [])
             if len(items) < 2:

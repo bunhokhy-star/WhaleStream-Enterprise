@@ -1,5 +1,14 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.83 — 2026-08-09 — Fix D: per-coin retry on rate-limit in 15m momentum + OI delta
+
+### `whale_stream_market_intel.py` — Fix D: per-coin retry (3 attempts, 0.5s backoff)
+- **BUG FIX**: Fix C (v47.80) caught retCode errors per coin and skipped to the next coin. When Bybit rate-limits affect ALL coins simultaneously, all are skipped → 0 coins returned from both `get_15m_momentum()` and `get_oi_delta()`. Claude then sees empty momentum data and defaults to STAY OUT.
+- Fix: Each coin now retries up to 3 times before giving up, with 0.5s / 1.0s / 1.5s progressive backoff. Transient rate-limit bursts clear between attempts, allowing real data to come through.
+- Applies to both `get_15m_momentum()` (Function 5) and `get_oi_delta()` (Function 7).
+
+---
+
 ## v47.81 — 2026-08-08 — Fix false CRITICAL alert + Gate 1 counter 150→50
 
 ### `whale_stream_tracker.py` — False CRITICAL expiry alert fix
