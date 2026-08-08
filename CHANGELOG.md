@@ -1,5 +1,18 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.81 — 2026-08-08 — Fix false CRITICAL alert + Gate 1 counter 150→50
+
+### `whale_stream_tracker.py` — False CRITICAL expiry alert fix
+- **BUG FIX**: Tracker was firing "Check Bybit NOW — CRITICAL close needed" for signals that were never placed on Bybit (no Order ID). Caused daily LTC false alarms for a signal that never executed.
+- Fix 1: Added `bybit_id` field to `all_parsed` records so the expiry section can access it.
+- Fix 2: CRITICAL / expiring_soon alert blocks now skip signals with empty `bybit_id`. Only orders actually placed on Bybit can trigger a manual-close alert.
+
+### `whale_stream_tracker.py` — Gate 1 counter 150→50
+- **BUG FIX**: Gate 1 target was still showing `/150` everywhere despite the v47.52 decision to reduce to 50 trades. The push BAT for v47.52 did not include tracker.py.
+- Fixed all 15 occurrences: dashboard HTML, Gate 1 cleared check, Telegram WIN/LOSS alerts, ETA calculator, milestone burst thresholds (now 10/25/50), Monday progress snapshot, and inline comments.
+
+---
+
 ## v47.80 — 2026-08-07 — Fix A/B/C: REDUCE_SIZE→trade, signal dedup, retCode rate-limit trap
 
 ### `whale_stream_trader.py` — Fix A: REDUCE_SIZE now trades at 50% margin

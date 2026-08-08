@@ -1022,8 +1022,8 @@ def write_dashboard_html(all_rows):
 <div class="gate-row" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
   <div class="card">
     <div class="label">🎯 Gate 1 — Trade Volume</div>
-    <div class="value {gate1_color}">{gate1_resolved}/150</div>
-    <div class="sub">{gate1_pct:.0f}% complete — need 150 resolved trades</div>
+    <div class="value {gate1_color}">{gate1_resolved}/50</div>
+    <div class="sub">{gate1_pct:.0f}% complete — need 50 resolved trades</div>
     <div style="margin-top:8px;background:var(--bg3);border-radius:4px;height:6px;">
       <div style="background:{gate1_bar_color};height:6px;border-radius:4px;width:{min(gate1_pct,100):.0f}%"></div>
     </div>
@@ -1268,10 +1268,10 @@ def _update_gate_checklist(all_rows):
     resolved = [r for r in all_rows if r.get("status") in ("WIN", "LOSS")]
     wins     = [r for r in resolved if r["status"] == "WIN"]
 
-    # ── Gate 1: ≥ 150 resolved trades ──────────────────────────
+    # ── Gate 1: ≥ 50 resolved trades ───────────────────────────
     g1_n   = len(resolved)
-    g1_ok  = g1_n >= 150
-    g1_str = f"{'✅' if g1_ok else '❌'} {g1_n}/150"
+    g1_ok  = g1_n >= 50
+    g1_str = f"{'✅' if g1_ok else '❌'} {g1_n}/50"
 
     # ── Gate 2: Overall WR ≥ 58% over last 30 resolved ──────────
     last30    = resolved[-30:] if len(resolved) >= 30 else resolved
@@ -1607,6 +1607,7 @@ def main():
             "tp_hit":      row[COL_TP_HIT].strip(),
             "resolved_at": row[COL_RESOLVED_AT].strip(),
             "ts":          ts_str,   # signal timestamp — needed for Gate 1 ETA + expiry alerts
+            "bybit_id":    bybit_id, # needed for expiry alert filtering (only alert if actually placed)
         })
 
         # ── P4: TP2/TP3 pursuit handled by Bybit write-back (below) ─
@@ -1726,9 +1727,9 @@ def main():
                 _p4_total  = len(_p4_resolved_all)
                 _p4_wr     = (_p4_wins / _p4_total * 100) if _p4_total else 0.0
                 _p4_gate1  = ""
-                if _p4_total >= 55 and _p4_total % 5 == 0:
-                    _p4_gate1 = (f"\n📊 Gate 1 progress: {_p4_total}/150 — "
-                                 f"{150 - _p4_total} trades to go")
+                if _p4_total >= 10 and _p4_total % 5 == 0:
+                    _p4_gate1 = (f"\n📊 Gate 1 progress: {_p4_total}/50 — "
+                                 f"{50 - _p4_total} trades to go")
                 if _p4_is_win:
                     send_telegram_alert(
                         f"✅ <b>REAL TRADE WIN — {coin} {_p4_dir}</b>\n"
@@ -1736,7 +1737,7 @@ def main():
                         f"P&amp;L: <b>{_p4_pnl_str}</b> (10× leverage)\n"
                         f"💰 Bybit Order: {bybit_id[:12]}...\n"
                         f"━━━━━━━━━━━━━━━━\n"
-                        f"Real: {_p4_wins}W/{_p4_losses}L | WR: {_p4_wr:.1f}% | Gate 1: {_p4_total}/150"
+                        f"Real: {_p4_wins}W/{_p4_losses}L | WR: {_p4_wr:.1f}% | Gate 1: {_p4_total}/50"
                         f"{_p4_gate1}"
                     )
                 else:
@@ -1746,7 +1747,7 @@ def main():
                         f"P&amp;L: <b>{_p4_pnl_pct:.1f}%</b> (10× leverage)\n"
                         f"💰 Bybit Order: {bybit_id[:12]}...\n"
                         f"━━━━━━━━━━━━━━━━\n"
-                        f"Real: {_p4_wins}W/{_p4_losses}L | WR: {_p4_wr:.1f}% | Gate 1: {_p4_total}/150"
+                        f"Real: {_p4_wins}W/{_p4_losses}L | WR: {_p4_wr:.1f}% | Gate 1: {_p4_total}/50"
                         f"{_p4_gate1}"
                     )
                 _newly_resolved.append({
@@ -1835,10 +1836,10 @@ def main():
             _alert_wr       = (_alert_wins / _alert_total * 100) if _alert_total else 0.0
             # Gate 1 milestone note (every 5 resolved trades from 55 onward)
             _gate1_note = ""
-            if _alert_total >= 55 and _alert_total % 5 == 0:
+            if _alert_total >= 10 and _alert_total % 5 == 0:
                 _gate1_note = (
-                    f"\n📊 Gate 1 progress: {_alert_total}/150 — "
-                    f"{150 - _alert_total} trades to go"
+                    f"\n📊 Gate 1 progress: {_alert_total}/50 — "
+                    f"{50 - _alert_total} trades to go"
                 )
             if res_status == "WIN":
                 _pnl_str  = f"+{pnl:.1f}%" if pnl > 0 else f"{pnl:.1f}%"
@@ -1850,7 +1851,7 @@ def main():
                     f"P&amp;L: <b>{_pnl_str}</b> (10× leverage)\n"
                     f"💰 Bybit Order: {bybit_id[:12]}...\n"
                     f"━━━━━━━━━━━━━━━━\n"
-                    f"Real: {_alert_wins}W/{_alert_losses}L | WR: {_alert_wr:.1f}% | Gate 1: {_alert_total}/150"
+                    f"Real: {_alert_wins}W/{_alert_losses}L | WR: {_alert_wr:.1f}% | Gate 1: {_alert_total}/50"
                     f"{_gate1_note}"
                 )
             else:
@@ -1861,7 +1862,7 @@ def main():
                     f"P&amp;L: <b>{pnl:.1f}%</b> (10× leverage)\n"
                     f"💰 Bybit Order: {bybit_id[:12]}...\n"
                     f"━━━━━━━━━━━━━━━━\n"
-                    f"Real: {_alert_wins}W/{_alert_losses}L | WR: {_alert_wr:.1f}% | Gate 1: {_alert_total}/150"
+                    f"Real: {_alert_wins}W/{_alert_losses}L | WR: {_alert_wr:.1f}% | Gate 1: {_alert_total}/50"
                     f"{_gate1_note}"
                 )
             # ── Queue for Post-Trade Debrief Agent ────────────────
@@ -2123,7 +2124,7 @@ def main():
         _open      = [r for r in all_parsed if r.get("status") == "OPEN"]
         _resolved  = [r for r in all_parsed if r.get("status") in ("WIN", "LOSS")]
         _gate1_n   = len(_resolved)
-        _gate1_pct = min(_gate1_n / 150 * 100, 100)
+        _gate1_pct = min(_gate1_n / 50 * 100, 100)
 
         # Expiry risk: OPEN trades approaching 72h timeout
         # Tier 1 (48h-59h): at risk, ~12-24h left
@@ -2135,6 +2136,9 @@ def main():
             try:
                 _trade_dt = datetime.strptime(_ts_str, "%Y-%m-%d %H:%M").replace(tzinfo=BKK)
                 _age_h = (_bkk_now - _trade_dt).total_seconds() / 3600
+                _r_bybit_id = _r.get("bybit_id", "")
+                if not _r_bybit_id:
+                    continue   # never placed on Bybit — no manual close needed, just let it expire
                 if _age_h >= 60:
                     _critical_close.append((_r.get("coin", "?"), _r.get("signal", "?"), _age_h))
                 elif _age_h >= 48:
@@ -2142,7 +2146,7 @@ def main():
             except Exception:
                 pass
 
-        _gate1_bar = "✅ CLEARED" if _gate1_n >= 150 else f"{_gate1_n}/150 ({_gate1_pct:.0f}%)"
+        _gate1_bar = "✅ CLEARED" if _gate1_n >= 50 else f"{_gate1_n}/50 ({_gate1_pct:.0f}%)"
 
         # Gate 1 ETA: resolved rate over last 7 days
         _seven_days_ago = _bkk_now - timedelta(days=7)
@@ -2159,11 +2163,11 @@ def main():
                 pass
         _days_with_data = max((_bkk_now - min(_recent_resolved)).total_seconds() / 86400, 1) if _recent_resolved else 7
         _daily_rate = len(_recent_resolved) / _days_with_data if _recent_resolved else 0
-        _trades_needed = max(150 - _gate1_n, 0)
-        if _daily_rate > 0 and _gate1_n < 150:
+        _trades_needed = max(50 - _gate1_n, 0)
+        if _daily_rate > 0 and _gate1_n < 50:
             _eta_days = _trades_needed / _daily_rate
             _gate1_eta = f"~{_eta_days:.0f}d ({_daily_rate:.1f}/day)"
-        elif _gate1_n >= 150:
+        elif _gate1_n >= 50:
             _gate1_eta = "✅ CLEARED"
         else:
             _gate1_eta = "insufficient data"
@@ -2336,7 +2340,7 @@ def main():
 
     # ── Gate 1 milestone Telegram bursts ─────────────────────────
     # Fires a celebration burst the first time resolved count crosses
-    # 50 / 75 / 100 / 125 / 150. State persisted in milestone_state.json
+    # 10 / 25 / 50. State persisted in milestone_state.json
     # so each milestone fires exactly once, even across restarts.
     try:
         _ms_file = os.path.join(SCRIPT_DIR, "milestone_state.json")
@@ -2360,17 +2364,17 @@ def main():
         _ms_avg_pnl  = sum(_ms_pnl_vals) / len(_ms_pnl_vals) if _ms_pnl_vals else None
 
         _ms_fired_any = False
-        for _ms_thresh in [50, 75, 100, 125, 150]:
+        for _ms_thresh in [10, 25, 50]:
             if _ms_n >= _ms_thresh and _ms_thresh not in _ms_state.get("fired", []):
-                _ms_pct  = _ms_thresh / 150 * 100
-                if _ms_thresh == 150:
-                    _ms_head = "🏆 <b>GATE 1 MILESTONE — 150 RESOLVED TRADES!</b>"
+                _ms_pct  = _ms_thresh / 50 * 100
+                if _ms_thresh == 50:
+                    _ms_head = "🏆 <b>GATE 1 MILESTONE — 50 RESOLVED TRADES!</b>"
                     _ms_sub  = "Gate 1 complete. Real capital assessment window is now open."
                     _ms_next = ""
                 else:
                     _ms_head = f"🎯 <b>GATE 1 CHECKPOINT — {_ms_thresh} TRADES RESOLVED!</b>"
-                    _ms_sub  = f"Progress: {_ms_thresh}/150 ({_ms_pct:.0f}% of Gate 1)"
-                    _ms_next = f"\n  Next checkpoint: {150 - _ms_thresh} more trades to go"
+                    _ms_sub  = f"Progress: {_ms_thresh}/50 ({_ms_pct:.0f}% of Gate 1)"
+                    _ms_next = f"\n  Next checkpoint: {50 - _ms_thresh} more trades to go"
                 _ms_pnl_line = (
                     f"\n  📊 Avg P&L (real trades): {_ms_avg_pnl:+.1f}%"
                     if _ms_avg_pnl is not None else ""
@@ -2418,13 +2422,13 @@ def main():
                    if ("LONG" in r.get("signal", "").upper() or "🟢" in r.get("signal", ""))
                    and _is_real_pnl(r.get("pnl"))
                    and r.get("status") in ("WIN", "LOSS")]
-            # Gate 1 = 150+ resolved real LONG trades (volume gate)
-            _g1_ok = len(_ml) >= 150
-            _g1_remaining = max(0, 150 - len(_ml))
+            # Gate 1 = 50+ resolved real LONG trades (volume gate)
+            _g1_ok = len(_ml) >= 50
+            _g1_remaining = max(0, 50 - len(_ml))
             if _g1_ok:
                 _g1_str = f"✅ GATE 1 CLEARED — {len(_ml)} resolved LONGs"
             else:
-                _g1_str = f"⏳ {len(_ml)}/150 real LONGs ({_g1_remaining} more needed)"
+                _g1_str = f"⏳ {len(_ml)}/50 real LONGs ({_g1_remaining} more needed)"
             # Gate 2 = 58% WR over all resolved LONGs (min 30)
             _ml_all   = _ml
             _ml_all_w = sum(1 for r in _ml_all if r["status"] == "WIN")
