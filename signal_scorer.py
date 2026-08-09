@@ -3,7 +3,7 @@ import os    # required for module-level path joins (must precede all other modu
 import json  # required for scorer_tune.json + pattern WR cache loads
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM SIGNAL SCORER v47.40                          ║
+║   WHALE-STREAM SIGNAL SCORER v47.84                          ║
 ║                                                              ║
 ║  Pre-scores every signal 0–10 BEFORE sending to Strategist.  ║
 ║  Deterministic — no API calls, instant evaluation.           ║
@@ -83,7 +83,7 @@ MODERATE_PATTERNS = {
 
 # Verdict thresholds (names match verdicts: STRONG_MIN = floor for STRONG, REVIEW_MIN = floor for REVIEW)
 STRONG_MIN  = 7   # score ≥ 7 → STRONG (high priority, send to Claude)
-REVIEW_MIN  = 4   # score ≥ 4 → REVIEW (send to Claude, flag low score); below 4 → SKIP
+REVIEW_MIN  = 3   # v47.84: lowered 4→3 — 4H_SIDEWAYS penalty of -2 was pushing valid signals below floor; score ≥ 3 → REVIEW; below 3 → SKIP
 
 # ── MTF bias classification tables ────────────────────────────
 # Ideal LONG entry: 4H bullish structure, 1H pulling back (best timing)

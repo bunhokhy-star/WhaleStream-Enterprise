@@ -1,5 +1,40 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.84 — 2026-08-09 — System-wide audit: 10 blockers fixed across 5 files
+
+### `whale_stream_bot.py` — Fix 1: Static prompt SHORT floor 95% → 93%
+- **BUG FIX**: Static prompt declared "MINIMUM SHORT CONFIDENCE: 95% — AUTO-DROPPED (REPAIR MODE)" even when REPAIR MODE was NOT active. Every cycle the 95% floor was sent to Claude, suppressing all SHORTs scored 93–94% (the healthy normal range).
+- Fix: Changed to 93% in the static prompt. Repair mode activates the 95% floor via the sentinel file check in code — not via the prompt.
+
+### `whale_stream_bot.py` — Fix 2: `<= 50` → `< 50` in min_short_conf
+- **BUG FIX**: `short_wr_recent <= 50` fires at exactly 50, which is the default when there are NO recent SHORTs (neutral baseline). This incorrectly applied the 95% floor to accounts with zero SHORT history. Fixed to `< 50`.
+
+### `whale_stream_bot.py` — Fix 3: Non-proven LONG floor 95% → 91%
+- **BUG FIX**: Once any proven LONG coin (≥3 trades, ≥60% WR) existed in trade_log.json, all other LONG coins required 95% confidence. Claude rarely outputs >94% for alts, so nearly all non-proven LONGs were auto-dropped. Floor relaxed to 91%.
+
+### `whale_stream_market_intel.py` — Fix 4: Extreme Fear LONG requirement 97% → 95%
+- **BUG FIX**: Extreme Fear environment required 97% LONG confidence. Claude never outputs 97% — this banned all LONGs during crypto fear events. Lowered to 95% to match system's maximum usable threshold.
+
+### `whale_stream_market_intel.py` — Fix 5: F&G Fear note changed from restrictive to permissive
+- **BUG FIX**: Fear label generated "Max 1 LONG at ≥95% confidence" — a hard cap that overwrote bot.py's permissive version (market_intel.py wins via line 3437). Changed to "LONG setups with strong confluence remain valid — standard rules apply."
+
+### `whale_stream_market_intel.py` — Fix 6: CROWDED_LONG threshold 0.0005 → 0.001
+- **BUG FIX**: Funding rate > 0.0005 (0.05%) flagged normal mild-bull funding as "CROWDED_LONG", suppressing LONGs in typical market conditions. Prompt defines "extreme" as >0.10%. Raised threshold to 0.001 (0.10%) to match.
+
+### `whale_stream_strategist.py` — Fix 7: BTC SMA band ±2% → ±4%
+- **BUG FIX**: BTC just 2.1% below SMA20 = BEARISH = ALL LONGs deleted by Strategist before Claude even sees them. Normal 4H BTC volatility routinely swings ±2–3% without a true trend reversal. Widened to ±4% so only genuine extended moves beyond SMA trigger directional bias.
+
+### `signal_scorer.py` — Fix 8: REVIEW_MIN 4 → 3
+- **BUG FIX**: 4H_SIDEWAYS penalty (-2) can push a valid signal from score 5 down to 3, auto-skipping it before Claude. REVIEW_MIN=4 was too aggressive. Lowered to 3 so borderline signals still reach Claude for human-AI evaluation.
+
+### `whale_stream_trader.py` — Fix 9: REDUCE_SIZE `_size_mult` mutation (Fix C2)
+- **BUG FIX (CRITICAL)**: `_size_mult = min(_size_mult, _reduce_mult)` permanently mutated the shared outer variable. If the first coin in the loop received REDUCE_SIZE, ALL subsequent coins in the same run inherited 50% sizing — unintended bleed. Fixed: write to `_coin_size_mult` only; `_size_mult` is untouched.
+
+### `whale_stream_trader.py` — Fix 10: Stale gate4_breach.flag auto-cleanup (Fix M1)
+- **BUG FIX**: `gate4_breach.flag` was stuck on disk since June 29 even after drawdown recovered below 15%. The only cleanup path was via `write_balance_file()` crossing $425 — which didn't fire. Added explicit cleanup: when `_drawdown_pct ≤ 15%` and the flag still exists, remove it immediately so breach alerts can re-fire if balance dips again.
+
+---
+
 ## v47.83 — 2026-08-09 — Fix D: per-coin retry on rate-limit in 15m momentum + OI delta
 
 ### `whale_stream_market_intel.py` — Fix D: per-coin retry (3 attempts, 0.5s backoff)

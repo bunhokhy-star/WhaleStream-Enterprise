@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ╔══════════════════════════════════════════════════════════════╗
-║    WHALE-STREAM v47.83 — Market Intelligence Module          ║
+║    WHALE-STREAM v47.84 — Market Intelligence Module          ║
 ║                                                              ║
 ║  Seven real-data layers BEFORE signal selection:             ║
 ║  1. Fear & Greed Index  (alternative.me — free)              ║
@@ -63,11 +63,11 @@ def get_fear_greed() -> dict:
         if value <= 25:
             signal    = "EXTREME_FEAR"
             long_bias = "SHORT_FAVORED"
-            note      = f"F&G {value} ({label}) — EXTREME FEAR: ideal SHORT environment. Lean into SHORTs. LONGs need ≥97% confidence only."
+            note      = f"F&G {value} ({label}) — EXTREME FEAR: ideal SHORT environment. Lean into SHORTs. LONGs only on clear capitulation reversals with ≥95% confidence."
         elif value <= 40:
             signal    = "FEAR"
             long_bias = "SHORT_FAVORED"
-            note      = f"F&G {value} ({label}) — FEAR: SHORTs are primary opportunity. Max 1 LONG at ≥95% confidence."
+            note      = f"F&G {value} ({label}) — FEAR: SHORTs are primary opportunity. LONG setups with strong confluence remain valid — standard rules apply."
         elif value <= 60:
             signal    = "NEUTRAL"
             long_bias = "NORMAL"
@@ -124,10 +124,10 @@ def get_funding_oi(symbols: list) -> dict:
             fr   = float(item.get("fundingRate", 0) or 0)
             oi   = float(item.get("openInterest", 0) or 0)
 
-            if fr > 0.0005:
+            if fr > 0.001:                                 # v47.84: raised from 0.0005 → 0.001 (0.10%) to match "extreme" definition in prompt
                 bias = "CROWDED_LONG"
                 note = f"Funding {fr*100:.3f}% — longs crowded, dump risk"
-            elif fr < -0.0005:
+            elif fr < -0.001:
                 bias = "CROWDED_SHORT"
                 note = f"Funding {fr*100:.3f}% — shorts crowded, squeeze risk"
             else:
@@ -761,7 +761,7 @@ if __name__ == "__main__":
         "LTCUSDT", "ADAUSDT", "NEARUSDT", "SUIUSDT", "DOTUSDT"
     ]
     print("=" * 60)
-    print("  WHALE-STREAM Market Intelligence v47.63 — Standalone Test")
+    print("  WHALE-STREAM Market Intelligence v47.84 — Standalone Test")
     print("=" * 60)
     ctx = run_market_intel(test_symbols)
     print()

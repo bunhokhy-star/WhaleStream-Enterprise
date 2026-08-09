@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v47.77   —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v47.84   —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 USDT perpetuals from Bybit (1 API call) ║
@@ -1039,8 +1039,8 @@ RULES:
     - "LH/LL breakdown" alone → 0% WR in several samples. Only trade if ALSO has Stage 4-5 characteristics.
     - "Dead cat bounce failure" → 0% WR. Avoid.
   SHORT CONFIDENCE RULE (hard floor enforced in code):
-    - MINIMUM SHORT CONFIDENCE: 95% — any SHORT below 95% will be AUTO-DROPPED by the system (REPAIR MODE)
-    - 88-94% confidence band has poor WR — do NOT output SHORTs in this range
+    - MINIMUM SHORT CONFIDENCE: 93% — any SHORT below 93% will be AUTO-DROPPED by the system
+    - 88-92% confidence band has poor WR — do NOT output SHORTs in this range
     - 93-95% band: 100% WR (9/9). 95%+ band: 94.1% WR (48/51). These are the ONLY acceptable SHORT zones.
     - If a setup feels like 90-92% confidence → either find the extra edge to push to 93%+ or SKIP it entirely
   LONG CONFIDENCE RULE (hard floor enforced in code):
@@ -2669,7 +2669,7 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     shorts = data.get("shorts", [])
 
     lines = []
-    lines.append(f"🐳 WHALE-STREAM v47.60")
+    lines.append(f"🐳 WHALE-STREAM v47.84")
     lines.append(f"📅 {ts}")
 
     # ── Market regime summary ─────────────────────────────────
@@ -3551,7 +3551,7 @@ def main():
     # intentionally. A weak SHORT (e.g. 88% conf) must not kill a valid LONG via
     # the conflict guard if that SHORT would be dropped here anyway. Filtering
     # SHORTs first ensures the conflict guard only sees SHORTs that would survive.
-    min_short_conf = 95 if short_wr_recent <= 50 else 93  # 95% floor until SHORT WR recovers to >50% (v47.8)
+    min_short_conf = 95 if short_wr_recent < 50 else 93   # 95% floor until SHORT WR recovers to ≥50% (v47.84 fix: was <= which wrongly fired at exactly 50)
     before = len(merged_shorts)
     merged_shorts = [s for s in merged_shorts if _parse_conf(s) >= min_short_conf]
     dropped = before - len(merged_shorts)
@@ -3720,14 +3720,14 @@ def main():
                 _filtered_longs.append(_ls)
             else:
                 _lconf = _top3_key(_ls)
-                if _lconf >= 95.0:
+                if _lconf >= 91.0:
                     _filtered_longs.append(_ls)
                 else:
-                    print(f"   🎯 LONG WL: {_lc} conf={_lconf:.0f}% < 95% (non-proven) → dropped")
+                    print(f"   🎯 LONG WL: {_lc} conf={_lconf:.0f}% < 91% (non-proven) → dropped")
         signal_data["longs"] = _filtered_longs
         _long_wl_dropped = _long_before_wl - len(signal_data["longs"])
         if _long_wl_dropped > 0:
-            print(f"   ✅ LONG WL FILTER: {_long_before_wl}🟢 → {len(signal_data['longs'])}🟢 kept ({_long_wl_dropped} non-proven below 95% dropped)")
+            print(f"   ✅ LONG WL FILTER: {_long_before_wl}🟢 → {len(signal_data['longs'])}🟢 kept ({_long_wl_dropped} non-proven below 91% dropped)")
     # ── end LONG whitelist filter ─────────────────────────────────────────────
     # ── end top-N filter ──────────────────────────────────────────────────────
 

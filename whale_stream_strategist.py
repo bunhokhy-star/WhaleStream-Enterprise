@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   WHALE-STREAM STRATEGIST v47.80 — SIGNAL QUALITY COUNCIL    ║
+║   WHALE-STREAM STRATEGIST v47.84 — SIGNAL QUALITY COUNCIL    ║
 ║                                                              ║
 ║  Team role: runs at :10 (Bot fires :00, Trader fires :20)   ║
 ║                                                              ║
@@ -443,7 +443,7 @@ def get_btc_market_bias():
     Compares current BTC price to 20-period SMA:
       - Price > SMA by >2% → BULLISH  → only trade LONGs (veto SHORTs)
       - Price < SMA by >2% → BEARISH  → only trade SHORTs (veto LONGs)
-      - Within ±2% of SMA  → NEUTRAL  → trade both directions
+      - Within ±4% of SMA  → NEUTRAL  → trade both directions
 
     Returns: (bias, current_price, sma20, pct_from_sma)
     bias = "BEARISH" / "BULLISH" / "NEUTRAL"
@@ -475,9 +475,9 @@ def get_btc_market_bias():
 
         pct_from_sma = (current - sma20) / sma20 * 100
 
-        if pct_from_sma < -2.0:
+        if pct_from_sma < -4.0:                # v47.84: widened from ±2% → ±4% — ±2% was too tight, killing all LONGs/SHORTs in normal volatility
             bias = "BEARISH"
-        elif pct_from_sma > 2.0:
+        elif pct_from_sma > 4.0:
             bias = "BULLISH"
         else:
             bias = "NEUTRAL"

@@ -1406,7 +1406,7 @@ def main():
         pass
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🤖  WHALE-STREAM TRADER v47.80 — BYBIT DEMO    ║")
+    print("║   🤖  WHALE-STREAM TRADER v47.84 — BYBIT DEMO    ║")
     print(f"║   💰  ${TRADE_MARGIN_USDT} margin × {LEVERAGE}x = ${TRADE_MARGIN_USDT*LEVERAGE} per trade        ║")
     print("╚══════════════════════════════════════════════════╝")
     print()
@@ -1776,6 +1776,17 @@ def main():
             except Exception:
                 pass
 
+    # ── Stale gate4_breach.flag cleanup (v47.84 Fix M1) ────────────────────
+    # If drawdown has recovered below 15% but the flag still exists on disk
+    # (e.g. was stuck since June 29), remove it now so the entry alert can
+    # fire again if the balance dips back below the breach threshold.
+    if not _GATE4_BREACH and os.path.exists(GATE4_BREACH_FILE):
+        try:
+            os.remove(GATE4_BREACH_FILE)
+            log("GATE4 BREACH FLAG cleared — drawdown recovered below 15% (stale flag removed)")
+        except Exception:
+            pass
+
     # ── Daily profit target scaling (v47.60) ────────────────────────────────
     # Track today's start balance → scale up position size when daily P&L hits $50.
     #   Normal:          $20 margin × 10x = $200 position (1.0×)
@@ -2075,8 +2086,9 @@ def main():
                            f"trading at 50% margin (${TRADE_MARGIN_USDT*_reduce_mult:.0f} × {LEVERAGE}x)")
             log(_reduce_msg)
             print(f"   {_reduce_msg}")
-            _size_mult = min(_size_mult, _reduce_mult)   # cap at 50%, drawdown may lower further
-        _coin_size_mult = _size_mult   # drawdown-based scale only (1.0× when no drawdown)
+            _coin_size_mult = min(_size_mult, _reduce_mult)   # v47.84 Fix C2: only this coin; _size_mult unchanged so later coins are NOT penalised
+        else:
+            _coin_size_mult = _size_mult   # drawdown-based scale only (1.0× when no drawdown)
         _MIN_SIZE_MULT = 0.25
         if _coin_size_mult < _MIN_SIZE_MULT:
             log(f"SIZE FLOOR: {coin} — {_coin_size_mult:.3f}x below minimum {_MIN_SIZE_MULT}x floor → clamped to {_MIN_SIZE_MULT}x")
