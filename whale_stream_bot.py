@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v47.84   —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v47.85   —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 USDT perpetuals from Bybit (1 API call) ║
@@ -912,30 +912,27 @@ TEMPLATE NOTE: You are working with PRE-SCREENED candidates. Do not force a sign
 If the best LONG candidate only scores 1–2 on the template, output STAY OUT.
 2 perfect signals beat 4 forced signals every time.
 ════════════════════════════════════════════════════════════
-ENTRY RULE (LONGS): Entry MUST be Retest Zone / Liquidity Sweep Reclaim / Support-Resistance Reclaim / Breakout Retest. Never chase current price.
-ENTRY ZONE WIDTH RULE (CRITICAL — REDUCES SIGNAL EXPIRY): Historical data shows 54% of LONG signals expire because price never pulls back to the entry zone within 72 hours.
-  • Set entry zone TOP at 0–1.5% below current price OR at current price if BTC momentum is positive (BTC 24h% > +1%) or funding rate is strongly negative (< −0.03%). PREFER entries at or very near current price — a filled trade at 1% worse price beats an expired signal every time.
-  • Entry zone BOTTOM must be at least 5–8% below the TOP (giving price room to pull back).
-  • Minimum zone width: entry_top - entry_bottom ≥ 4% of entry_top. A zone narrower than 4% will likely never fill.
-  • For Stage 2 expansion plays already in motion (coin has already broken out and is trending): entry zone may overlap with current price (near-market entry), with SL below the breakout base.
-  • PREFER FILLED SIGNALS: A signal that fills at a slightly wider zone beats a perfect signal that expires. Widen the zone rather than risk expiry. When BTC momentum is positive or funding is strongly negative, prefer entry zones that include current price.
+ENTRY RULE (LONGS): Entry MUST be Retest Zone / Liquidity Sweep Reclaim / Support-Resistance Reclaim / Breakout Retest.
 ENTRY RULE (SHORTS): Entry MUST be at Resistance Rejection / Failed Retest of Broken Support / Dead-Cat Bounce Top / High-Volume Reversal Candle. NEVER enter a short on a breakdown candle — wait for the bounce back to resistance, THEN enter. Entering on breakdown = chasing, SL gets hit on the bounce.
 ════════════════════════════════════════════════════════════
-⚠️ ENTRY PRICE CONSTRAINTS (enforced by Bybit limit order rules):
-All entries are LIMIT orders. Bybit rejects orders where entry deviates >5% from mark price.
+⚠️ ENTRY PRICE CONSTRAINTS — CRITICAL (v47.85: tight zones enforced):
+All entries are LIMIT orders placed within minutes of signal generation. Entries far from market NEVER FILL.
 
-LONG entries: Place entry 0.5%–2% BELOW current market.
-  ✓ Market at 1.00 → entry 0.98–0.995 ✓
+LONG entries: BOTH top and bottom of zone must be within 0–2% BELOW current mark price.
+  ✓ Mark at 1.000 → entry zone 0.985–0.998 ✓  (both within 2% below mark)
+  ✓ Mark at 1.000 → entry zone 0.992–1.000 ✓  (at-market or slightly below)
+  ✗ Entry zone 0.930–0.970 = 3–7% away = WILL NEVER FILL — DO NOT OUTPUT
   ✗ Entry above market = invalid for a limit BUY
-  ✗ Entry more than 4% below market = will never fill before signal expires
 
-SHORT entries: Place entry 0.5%–2% ABOVE current market.
-  ✓ Market at 1.00 → entry 1.005–1.02 ✓
-  ✗ Entry more than 4% above market = Bybit "Price invalid" rejection
-  ✗ H and FF coins: keep SHORT entry within 2% above mark (tight deviation limits)
+SHORT entries: BOTH top and bottom of zone must be within 0–2% ABOVE current mark price.
+  ✓ Mark at 1.000 → entry zone 1.002–1.018 ✓  (both within 2% above mark)
+  ✓ Mark at 1.000 → entry zone 1.000–1.010 ✓  (at-market or slightly above)
+  ✗ Entry zone 1.040–1.070 = 4–7% away = WILL NEVER FILL — DO NOT OUTPUT
+  ✗ H and FF coins: keep SHORT entry within 1.5% above mark (tight deviation limits)
 
-Rule: If your ideal entry requires >4% deviation from current price → DO NOT generate this signal.
-Preference: Entries 1–2% from mark have highest fill rate.
+ZONE WIDTH: Keep entry zone narrow — 0.5–1.5% wide maximum. Wide zones cause the trader to use midpoint, putting entry far from market.
+Rule: If ideal entry is more than 2% from current price → DO NOT generate this signal. Output STAY OUT instead.
+Preference: Entries 0.5–1.5% from mark fill within minutes. This is the fill-rate sweet spot.
 ════════════════════════════════════════════════════════════
 HARD RULES FOR SHORT SIGNALS — THESE ARE NON-NEGOTIABLE:
 • SL MUST be 5–7% ABOVE the entry midpoint. If you set SL below or at entry, the signal is INVALID.
@@ -2669,7 +2666,7 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     shorts = data.get("shorts", [])
 
     lines = []
-    lines.append(f"🐳 WHALE-STREAM v47.84")
+    lines.append(f"🐳 WHALE-STREAM v47.85")
     lines.append(f"📅 {ts}")
 
     # ── Market regime summary ─────────────────────────────────

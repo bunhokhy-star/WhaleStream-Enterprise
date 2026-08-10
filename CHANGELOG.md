@@ -1,5 +1,25 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.85 — 2026-08-10 — Entry zone tightening: entries near market price to maximise fill rate
+
+### Root cause
+Limit orders were placed 4–7% from current mark price because the bot prompt required a minimum zone width of ≥4% and a zone bottom 5–8% below the top. `parse_midpoint` then used the zone centre, landing entries deep below market. In a sideways regime, these never filled within the 4h signal window.
+
+### `whale_stream_bot.py` — Tight entry zone rule
+- **FIX**: Removed the contradictory "zone bottom must be 5-8% below top" and "minimum zone width ≥4%" rules that forced wide zones.
+- New rule: BOTH top and bottom of the entry zone must be within 0–2% of current mark price. Zone width max 1.5%. Entries more than 2% from mark → output STAY OUT instead of forcing a signal that will never fill.
+
+### `whale_stream_trader.py` — Nearest-to-market entry parsing
+- **FIX**: `parse_midpoint()` now uses the **nearest price to market** instead of the midpoint.
+  - LONG (Buy): uses the HIGHER of the two zone prices (closest to market from below)
+  - SHORT (Sell): uses the LOWER of the two zone prices (closest to market from above)
+- Entry zone `$0.93–$0.97` LONG → entry `$0.97` (was `$0.95` midpoint)
+
+### `whale_stream_trader.py` — Tighter price clamp
+- **FIX**: `BYBIT_PRICE_CLAMP_PCT` reduced 2.5% → 1.5%. Safety-net clamp now forces entries within 1.5% of mark (was 2.5%).
+
+---
+
 ## v47.84 — 2026-08-09 — System-wide audit: 10 blockers fixed across 5 files
 
 ### `whale_stream_bot.py` — Fix 1: Static prompt SHORT floor 95% → 93%

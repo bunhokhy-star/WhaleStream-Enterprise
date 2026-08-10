@@ -142,7 +142,7 @@ MAX_ENTRY_DISTANCE_PCT = 8.0
 # mark ± BYBIT_PRICE_CLAMP_PCT instead of rejecting outright.
 # This recovers trades like OP, TRX, SEI, XLM, FF that pass our 8% check
 # but still hit retCode=10001 because Bybit's band is ~3%.
-BYBIT_PRICE_CLAMP_PCT = 2.5   # clamp radius: mark ± 2.5%
+BYBIT_PRICE_CLAMP_PCT = 1.5   # v47.85: clamp radius mark ± 1.5% (was 2.5%) — tight fill zones
 
 # Risk cap: never deploy more than this fraction of total balance
 MAX_DEPLOYED_FRACTION = 0.50   # 50%
@@ -1050,11 +1050,23 @@ def calc_qty(entry_price, info, size_mult=1.0):
 # PRICE PARSING
 # ─────────────────────────────────────────────────────────────
 
-def parse_midpoint(zone_str):
-    """Parse '$435-$445' → 440.0  or  '$435' → 435.0"""
+def parse_midpoint(zone_str, side=None):
+    """
+    Parse entry zone to nearest-to-market price.
+    v47.85: use TOP (max) for LONG (Buy) and BOTTOM (min) for SHORT (Sell)
+    so the entry is as close as possible to current market price, maximising fill rate.
+    Falls back to midpoint when side is unknown.
+    '$435-$445' LONG → 445.0   '$435-$445' SHORT → 435.0   '$440' → 440.0
+    """
     nums = re.findall(r"[\d]+\.?[\d]*", str(zone_str).replace(",", ""))
     if len(nums) >= 2:
-        return (float(nums[0]) + float(nums[1])) / 2
+        lo, hi = float(nums[0]), float(nums[1])
+        if side == "Buy":    # LONG: use higher price (nearest to market)
+            return hi
+        elif side == "Sell": # SHORT: use lower price (nearest to market)
+            return lo
+        else:
+            return (lo + hi) / 2   # fallback: midpoint
     elif len(nums) == 1:
         return float(nums[0])
     return None
@@ -1406,7 +1418,7 @@ def main():
         pass
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🤖  WHALE-STREAM TRADER v47.84 — BYBIT DEMO    ║")
+    print("║   🤖  WHALE-STREAM TRADER v47.85 — BYBIT DEMO    ║")
     print(f"║   💰  ${TRADE_MARGIN_USDT} margin × {LEVERAGE}x = ${TRADE_MARGIN_USDT*LEVERAGE} per trade        ║")
     print("╚══════════════════════════════════════════════════╝")
     print()
@@ -2150,8 +2162,8 @@ def main():
             print(f"   ⚠ Already have an active position/order for {symbol} — skipping")
             continue
 
-        # Parse prices
-        entry = parse_midpoint(entry_zone)
+        # Parse prices — v47.85: use nearest-to-market price (top for LONG, bottom for SHORT)
+        entry = parse_midpoint(entry_zone, side=side)
         sl    = parse_price(sl_str)
         tp1   = parse_price(tp1_str)
         tp2   = parse_price(tp2_str) if tp2_str else None
