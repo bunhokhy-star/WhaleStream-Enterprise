@@ -1,5 +1,14 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.87 — 2026-08-12 — Fix false "VETO FAILED" alerts on already-resolved orders
+
+### Root cause
+Telegram sent "⚠️ VETO FAILED — MANUAL ACTION REQUIRED" for LINKUSDT at 06:xx BKK. User checked Bybit directly: no LINK order, no LINK position — nothing wrong. `cancel_order()` had already correctly detected the order no longer existed (retCode=20001, "already_gone") but only returned a bare `False`, identical to a real cancel failure. `close_position_at_market_for_veto()` couldn't tell "order legitimately doesn't exist anymore" (already resolved by an earlier veto pass) apart from "cancel kept failing for an unknown reason" (a real problem) — both hit the same alarming alert. No money was ever at risk; this was purely a false alarm that erodes trust in real alerts.
+
+### `whale_stream_trader.py` — Distinguish "already resolved" from "genuinely stuck"
+- **FIX**: `cancel_order()` gained an optional `return_reason=True` mode returning `(success, reason)` — `"cancelled"`, `"already_gone"` (retCode 20001), or `"failed"` (retries exhausted for an unexplained reason). Existing callers unaffected (default behavior unchanged).
+- **FIX**: `close_position_at_market_for_veto()` now uses `return_reason=True`. When cancel fails because the order is confirmed gone (`already_gone`) AND no live position exists, it logs quietly and returns `"already_resolved"` — no Telegram alert. The urgent "MANUAL ACTION REQUIRED" alert now only fires when cancel failed for an unexplained reason AND no position is found — the genuinely ambiguous case.
+
 ## v47.86 — 2026-08-11 — Auto-block non-crypto Bybit instruments (retCode=110126)
 
 ### Root cause

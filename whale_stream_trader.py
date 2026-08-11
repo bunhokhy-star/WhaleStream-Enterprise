@@ -752,11 +752,15 @@ def cancel_orphaned_tp_orders():
         return 0
 
 
-def cancel_order(symbol, order_id, _max_retries=3):
+def cancel_order(symbol, order_id, _max_retries=3, return_reason=False):
     """
     Cancel a specific open order by orderId.
     Retries up to _max_retries times on transient failures with exponential backoff.
     Returns True on success. Returns False immediately if order is already gone (retCode 20001).
+    v47.87: if return_reason=True, returns (success, reason) instead of just bool.
+    reason is one of: "cancelled", "already_gone" (retCode 20001), "failed" (retries exhausted).
+    Callers that need to distinguish "order legitimately doesn't exist anymore" from
+    "cancel kept failing for an unknown reason" should pass return_reason=True.
     """
     for _attempt in range(_max_retries):
         result = bybit_request("POST", "/v5/order/cancel", body={
@@ -766,16 +770,16 @@ def cancel_order(symbol, order_id, _max_retries=3):
         })
         ret_code = result.get("retCode", -1)
         if ret_code == 0:
-            return True
+            return (True, "cancelled") if return_reason else True
         if ret_code == 20001:
             # Order no longer exists (already filled or cancelled) — don't retry
-            return False
+            return (False, "already_gone") if return_reason else False
         if _attempt < _max_retries - 1:
             _sleep = 2 ** _attempt   # 1s, 2s, 4s
             log(f"cancel_order {symbol} attempt {_attempt+1} failed (retCode={ret_code}) — retrying in {_sleep}s")
             time.sleep(_sleep)
     log(f"cancel_order {symbol} failed after {_max_retries} attempts")
-    return False
+    return (False, "failed") if return_reason else False
 
 
 def get_position_for_coin(symbol):
@@ -809,14 +813,14 @@ def close_position_at_market_for_veto(symbol, bybit_order_id):
     Returns (action, success) where action is 'cancelled' | 'closed' | 'failed'.
     """
     # Step 1: attempt cancel (with built-in retries)
-    cancelled = cancel_order(symbol, bybit_order_id)
+    cancelled, cancel_reason = cancel_order(symbol, bybit_order_id, return_reason=True)
     if cancelled:
         log(f"REACTIVE VETO: {symbol} order {bybit_order_id} cancelled successfully")
         print(f"   ✅ Order cancelled: {symbol} (order {bybit_order_id})")
         return "cancelled", True
 
     # Step 2: order may have filled — retry position check to handle API propagation lag
-    log(f"REACTIVE VETO: cancel failed for {symbol} — checking for live position (up to 3 retries)")
+    log(f"REACTIVE VETO: cancel failed for {symbol} (reason={cancel_reason}) — checking for live position (up to 3 retries)")
     pos = None
     for _retry in range(3):
         pos = get_position_for_coin(symbol)
@@ -827,16 +831,29 @@ def close_position_at_market_for_veto(symbol, bybit_order_id):
             time.sleep(3)
 
     if pos is None:
-        # Position genuinely not found after retries — send urgent Telegram
+        if cancel_reason == "already_gone":
+            # v47.87: Bybit confirmed the order no longer exists (retCode 20001) AND
+            # there's no live position — this means the veto was already resolved by
+            # an earlier pass (e.g. a prior reactive run already cancelled it, or it
+            # naturally expired). This is the EXPECTED end state, not a problem.
+            # Log quietly — no alarming Telegram. False "manual action required"
+            # alerts on already-resolved orders erode trust in real alerts.
+            log(f"REACTIVE VETO: {symbol} order {bybit_order_id} already gone, no position — already resolved, nothing to do")
+            print(f"   ✓ {symbol} already resolved (order gone, no position found) — no action needed")
+            return "already_resolved", True
+
+        # Cancel failed for an UNEXPLAINED reason (real API/auth/rate-limit issue,
+        # not "order doesn't exist") AND no position found — this is the genuinely
+        # ambiguous case worth a human look.
         _msg = (f"⚠️ <b>VETO FAILED — MANUAL ACTION REQUIRED</b>\n"
                 f"Symbol: {symbol}\n"
-                f"Order {bybit_order_id} could not be cancelled and no open position found.\n"
+                f"Order {bybit_order_id} could not be cancelled (reason={cancel_reason}) and no open position found.\n"
                 f"Please check Bybit manually and close if needed.")
         try:
             send_telegram_alert(_msg)
         except Exception:
             pass
-        log(f"REACTIVE VETO FAILED: {symbol} — no position found after 3 retries, Telegram sent")
+        log(f"REACTIVE VETO FAILED: {symbol} — no position found after 3 retries (cancel_reason={cancel_reason}), Telegram sent")
         print(f"   ✗ VETO FAILED for {symbol} — no position found. Telegram alert sent.")
         return "failed", False
 
@@ -1444,7 +1461,7 @@ def main():
         pass
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🤖  WHALE-STREAM TRADER v47.86 — BYBIT DEMO    ║")
+    print("║   🤖  WHALE-STREAM TRADER v47.87 — BYBIT DEMO    ║")
     print(f"║   💰  ${TRADE_MARGIN_USDT} margin × {LEVERAGE}x = ${TRADE_MARGIN_USDT*LEVERAGE} per trade        ║")
     print("╚══════════════════════════════════════════════════╝")
     print()
