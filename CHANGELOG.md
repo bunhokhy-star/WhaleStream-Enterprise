@@ -1,5 +1,17 @@
 # WHALE-STREAM CHANGELOG
 
+## v47.86 — 2026-08-11 — Auto-block non-crypto Bybit instruments (retCode=110126)
+
+### Root cause
+The 20:20 BKK cycle confirmed v47.85's entry-zone fix works (SKHYNIX entry landed 0.0% from mark), but 0/3 orders still placed. Two of three (XAU, DRAM) were correctly filtered by the signal-score gate. The third (SKHYNIX SHORT) failed with `retCode=110126: You must sign the required agreement before trading this contract.` XAU (gold), SKHYNIX (a Korean stock), and DRAM (a memory-sector token) are non-crypto products Bybit lists under the same "linear" USDT-settled category as crypto perpetuals, so `fetch_top_300_coins()` was scanning and generating real signals for instruments this account isn't authorized to trade — a permanent, unfixable-by-retry failure every time they surface.
+
+### `whale_stream_trader.py` — Auto-blocklist on permission failure
+- **FIX**: New `block_unsupported_instrument()` writes to `unsupported_instruments.json` whenever an order fails with `retCode=110126`. Self-healing — any future non-crypto/restricted symbol Bybit lists gets permanently excluded the first time it fails, no manual intervention needed.
+
+### `whale_stream_bot.py` — Filter unsupported instruments from scan
+- **FIX**: `fetch_top_300_coins()` now loads `unsupported_instruments.json` and drops any symbol on it before ranking/scoring, so the bot stops wasting signal slots on instruments that can never fill an order.
+- Seeded `unsupported_instruments.json` immediately with XAUUSDT, SKHYNIXUSDT, DRAMUSDT (confirmed failing) so the fix is live from the very next cycle instead of waiting for another failed attempt.
+
 ## v47.85 — 2026-08-10 — Entry zone tightening: entries near market price to maximise fill rate
 
 ### Root cause

@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        WHALE-STREAM v47.85   —  FULL AUTOMATION BOT          ║
+║        WHALE-STREAM v47.86   —  FULL AUTOMATION BOT          ║
 ║                                                              ║
 ║  What this script does (automatically, every run):          ║
 ║  1. Fetches top 200 USDT perpetuals from Bybit (1 API call) ║
@@ -2308,6 +2308,24 @@ def fetch_top_300_coins():
                 "funding_rate":                          fr,
                 "open_interest":                         oi,
             })
+        # ── Filter out unsupported instruments (v47.86) ──────────────────────
+        # Bybit's "linear" category mixes real crypto perps with non-crypto
+        # products (gold XAUUSDT, single-stock perpetuals like SKHYNIXUSDT/
+        # DRAMUSDT) that require a separate signed agreement on Bybit's site.
+        # trader.py auto-populates this file when it hits retCode=110126.
+        try:
+            _unsup_path = os.path.join(SCRIPT_DIR, "unsupported_instruments.json")
+            if os.path.exists(_unsup_path):
+                with open(_unsup_path, "r", encoding="utf-8") as _uf:
+                    _unsupported = set(json.load(_uf).keys())
+                before = len(all_coins)
+                all_coins = [c for c in all_coins if c["symbol"] not in _unsupported]
+                dropped = before - len(all_coins)
+                if dropped:
+                    print(f"   🚫 Filtered {dropped} unsupported instrument(s): {', '.join(sorted(_unsupported))}")
+        except Exception as e:
+            print(f"   ⚠ Could not load unsupported_instruments.json: {e}")
+
         # Rank by 24h turnover (USD) — same effective ordering as market-cap rank for major coins
         all_coins.sort(key=lambda c: c["total_volume"], reverse=True)
         all_coins = all_coins[:200]   # top 200 by volume = same as before
@@ -2666,7 +2684,7 @@ def build_telegram_message(data, bkk_time, graveyard_text=""):
     shorts = data.get("shorts", [])
 
     lines = []
-    lines.append(f"🐳 WHALE-STREAM v47.85")
+    lines.append(f"🐳 WHALE-STREAM v47.86")
     lines.append(f"📅 {ts}")
 
     # ── Market regime summary ─────────────────────────────────

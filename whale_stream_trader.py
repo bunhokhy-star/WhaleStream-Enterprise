@@ -163,6 +163,32 @@ except ImportError:
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# ── Unsupported instruments (v47.86) ────────────────────────────────────────
+# Bybit's "linear" category includes crypto perpetuals AND non-crypto products
+# (gold XAUUSDT, single-stock perpetuals like SKHYNIXUSDT/DRAMUSDT) that require
+# a separate trading agreement to be signed on Bybit's site (retCode=110126).
+# The coin scanner in bot.py can't tell these apart from real crypto by symbol
+# alone, so when an order fails with this retCode, we permanently blocklist the
+# symbol here — bot.py reads this file and stops generating signals for it.
+UNSUPPORTED_INSTRUMENTS_FILE = os.path.join(SCRIPT_DIR, "unsupported_instruments.json")
+
+
+def block_unsupported_instrument(symbol: str, reason: str):
+    """Permanently exclude a symbol from future scans (account can't trade it)."""
+    try:
+        data = {}
+        if os.path.exists(UNSUPPORTED_INSTRUMENTS_FILE):
+            with open(UNSUPPORTED_INSTRUMENTS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        if symbol not in data:
+            data[symbol] = {"reason": reason, "blocked_at": datetime.now(BKK).strftime("%Y-%m-%d %H:%M BKK")}
+            with open(UNSUPPORTED_INSTRUMENTS_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+            print(f"   🚫 {symbol} added to unsupported_instruments.json — won't be scanned again ({reason})")
+    except Exception as e:
+        print(f"   ⚠ Could not write unsupported_instruments.json: {e}")
+
+
 # Balance file (read by whale_stream_tracker.py for dashboard)
 BYBIT_BALANCE_FILE  = os.path.join(SCRIPT_DIR, "bybit_balance.json")
 BYBIT_START_BALANCE = 5000.00  # $5,000 demo scale-up — MUST match BYBIT_START_BALANCE in whale_stream_tracker.py
@@ -1418,7 +1444,7 @@ def main():
         pass
     print()
     print("╔══════════════════════════════════════════════════╗")
-    print("║   🤖  WHALE-STREAM TRADER v47.85 — BYBIT DEMO    ║")
+    print("║   🤖  WHALE-STREAM TRADER v47.86 — BYBIT DEMO    ║")
     print(f"║   💰  ${TRADE_MARGIN_USDT} margin × {LEVERAGE}x = ${TRADE_MARGIN_USDT*LEVERAGE} per trade        ║")
     print("╚══════════════════════════════════════════════════╝")
     print()
@@ -2429,6 +2455,8 @@ def main():
             time.sleep(0.5)   # small delay between orders
         else:
             print(f"   ❌ Order failed: {result}")
+            if "retCode=110126" in str(result):
+                block_unsupported_instrument(symbol, str(result))
             send_telegram_alert(
                 f"❌ <b>DEMO ORDER FAILED</b> — {coin} {dir_label}\n"
                 f"  {result}"

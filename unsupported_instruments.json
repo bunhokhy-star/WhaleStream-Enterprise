@@ -1,0 +1,14 @@
+{
+  "XAUUSDT": {
+    "reason": "retCode=110126 You must sign the required agreement before trading this contract.",
+    "blocked_at": "2026-08-11 20:20 BKK (manual seed — confirmed failing pre-fix)"
+  },
+  "SKHYNIXUSDT": {
+    "reason": "retCode=110126 You must sign the required agreement before trading this contract.",
+    "blocked_at": "2026-08-11 20:20 BKK (manual seed — confirmed failing pre-fix)"
+  },
+  "DRAMUSDT": {
+    "reason": "retCode=110126 You must sign the required agreement before trading this contract.",
+    "blocked_at": "2026-08-11 20:20 BKK (manual seed — confirmed failing pre-fix)"
+  }
+}
